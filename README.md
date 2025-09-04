@@ -4,7 +4,7 @@ This repository contains Ruby scripts for SketchUp that generate simple cabinetr
 
 ## Contents
 
-- `lib/cabinet.rb` – library functions for creating cabinets.
+- `lib/cabinet.rb` – library functions for creating cabinets. The generator builds a frameless carcass from two sides, a top, a bottom, and a back, and can optionally add shelves.
 - `examples/frameless_two_shelf_cabinet.rb` – sample script that creates a frameless cabinet with two shelves.
 
 Copy the library and sample code into SketchUp's Ruby console or load them as scripts to build cabinet geometry automatically.
