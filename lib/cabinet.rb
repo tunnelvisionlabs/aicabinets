@@ -54,13 +54,13 @@ module AICabinets
       [panel_thickness, depth, height - panel_thickness]
     ).pushpull(panel_thickness)
 
-    # Back
+    # Back inset between the sides and flush to the top and bottom
     back = entities.add_group
     back.entities.add_face(
-      [0, depth, 0],
-      [width, depth, 0],
-      [width, depth, height],
-      [0, depth, height]
+      [panel_thickness, depth, 0],
+      [width - panel_thickness, depth, 0],
+      [width - panel_thickness, depth, height - panel_thickness],
+      [panel_thickness, depth, height - panel_thickness]
     ).pushpull(back_thickness)
 
     # Shelves
