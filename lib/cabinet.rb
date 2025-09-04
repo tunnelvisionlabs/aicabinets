@@ -57,11 +57,11 @@ module AICabinets
     # Back
     back = entities.add_group
     back.entities.add_face(
-      [0, depth - back_thickness, 0],
-      [width, depth - back_thickness, 0],
-      [width, depth - back_thickness, height],
-      [0, depth - back_thickness, height]
-    ).pushpull(back_thickness)
+      [0, depth, 0],
+      [width, depth, 0],
+      [width, depth, height],
+      [0, depth, height]
+    ).pushpull(-back_thickness)
 
     # Shelves
     return if shelf_count <= 0
