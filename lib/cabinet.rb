@@ -61,7 +61,7 @@ module AICabinets
       [width, depth, 0],
       [width, depth, height],
       [0, depth, height]
-    ).pushpull(-back_thickness)
+    ).pushpull(back_thickness)
 
     # Shelves
     return if shelf_count <= 0
