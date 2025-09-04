@@ -43,7 +43,7 @@ module AICabinets
       [width - panel_thickness, 0, 0],
       [width - panel_thickness, depth, 0],
       [panel_thickness, depth, 0]
-    ).pushpull(panel_thickness)
+    ).pushpull(-panel_thickness)
 
     # Top
     top = entities.add_group
@@ -69,6 +69,7 @@ module AICabinets
     shelf_thickness = panel_thickness
     interior_height = height - panel_thickness * 2
     spacing = interior_height / (shelf_count + 1)
+    shelf_depth = depth - back_thickness
 
     shelf_count.times do |i|
       z = panel_thickness + spacing * (i + 1)
@@ -76,8 +77,8 @@ module AICabinets
       shelf.entities.add_face(
         [panel_thickness, 0, z],
         [width - panel_thickness, 0, z],
-        [width - panel_thickness, depth - back_thickness, z],
-        [panel_thickness, depth - back_thickness, z]
+        [width - panel_thickness, shelf_depth, z],
+        [panel_thickness, shelf_depth, z]
       ).pushpull(-shelf_thickness)
     end
   end
