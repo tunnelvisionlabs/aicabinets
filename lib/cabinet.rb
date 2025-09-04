@@ -23,18 +23,18 @@ module AICabinets
     left = entities.add_group
     left.entities.add_face(
       [0, 0, 0],
-      [panel_thickness, 0, 0],
-      [panel_thickness, depth, 0],
-      [0, depth, 0]
-    ).pushpull(height)
+      [0, depth, 0],
+      [0, depth, height],
+      [0, 0, height]
+    ).pushpull(panel_thickness)
 
     right = entities.add_group
     right.entities.add_face(
-      [width - panel_thickness, 0, 0],
       [width, 0, 0],
       [width, depth, 0],
-      [width - panel_thickness, depth, 0]
-    ).pushpull(height)
+      [width, depth, height],
+      [width, 0, height]
+    ).pushpull(-panel_thickness)
 
     # Bottom
     bottom = entities.add_group
