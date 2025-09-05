@@ -308,7 +308,7 @@ module AICabinets
       [x + width, y, z],
       [x + width, y, z + height],
       [x, y, z + height]
-    ).pushpull(-thickness)
+    ).pushpull(thickness)
   end
 
   def self.align_to_hole_top(z, base, spacing)
