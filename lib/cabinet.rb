@@ -63,46 +63,46 @@ module AICabinets
 
     height = defaults[:height]
     depth = defaults[:depth]
+
+    cabinets = (config[:cabinets] || []).map { |cab| defaults.merge(cab) }
+
+    cabinets.each do |cab|
+      cab[:left_reveal] = cab[:door_reveal]
+      cab[:right_reveal] = cab[:door_reveal]
+    end
+
+    cabinets.each_cons(2) do |left, right|
+      next unless left[:doors] && right[:doors]
+
+      left[:right_reveal] = left[:door_reveal] / 2
+      right[:left_reveal] = right[:door_reveal] / 2
+    end
+
     x_offset = 0
-
-    (config[:cabinets] || []).each do |cabinet|
-      cab_opts = defaults.merge(cabinet)
-
-      width = cab_opts[:width]
-      panel_thickness = cab_opts[:panel_thickness]
-      back_thickness = cab_opts[:back_thickness]
-      shelf_count = cab_opts[:shelf_count]
-      hole_diameter = cab_opts[:hole_diameter]
-      hole_depth = cab_opts[:hole_depth]
-      hole_spacing = cab_opts[:hole_spacing]
-      hole_columns = cab_opts[:hole_columns] || []
-      door_thickness = cab_opts[:door_thickness]
-      door_type = cab_opts[:door_type]
-      door_style = cab_opts[:door_style]
-      door_reveal = cab_opts[:door_reveal]
-      doors = cab_opts[:doors]
-
+    cabinets.each do |cab_opts|
       create_single_cabinet(
         entities,
         x_offset: x_offset,
-        width: width,
+        width: cab_opts[:width],
         height: height,
         depth: depth,
-        panel_thickness: panel_thickness,
-        back_thickness: back_thickness,
-        shelf_count: shelf_count,
-        hole_diameter: hole_diameter,
-        hole_depth: hole_depth,
-        hole_spacing: hole_spacing,
-        hole_columns: hole_columns,
-        door_thickness: door_thickness,
-        door_type: door_type,
-        door_style: door_style,
-        door_reveal: door_reveal,
-        doors: doors
+        panel_thickness: cab_opts[:panel_thickness],
+        back_thickness: cab_opts[:back_thickness],
+        shelf_count: cab_opts[:shelf_count],
+        hole_diameter: cab_opts[:hole_diameter],
+        hole_depth: cab_opts[:hole_depth],
+        hole_spacing: cab_opts[:hole_spacing],
+        hole_columns: cab_opts[:hole_columns] || [],
+        door_thickness: cab_opts[:door_thickness],
+        door_type: cab_opts[:door_type],
+        door_style: cab_opts[:door_style],
+        door_reveal: cab_opts[:door_reveal],
+        left_door_reveal: cab_opts[:left_reveal],
+        right_door_reveal: cab_opts[:right_reveal],
+        doors: cab_opts[:doors]
       )
 
-      x_offset += width
+      x_offset += cab_opts[:width]
     end
   end
 
@@ -136,6 +136,8 @@ module AICabinets
     door_type:,
     door_style:,
     door_reveal:,
+    left_door_reveal: door_reveal,
+    right_door_reveal: door_reveal,
     doors: nil
   )
     cabinet = entities.add_group
@@ -256,6 +258,8 @@ module AICabinets
       height: height,
       door_thickness: door_thickness,
       door_reveal: door_reveal,
+      left_reveal: left_door_reveal,
+      right_reveal: right_door_reveal,
       type: door_type,
       style: door_style,
       orientation: doors
@@ -269,6 +273,8 @@ module AICabinets
     height:,
     door_thickness:,
     door_reveal:,
+    left_reveal:,
+    right_reveal:,
     type:,
     style:,
     orientation:
@@ -280,8 +286,8 @@ module AICabinets
     z = door_reveal
     gap = DOOR_BUMPER_GAP
     if orientation == :double
-      door_width = (width - 3 * door_reveal) / 2
-      x_start = x_offset + door_reveal
+      door_width = (width - left_reveal - right_reveal - door_reveal) / 2
+      x_start = x_offset + left_reveal
       2.times do |i|
         create_door_panel(
           entities,
@@ -294,8 +300,8 @@ module AICabinets
         )
       end
     else
-      door_width = width - 2 * door_reveal
-      x_start = x_offset + door_reveal
+      door_width = width - left_reveal - right_reveal
+      x_start = x_offset + left_reveal
       create_door_panel(entities, x_start, door_width, door_height, z, door_thickness, gap)
     end
   end
