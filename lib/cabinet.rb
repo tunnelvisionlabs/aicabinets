@@ -204,8 +204,10 @@ module AICabinets
                     spacing_even = interior_height / (shelf_count + 1)
 
                     Array.new(shelf_count) do |i|
-                      desired = panel_thickness + spacing_even * (i + 1)
-                      align_to_hole_top(desired, base, spacing_holes)
+                      desired_top = panel_thickness + spacing_even * (i + 1)
+                      desired_bottom = desired_top - shelf_thickness
+                      hole_top = align_to_hole_top(desired_bottom, base, spacing_holes)
+                      hole_top + shelf_thickness
                     end
                   else
                     spacing_even = interior_height / (shelf_count + 1)
