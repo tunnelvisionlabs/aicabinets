@@ -8,6 +8,10 @@ module AICabinets
   DEFAULT_HOLE_DIAMETER = 5.mm
   DEFAULT_HOLE_DEPTH = 13.mm
   DEFAULT_HOLE_SPACING = 32.mm
+  DEFAULT_DOOR_THICKNESS = 19.mm
+  DEFAULT_DOOR_TYPE = :full_overlay
+  DEFAULT_DOOR_STYLE = :slab
+  DEFAULT_DOOR_REVEAL = 2.mm
 
   # Creates a row of simple frameless cabinets formed from discrete panels.
   #
@@ -49,7 +53,11 @@ module AICabinets
       hole_diameter: DEFAULT_HOLE_DIAMETER,
       hole_depth: DEFAULT_HOLE_DEPTH,
       hole_spacing: DEFAULT_HOLE_SPACING,
-      hole_columns: []
+      hole_columns: [],
+      door_thickness: DEFAULT_DOOR_THICKNESS,
+      door_type: DEFAULT_DOOR_TYPE,
+      door_style: DEFAULT_DOOR_STYLE,
+      door_reveal: DEFAULT_DOOR_REVEAL
     }.merge(config)
 
     height = defaults[:height]
@@ -67,6 +75,11 @@ module AICabinets
       hole_depth = cab_opts[:hole_depth]
       hole_spacing = cab_opts[:hole_spacing]
       hole_columns = cab_opts[:hole_columns] || []
+      door_thickness = cab_opts[:door_thickness]
+      door_type = cab_opts[:door_type]
+      door_style = cab_opts[:door_style]
+      door_reveal = cab_opts[:door_reveal]
+      doors = cab_opts[:doors]
 
       create_single_cabinet(
         entities,
@@ -80,7 +93,12 @@ module AICabinets
         hole_diameter: hole_diameter,
         hole_depth: hole_depth,
         hole_spacing: hole_spacing,
-        hole_columns: hole_columns
+        hole_columns: hole_columns,
+        door_thickness: door_thickness,
+        door_type: door_type,
+        door_style: door_style,
+        door_reveal: door_reveal,
+        doors: doors
       )
 
       x_offset += width
@@ -112,7 +130,12 @@ module AICabinets
     hole_diameter:,
     hole_depth:,
     hole_spacing:,
-    hole_columns: []
+    hole_columns: [],
+    door_thickness:,
+    door_type:,
+    door_style:,
+    door_reveal:,
+    doors: nil
   )
     cabinet = entities.add_group
     g = cabinet.entities
@@ -224,6 +247,67 @@ module AICabinets
         ).pushpull(-shelf_thickness)
       end
     end
+
+    add_doors(
+      g,
+      x_offset: x_offset,
+      width: width,
+      height: height,
+      panel_thickness: panel_thickness,
+      door_thickness: door_thickness,
+      door_reveal: door_reveal,
+      type: door_type,
+      style: door_style,
+      orientation: doors
+    )
+  end
+
+  def self.add_doors(
+    entities,
+    x_offset:,
+    width:,
+    height:,
+    panel_thickness:,
+    door_thickness:,
+    door_reveal:,
+    type:,
+    style:,
+    orientation:
+  )
+    return unless orientation
+    return unless type == :full_overlay && style == :slab
+
+    door_height = height - 2 * door_reveal
+    z = door_reveal
+    if orientation == :double
+      total_width = width + panel_thickness * 2
+      door_width = (total_width - 3 * door_reveal) / 2
+      x_start = x_offset - panel_thickness + door_reveal
+      2.times do |i|
+        create_door_panel(
+          entities,
+          x_start + i * (door_width + door_reveal),
+          door_width,
+          door_height,
+          z,
+          door_thickness
+        )
+      end
+    else
+      door_width = width + panel_thickness * 2 - 2 * door_reveal
+      x_start = x_offset - panel_thickness + door_reveal
+      create_door_panel(entities, x_start, door_width, door_height, z, door_thickness)
+    end
+  end
+
+  def self.create_door_panel(entities, x, width, height, z, thickness)
+    group = entities.add_group
+    group.entities.add_face(
+      [x, 0, z],
+      [x + width, 0, z],
+      [x + width, 0, z + height],
+      [x, 0, z + height]
+    ).pushpull(-thickness)
   end
 
   def self.align_to_hole_top(z, base, spacing)

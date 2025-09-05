@@ -9,10 +9,13 @@ AICabinets.create_frameless_cabinet(
   depth: 350.mm,
   panel_thickness: 19.mm,
   back_thickness: 6.mm,
+  door_thickness: 19.mm,
+  door_reveal: 2.mm,
   cabinets: [
     {
       width: 600.mm,
       shelf_count: 2,
+      doors: :left,
       hole_columns: [
         { distance: 37.mm, first_hole: 38.mm, count: 20 },
         { distance: 37.mm, from: :rear, first_hole: 38.mm, count: 20 }
@@ -21,6 +24,7 @@ AICabinets.create_frameless_cabinet(
     {
       width: 800.mm,
       shelf_count: 3,
+      doors: :double,
       hole_columns: [
         { distance: 37.mm, first_hole: 38.mm, count: 20 },
         { distance: 37.mm, from: :rear, first_hole: 38.mm, count: 20 }
