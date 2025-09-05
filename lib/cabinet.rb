@@ -12,6 +12,7 @@ module AICabinets
   DEFAULT_DOOR_TYPE = :full_overlay
   DEFAULT_DOOR_STYLE = :slab
   DEFAULT_DOOR_REVEAL = 2.mm
+  DOOR_BUMPER_GAP = 2.mm
 
   # Creates a row of simple frameless cabinets formed from discrete panels.
   #
@@ -253,7 +254,6 @@ module AICabinets
       x_offset: x_offset,
       width: width,
       height: height,
-      panel_thickness: panel_thickness,
       door_thickness: door_thickness,
       door_reveal: door_reveal,
       type: door_type,
@@ -267,7 +267,6 @@ module AICabinets
     x_offset:,
     width:,
     height:,
-    panel_thickness:,
     door_thickness:,
     door_reveal:,
     type:,
@@ -279,10 +278,10 @@ module AICabinets
 
     door_height = height - 2 * door_reveal
     z = door_reveal
+    gap = DOOR_BUMPER_GAP
     if orientation == :double
-      total_width = width + panel_thickness * 2
-      door_width = (total_width - 3 * door_reveal) / 2
-      x_start = x_offset - panel_thickness + door_reveal
+      door_width = (width - 3 * door_reveal) / 2
+      x_start = x_offset + door_reveal
       2.times do |i|
         create_door_panel(
           entities,
@@ -290,23 +289,25 @@ module AICabinets
           door_width,
           door_height,
           z,
-          door_thickness
+          door_thickness,
+          gap
         )
       end
     else
-      door_width = width + panel_thickness * 2 - 2 * door_reveal
-      x_start = x_offset - panel_thickness + door_reveal
-      create_door_panel(entities, x_start, door_width, door_height, z, door_thickness)
+      door_width = width - 2 * door_reveal
+      x_start = x_offset + door_reveal
+      create_door_panel(entities, x_start, door_width, door_height, z, door_thickness, gap)
     end
   end
 
-  def self.create_door_panel(entities, x, width, height, z, thickness)
+  def self.create_door_panel(entities, x, width, height, z, thickness, gap)
     group = entities.add_group
+    y = -gap
     group.entities.add_face(
-      [x, 0, z],
-      [x + width, 0, z],
-      [x + width, 0, z + height],
-      [x, 0, z + height]
+      [x, y, z],
+      [x + width, y, z],
+      [x + width, y, z + height],
+      [x, y, z + height]
     ).pushpull(-thickness)
   end
 
