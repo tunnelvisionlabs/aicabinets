@@ -192,11 +192,27 @@ module AICabinets
     if shelf_count > 0
       shelf_thickness = panel_thickness
       interior_height = height - panel_thickness * 2
-      spacing = interior_height / (shelf_count + 1)
       shelf_depth = depth - back_thickness
 
-      shelf_count.times do |i|
-        z = panel_thickness + spacing * (i + 1)
+      positions = if shelf_count > 0 && hole_columns.any?
+                    col = hole_columns.first
+                    spacing_holes = col[:spacing] || hole_spacing
+                    first = col[:first_hole] || 0
+                    skip = col[:skip].to_i
+                    diameter = col[:diameter] || hole_diameter
+                    base = panel_thickness + first + spacing_holes * skip + diameter / 2
+                    spacing_even = interior_height / (shelf_count + 1)
+
+                    Array.new(shelf_count) do |i|
+                      desired = panel_thickness + spacing_even * (i + 1)
+                      align_to_hole_top(desired, base, spacing_holes)
+                    end
+                  else
+                    spacing_even = interior_height / (shelf_count + 1)
+                    Array.new(shelf_count) { |i| panel_thickness + spacing_even * (i + 1) }
+                  end
+
+      positions.each do |z|
         shelf = g.add_group
         shelf.entities.add_face(
           [x_offset + panel_thickness, 0, z],
@@ -206,6 +222,11 @@ module AICabinets
         ).pushpull(-shelf_thickness)
       end
     end
+  end
+
+  def self.align_to_hole_top(z, base, spacing)
+    return z if spacing.to_f.zero?
+    base + ((z - base) / spacing).round * spacing
   end
 
   def self.drill_hole_columns(
