@@ -3,10 +3,14 @@
 
 require_relative '../lib/cabinet'
 
+# Build a single cabinet using the data structure input.
 AICabinets.create_frameless_cabinet(
-  width: 600.mm,
   height: 720.mm,
   depth: 350.mm,
-  shelf_count: 2
+  panel_thickness: 19.mm,
+  back_thickness: 6.mm,
+  cabinets: [
+    { width: 600.mm, shelf_count: 2 }
+  ]
 )
 
