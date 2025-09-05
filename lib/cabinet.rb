@@ -12,6 +12,9 @@ module AICabinets
   DEFAULT_DOOR_TYPE = :full_overlay
   DEFAULT_DOOR_STYLE = :slab
   DEFAULT_DOOR_REVEAL = 2.mm
+  DEFAULT_RAIL_WIDTH = 70.mm
+  DEFAULT_STILE_WIDTH = 70.mm
+  DEFAULT_BEVEL_ANGLE = 15.degrees
   DOOR_BUMPER_GAP = 2.mm
 
   # Creates a row of simple frameless cabinets formed from discrete panels.
@@ -58,7 +61,10 @@ module AICabinets
       door_thickness: DEFAULT_DOOR_THICKNESS,
       door_type: DEFAULT_DOOR_TYPE,
       door_style: DEFAULT_DOOR_STYLE,
-      door_reveal: DEFAULT_DOOR_REVEAL
+      door_reveal: DEFAULT_DOOR_REVEAL,
+      rail_width: DEFAULT_RAIL_WIDTH,
+      stile_width: DEFAULT_STILE_WIDTH,
+      bevel_angle: DEFAULT_BEVEL_ANGLE
     }.merge(config)
 
     height = defaults[:height]
@@ -97,6 +103,9 @@ module AICabinets
         door_type: cab_opts[:door_type],
         door_style: cab_opts[:door_style],
         door_reveal: cab_opts[:door_reveal],
+        rail_width: cab_opts[:rail_width],
+        stile_width: cab_opts[:stile_width],
+        bevel_angle: cab_opts[:bevel_angle],
         left_door_reveal: cab_opts[:left_reveal],
         right_door_reveal: cab_opts[:right_reveal],
         doors: cab_opts[:doors]
@@ -136,6 +145,9 @@ module AICabinets
     door_type:,
     door_style:,
     door_reveal:,
+    rail_width:,
+    stile_width:,
+    bevel_angle:,
     left_door_reveal: door_reveal,
     right_door_reveal: door_reveal,
     doors: nil
@@ -262,6 +274,9 @@ module AICabinets
       right_reveal: right_door_reveal,
       type: door_type,
       style: door_style,
+      rail_width: rail_width,
+      stile_width: stile_width,
+      bevel_angle: bevel_angle,
       orientation: doors
     )
   end
@@ -277,10 +292,13 @@ module AICabinets
     right_reveal:,
     type:,
     style:,
+    rail_width:,
+    stile_width:,
+    bevel_angle:,
     orientation:
   )
     return unless orientation
-    return unless type == :full_overlay && style == :slab
+    return unless type == :full_overlay
 
     door_height = height - 2 * door_reveal
     z = door_reveal
@@ -296,25 +314,84 @@ module AICabinets
           door_height,
           z,
           door_thickness,
-          gap
+          gap,
+          style: style,
+          rail_width: rail_width,
+          stile_width: stile_width,
+          bevel_angle: bevel_angle
         )
       end
     else
       door_width = width - left_reveal - right_reveal
       x_start = x_offset + left_reveal
-      create_door_panel(entities, x_start, door_width, door_height, z, door_thickness, gap)
+      create_door_panel(
+        entities,
+        x_start,
+        door_width,
+        door_height,
+        z,
+        door_thickness,
+        gap,
+        style: style,
+        rail_width: rail_width,
+        stile_width: stile_width,
+        bevel_angle: bevel_angle
+      )
     end
   end
 
-  def self.create_door_panel(entities, x, width, height, z, thickness, gap)
+  def self.create_door_panel(
+    entities,
+    x,
+    width,
+    height,
+    z,
+    thickness,
+    gap,
+    style: :slab,
+    rail_width: DEFAULT_RAIL_WIDTH,
+    stile_width: DEFAULT_STILE_WIDTH,
+    bevel_angle: DEFAULT_BEVEL_ANGLE
+  )
     group = entities.add_group
     y = -gap
-    group.entities.add_face(
+    base_face = group.entities.add_face(
       [x, y, z],
       [x + width, y, z],
       [x + width, y, z + height],
       [x, y, z + height]
-    ).pushpull(thickness)
+    )
+    base_face.pushpull(thickness)
+
+    return group if style == :slab
+
+    rail = rail_width
+    stile = stile_width
+
+    outer_p1 = Geom::Point3d.new(x + stile, y, z + rail)
+    outer_p2 = Geom::Point3d.new(x + width - stile, y, z + rail)
+    outer_p3 = Geom::Point3d.new(x + width - stile, y, z + height - rail)
+    outer_p4 = Geom::Point3d.new(x + stile, y, z + height - rail)
+
+    group.entities.add_face(outer_p1, outer_p2, outer_p3, outer_p4).erase!
+
+    run = bevel_angle.to_f.zero? ? 0 : [thickness, rail, stile].min / 2.0
+    depth = bevel_angle.to_f.zero? ? thickness / 4.0 : run * Math.tan(bevel_angle)
+
+    panel_p1 = Geom::Point3d.new(outer_p1.x + run, y + depth, outer_p1.z + run)
+    panel_p2 = Geom::Point3d.new(outer_p2.x - run, y + depth, outer_p2.z + run)
+    panel_p3 = Geom::Point3d.new(outer_p3.x - run, y + depth, outer_p3.z - run)
+    panel_p4 = Geom::Point3d.new(outer_p4.x + run, y + depth, outer_p4.z - run)
+
+    group.entities.add_face(outer_p1, outer_p2, panel_p2, panel_p1)
+    group.entities.add_face(outer_p2, outer_p3, panel_p3, panel_p2)
+    group.entities.add_face(outer_p3, outer_p4, panel_p4, panel_p3)
+    group.entities.add_face(outer_p4, outer_p1, panel_p1, panel_p4)
+
+    panel_face = group.entities.add_face(panel_p1, panel_p2, panel_p3, panel_p4)
+    panel_face.pushpull(-(thickness - depth))
+
+    group
   end
 
   def self.align_to_hole_top(z, base, spacing)
