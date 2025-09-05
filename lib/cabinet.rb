@@ -378,10 +378,10 @@ module AICabinets
     run = bevel_angle.to_f.zero? ? 0 : [thickness, rail, stile].min / 2.0
     depth = bevel_angle.to_f.zero? ? thickness / 4.0 : run * Math.tan(bevel_angle)
 
-    panel_p1 = Geom::Point3d.new(outer_p1.x + run, y + depth, outer_p1.z + run)
-    panel_p2 = Geom::Point3d.new(outer_p2.x - run, y + depth, outer_p2.z + run)
-    panel_p3 = Geom::Point3d.new(outer_p3.x - run, y + depth, outer_p3.z - run)
-    panel_p4 = Geom::Point3d.new(outer_p4.x + run, y + depth, outer_p4.z - run)
+    panel_p1 = Geom::Point3d.new(outer_p1.x + run, y - depth, outer_p1.z + run)
+    panel_p2 = Geom::Point3d.new(outer_p2.x - run, y - depth, outer_p2.z + run)
+    panel_p3 = Geom::Point3d.new(outer_p3.x - run, y - depth, outer_p3.z - run)
+    panel_p4 = Geom::Point3d.new(outer_p4.x + run, y - depth, outer_p4.z - run)
 
     group.entities.add_face(outer_p1, outer_p2, panel_p2, panel_p1)
     group.entities.add_face(outer_p2, outer_p3, panel_p3, panel_p2)
@@ -389,7 +389,7 @@ module AICabinets
     group.entities.add_face(outer_p4, outer_p1, panel_p1, panel_p4)
 
     panel_face = group.entities.add_face(panel_p1, panel_p2, panel_p3, panel_p4)
-    panel_face.pushpull(-(thickness - depth))
+    panel_face.pushpull(thickness - depth)
 
     group
   end
