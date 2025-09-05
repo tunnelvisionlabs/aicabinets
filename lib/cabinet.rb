@@ -244,6 +244,8 @@ module AICabinets
         center = Geom::Point3d.new(x, y, z)
         edges = entities.add_circle(center, normal, radius_col)
         face = entities.add_face(edges)
+        face ||= edges.first.faces.min_by(&:area)
+        next unless face
         face.pushpull(-depth_drill)
       end
     end
