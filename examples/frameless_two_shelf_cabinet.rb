@@ -10,7 +10,13 @@ AICabinets.create_frameless_cabinet(
   panel_thickness: 19.mm,
   back_thickness: 6.mm,
   cabinets: [
-    { width: 600.mm, shelf_count: 2 }
+    {
+      width: 600.mm,
+      shelf_count: 2,
+      hole_columns: [
+        { distance: 37.mm, first_hole: 10.mm, skip: 2, count: 5 }
+      ]
+    }
   ]
 )
 
