@@ -402,15 +402,18 @@ module AICabinets
           else
             [profile * Math.tan(bevel_angle), rail / 2.0, stile / 2.0].min
           end
-    panel_offset = profile - thickness
+    inside_y = y + thickness
+    uncut = thickness - profile - groove_width
+    groove_back_y = inside_y - uncut
+    groove_front_y = groove_back_y - groove_width
 
     # Panel
     panel = group.entities.add_group
     panel_face = panel.entities.add_face(
-      [x + stile + run, y + panel_offset, z + rail + run],
-      [x + width - stile - run, y + panel_offset, z + rail + run],
-      [x + width - stile - run, y + panel_offset, z + height - rail - run],
-      [x + stile + run, y + panel_offset, z + height - rail - run]
+      [x + stile + run, groove_front_y, z + rail + run],
+      [x + width - stile - run, groove_front_y, z + rail + run],
+      [x + width - stile - run, groove_front_y, z + height - rail - run],
+      [x + stile + run, groove_front_y, z + height - rail - run]
     )
     panel_face.pushpull(groove_width)
 
@@ -426,29 +429,29 @@ module AICabinets
     bottom.entities.add_face(
       [x + stile, y, z + rail],
       [x + width - stile, y, z + rail],
-      [x + width - stile - run, y + panel_offset, z + rail + run],
-      [x + stile + run, y + panel_offset, z + rail + run]
+      [x + width - stile - run, groove_front_y, z + rail - run],
+      [x + stile + run, groove_front_y, z + rail - run]
     )
     groove_bottom = bottom.entities.add_face(
-      [x + stile + run, y + panel_offset, z],
-      [x + width - stile - run, y + panel_offset, z],
-      [x + width - stile - run, y + panel_offset + groove_width, z],
-      [x + stile + run, y + panel_offset + groove_width, z]
+      [x + stile + run, groove_front_y, z],
+      [x + width - stile - run, groove_front_y, z],
+      [x + width - stile - run, groove_back_y, z],
+      [x + stile + run, groove_back_y, z]
     )
     groove_bottom.pushpull(-groove_depth)
     # Cope the rail ends to match the stile profile
     left_cope = bottom.entities.add_face(
       [x + stile, y, z],
       [x + stile, y, z + rail],
-      [x + stile + run, y + panel_offset, z + rail + run],
-      [x + stile + run, y + panel_offset, z + run]
+      [x + stile + run, groove_front_y, z + rail - run],
+      [x + stile + run, groove_front_y, z + run]
     )
     left_cope.pushpull(-thickness)
     right_cope = bottom.entities.add_face(
       [x + width - stile, y, z],
       [x + width - stile, y, z + rail],
-      [x + width - stile - run, y + panel_offset, z + rail + run],
-      [x + width - stile - run, y + panel_offset, z + run]
+      [x + width - stile - run, groove_front_y, z + rail - run],
+      [x + width - stile - run, groove_front_y, z + run]
     )
     right_cope.pushpull(-thickness)
 
@@ -464,29 +467,29 @@ module AICabinets
     top.entities.add_face(
       [x + stile, y, z + height - rail],
       [x + width - stile, y, z + height - rail],
-      [x + width - stile - run, y + panel_offset, z + height - rail - run],
-      [x + stile + run, y + panel_offset, z + height - rail - run]
+      [x + width - stile - run, groove_front_y, z + height - rail + run],
+      [x + stile + run, groove_front_y, z + height - rail + run]
     )
     groove_top = top.entities.add_face(
-      [x + stile + run, y + panel_offset, z + height - rail],
-      [x + width - stile - run, y + panel_offset, z + height - rail],
-      [x + width - stile - run, y + panel_offset + groove_width, z + height - rail],
-      [x + stile + run, y + panel_offset + groove_width, z + height - rail]
+      [x + stile + run, groove_front_y, z + height - rail],
+      [x + width - stile - run, groove_front_y, z + height - rail],
+      [x + width - stile - run, groove_back_y, z + height - rail],
+      [x + stile + run, groove_back_y, z + height - rail]
     )
     groove_top.pushpull(-groove_depth)
     # Cope the rail ends to match the stile profile
     top_left_cope = top.entities.add_face(
       [x + stile, y, z + height - rail],
       [x + stile, y, z + height],
-      [x + stile + run, y + panel_offset, z + height - run],
-      [x + stile + run, y + panel_offset, z + height - rail - run]
+      [x + stile + run, groove_front_y, z + height - run],
+      [x + stile + run, groove_front_y, z + height - rail + run]
     )
     top_left_cope.pushpull(-thickness)
     top_right_cope = top.entities.add_face(
       [x + width - stile, y, z + height - rail],
       [x + width - stile, y, z + height],
-      [x + width - stile - run, y + panel_offset, z + height - run],
-      [x + width - stile - run, y + panel_offset, z + height - rail - run]
+      [x + width - stile - run, groove_front_y, z + height - run],
+      [x + width - stile - run, groove_front_y, z + height - rail + run]
     )
     top_right_cope.pushpull(-thickness)
 
@@ -500,16 +503,16 @@ module AICabinets
     )
     l_face.pushpull(thickness)
     left.entities.add_face(
-      [x + stile - run, y, z],
-      [x + stile - run, y, z + height],
-      [x + stile, y + panel_offset, z + height],
-      [x + stile, y + panel_offset, z]
+      [x + stile, y, z],
+      [x + stile, y, z + height],
+      [x + stile - run, groove_front_y, z + height],
+      [x + stile - run, groove_front_y, z]
     )
     left_groove = left.entities.add_face(
-      [x + stile - run, y + panel_offset, z],
-      [x + stile - run, y + panel_offset + groove_width, z],
-      [x + stile - run, y + panel_offset + groove_width, z + height],
-      [x + stile - run, y + panel_offset, z + height]
+      [x + stile - run, groove_front_y, z],
+      [x + stile - run, groove_back_y, z],
+      [x + stile - run, groove_back_y, z + height],
+      [x + stile - run, groove_front_y, z + height]
     )
     left_groove.pushpull(-groove_depth)
 
@@ -523,16 +526,16 @@ module AICabinets
     )
     r_face.pushpull(thickness)
     right.entities.add_face(
-      [x + width - stile + run, y, z],
-      [x + width - stile + run, y, z + height],
-      [x + width - stile, y + panel_offset, z + height],
-      [x + width - stile, y + panel_offset, z]
+      [x + width - stile, y, z],
+      [x + width - stile, y, z + height],
+      [x + width - stile + run, groove_front_y, z + height],
+      [x + width - stile + run, groove_front_y, z]
     )
     right_groove = right.entities.add_face(
-      [x + width - stile + run, y + panel_offset, z],
-      [x + width - stile + run, y + panel_offset + groove_width, z],
-      [x + width - stile + run, y + panel_offset + groove_width, z + height],
-      [x + width - stile + run, y + panel_offset, z + height]
+      [x + width - stile + run, groove_front_y, z],
+      [x + width - stile + run, groove_back_y, z],
+      [x + width - stile + run, groove_back_y, z + height],
+      [x + width - stile + run, groove_front_y, z + height]
     )
     right_groove.pushpull(groove_depth)
 
