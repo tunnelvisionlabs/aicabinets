@@ -493,16 +493,16 @@ module AICabinets
     )
     l_face.pushpull(thickness)
     left.entities.add_face(
-      [x + stile, y, z],
-      [x + stile, y, z + height],
-      [x + stile + run, y + panel_offset, z + height - run],
-      [x + stile + run, y + panel_offset, z + run]
+      [x + stile - run, y, z],
+      [x + stile - run, y, z + height],
+      [x + stile, y + panel_offset, z + height - run],
+      [x + stile, y + panel_offset, z + run]
     )
     left_groove = left.entities.add_face(
-      [x + stile, y + panel_offset, z],
-      [x + stile, y + panel_offset + groove, z],
-      [x + stile, y + panel_offset + groove, z + height],
-      [x + stile, y + panel_offset, z + height]
+      [x + stile - run, y + panel_offset, z],
+      [x + stile - run, y + panel_offset + groove, z],
+      [x + stile - run, y + panel_offset + groove, z + height],
+      [x + stile - run, y + panel_offset, z + height]
     )
     left_groove.pushpull(-run)
 
@@ -516,18 +516,18 @@ module AICabinets
     )
     r_face.pushpull(thickness)
     right.entities.add_face(
-      [x + width - stile, y, z],
-      [x + width - stile, y, z + height],
-      [x + width - stile - run, y + panel_offset, z + height - run],
-      [x + width - stile - run, y + panel_offset, z + run]
+      [x + width - stile + run, y, z],
+      [x + width - stile + run, y, z + height],
+      [x + width - stile, y + panel_offset, z + height - run],
+      [x + width - stile, y + panel_offset, z + run]
     )
     right_groove = right.entities.add_face(
-      [x + width - stile, y + panel_offset, z],
-      [x + width - stile, y + panel_offset + groove, z],
-      [x + width - stile, y + panel_offset + groove, z + height],
-      [x + width - stile, y + panel_offset, z + height]
+      [x + width - stile + run, y + panel_offset, z],
+      [x + width - stile + run, y + panel_offset + groove, z],
+      [x + width - stile + run, y + panel_offset + groove, z + height],
+      [x + width - stile + run, y + panel_offset, z + height]
     )
-    right_groove.pushpull(-run)
+    right_groove.pushpull(run)
 
     group
   end
