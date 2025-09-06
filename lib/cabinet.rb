@@ -15,6 +15,8 @@ module AICabinets
   DEFAULT_RAIL_WIDTH = 70.mm
   DEFAULT_STILE_WIDTH = 70.mm
   DEFAULT_BEVEL_ANGLE = 15.degrees
+  DEFAULT_PROFILE_DEPTH = 6.mm
+  DEFAULT_GROOVE_DEPTH = 6.mm
   DOOR_BUMPER_GAP = 2.mm
 
   # Creates a row of simple frameless cabinets formed from discrete panels.
@@ -64,7 +66,9 @@ module AICabinets
       door_reveal: DEFAULT_DOOR_REVEAL,
       rail_width: DEFAULT_RAIL_WIDTH,
       stile_width: DEFAULT_STILE_WIDTH,
-      bevel_angle: DEFAULT_BEVEL_ANGLE
+      bevel_angle: DEFAULT_BEVEL_ANGLE,
+      profile_depth: DEFAULT_PROFILE_DEPTH,
+      groove_depth: DEFAULT_GROOVE_DEPTH
     }.merge(config)
 
     height = defaults[:height]
@@ -106,6 +110,8 @@ module AICabinets
         rail_width: cab_opts[:rail_width],
         stile_width: cab_opts[:stile_width],
         bevel_angle: cab_opts[:bevel_angle],
+        profile_depth: cab_opts[:profile_depth],
+        groove_depth: cab_opts[:groove_depth],
         left_door_reveal: cab_opts[:left_reveal],
         right_door_reveal: cab_opts[:right_reveal],
         doors: cab_opts[:doors]
@@ -148,6 +154,8 @@ module AICabinets
     rail_width:,
     stile_width:,
     bevel_angle:,
+    profile_depth:,
+    groove_depth:,
     left_door_reveal: door_reveal,
     right_door_reveal: door_reveal,
     doors: nil
@@ -277,6 +285,8 @@ module AICabinets
       rail_width: rail_width,
       stile_width: stile_width,
       bevel_angle: bevel_angle,
+      profile_depth: profile_depth,
+      groove_depth: groove_depth,
       orientation: doors
     )
   end
@@ -295,6 +305,8 @@ module AICabinets
     rail_width:,
     stile_width:,
     bevel_angle:,
+    profile_depth:,
+    groove_depth:,
     orientation:
   )
     return unless orientation
@@ -318,7 +330,9 @@ module AICabinets
           style: style,
           rail_width: rail_width,
           stile_width: stile_width,
-          bevel_angle: bevel_angle
+          bevel_angle: bevel_angle,
+          profile_depth: profile_depth,
+          groove_depth: groove_depth
         )
       end
     else
@@ -335,7 +349,9 @@ module AICabinets
         style: style,
         rail_width: rail_width,
         stile_width: stile_width,
-        bevel_angle: bevel_angle
+        bevel_angle: bevel_angle,
+        profile_depth: profile_depth,
+        groove_depth: groove_depth
       )
     end
   end
@@ -351,7 +367,9 @@ module AICabinets
     style: :slab,
     rail_width: DEFAULT_RAIL_WIDTH,
     stile_width: DEFAULT_STILE_WIDTH,
-    bevel_angle: DEFAULT_BEVEL_ANGLE
+    bevel_angle: DEFAULT_BEVEL_ANGLE,
+    profile_depth: DEFAULT_PROFILE_DEPTH,
+    groove_depth: DEFAULT_GROOVE_DEPTH
   )
     group = entities.add_group
     y = -gap
@@ -369,19 +387,25 @@ module AICabinets
 
     rail = rail_width
     stile = stile_width
+    profile = profile_depth
+    groove = groove_depth
 
-    run = bevel_angle.to_f.zero? ? 0 : [thickness, rail, stile].min / 2.0
-    depth = bevel_angle.to_f.zero? ? thickness / 4.0 : run * Math.tan(bevel_angle)
+    run = if bevel_angle.to_f.zero?
+            groove
+          else
+            [profile / Math.tan(bevel_angle), rail / 2.0, stile / 2.0].min
+          end
+    panel_offset = profile
 
     # Panel
     panel = group.entities.add_group
     panel_face = panel.entities.add_face(
-      [x + stile + run, y + depth, z + rail + run],
-      [x + width - stile - run, y + depth, z + rail + run],
-      [x + width - stile - run, y + depth, z + height - rail - run],
-      [x + stile + run, y + depth, z + height - rail - run]
+      [x + stile + run, y + panel_offset, z + rail + run],
+      [x + width - stile - run, y + panel_offset, z + rail + run],
+      [x + width - stile - run, y + panel_offset, z + height - rail - run],
+      [x + stile + run, y + panel_offset, z + height - rail - run]
     )
-    panel_face.pushpull(thickness - depth)
+    panel_face.pushpull(groove)
 
     # Bottom rail
     bottom = group.entities.add_group
@@ -395,22 +419,29 @@ module AICabinets
     bottom.entities.add_face(
       [x + stile, y, z + rail],
       [x + width - stile, y, z + rail],
-      [x + width - stile - run, y + depth, z + rail + run],
-      [x + stile + run, y + depth, z + rail + run]
+      [x + width - stile - run, y + panel_offset, z + rail + run],
+      [x + stile + run, y + panel_offset, z + rail + run]
     )
+    groove_bottom = bottom.entities.add_face(
+      [x + stile + run, y + panel_offset, z],
+      [x + width - stile - run, y + panel_offset, z],
+      [x + width - stile - run, y + panel_offset + groove, z],
+      [x + stile + run, y + panel_offset + groove, z]
+    )
+    groove_bottom.pushpull(-thickness)
     # Cope the rail ends to match the stile profile
     left_cope = bottom.entities.add_face(
       [x + stile, y, z],
       [x + stile, y, z + rail],
-      [x + stile + run, y + depth, z + rail + run],
-      [x + stile + run, y + depth, z + run]
+      [x + stile + run, y + panel_offset, z + rail + run],
+      [x + stile + run, y + panel_offset, z + run]
     )
     left_cope.pushpull(-thickness)
     right_cope = bottom.entities.add_face(
       [x + width - stile, y, z],
       [x + width - stile, y, z + rail],
-      [x + width - stile - run, y + depth, z + rail + run],
-      [x + width - stile - run, y + depth, z + run]
+      [x + width - stile - run, y + panel_offset, z + rail + run],
+      [x + width - stile - run, y + panel_offset, z + run]
     )
     right_cope.pushpull(-thickness)
 
@@ -426,22 +457,29 @@ module AICabinets
     top.entities.add_face(
       [x + stile, y, z + height - rail],
       [x + width - stile, y, z + height - rail],
-      [x + width - stile - run, y + depth, z + height - rail - run],
-      [x + stile + run, y + depth, z + height - rail - run]
+      [x + width - stile - run, y + panel_offset, z + height - rail - run],
+      [x + stile + run, y + panel_offset, z + height - rail - run]
     )
+    groove_top = top.entities.add_face(
+      [x + stile + run, y + panel_offset, z + height - rail],
+      [x + width - stile - run, y + panel_offset, z + height - rail],
+      [x + width - stile - run, y + panel_offset + groove, z + height - rail],
+      [x + stile + run, y + panel_offset + groove, z + height - rail]
+    )
+    groove_top.pushpull(-thickness)
     # Cope the rail ends to match the stile profile
     top_left_cope = top.entities.add_face(
       [x + stile, y, z + height - rail],
       [x + stile, y, z + height],
-      [x + stile + run, y + depth, z + height - run],
-      [x + stile + run, y + depth, z + height - rail - run]
+      [x + stile + run, y + panel_offset, z + height - run],
+      [x + stile + run, y + panel_offset, z + height - rail - run]
     )
     top_left_cope.pushpull(-thickness)
     top_right_cope = top.entities.add_face(
       [x + width - stile, y, z + height - rail],
       [x + width - stile, y, z + height],
-      [x + width - stile - run, y + depth, z + height - run],
-      [x + width - stile - run, y + depth, z + height - rail - run]
+      [x + width - stile - run, y + panel_offset, z + height - run],
+      [x + width - stile - run, y + panel_offset, z + height - rail - run]
     )
     top_right_cope.pushpull(-thickness)
 
@@ -457,9 +495,16 @@ module AICabinets
     left.entities.add_face(
       [x + stile, y, z],
       [x + stile, y, z + height],
-      [x + stile + run, y + depth, z + height - run],
-      [x + stile + run, y + depth, z + run]
+      [x + stile + run, y + panel_offset, z + height - run],
+      [x + stile + run, y + panel_offset, z + run]
     )
+    left_groove = left.entities.add_face(
+      [x + stile, y + panel_offset, z],
+      [x + stile, y + panel_offset + groove, z],
+      [x + stile, y + panel_offset + groove, z + height],
+      [x + stile, y + panel_offset, z + height]
+    )
+    left_groove.pushpull(-run)
 
     # Right stile
     right = group.entities.add_group
@@ -473,9 +518,16 @@ module AICabinets
     right.entities.add_face(
       [x + width - stile, y, z],
       [x + width - stile, y, z + height],
-      [x + width - stile - run, y + depth, z + height - run],
-      [x + width - stile - run, y + depth, z + run]
+      [x + width - stile - run, y + panel_offset, z + height - run],
+      [x + width - stile - run, y + panel_offset, z + run]
     )
+    right_groove = right.entities.add_face(
+      [x + width - stile, y + panel_offset, z],
+      [x + width - stile, y + panel_offset + groove, z],
+      [x + width - stile, y + panel_offset + groove, z + height],
+      [x + width - stile, y + panel_offset, z + height]
+    )
+    right_groove.pushpull(-run)
 
     group
   end
