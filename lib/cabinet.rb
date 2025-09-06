@@ -501,19 +501,19 @@ module AICabinets
       [x, y, z + height]
     )
     l_face.pushpull(thickness)
-    left.entities.add_face(
-      [x + run, y, z],
-      [x + run, y, z + height],
-      [x + stile, groove_front_y, z + height],
+    bevel_left = left.entities.add_face(
+      [x + stile - run, y, z],
+      [x + stile, y, z],
       [x + stile, groove_front_y, z]
     )
-    left_groove = left.entities.add_face(
-      [x + stile, groove_front_y, z],
+    bevel_left.pushpull(height)
+    groove_left = left.entities.add_face(
+      [x + stile - groove_depth, groove_front_y, z],
+      [x + stile - groove_depth, groove_back_y, z],
       [x + stile, groove_back_y, z],
-      [x + stile, groove_back_y, z + height],
-      [x + stile, groove_front_y, z + height]
+      [x + stile, groove_front_y, z]
     )
-    left_groove.pushpull(-groove_depth)
+    groove_left.pushpull(height)
 
     # Right stile
     right = group.entities.add_group
@@ -524,19 +524,19 @@ module AICabinets
       [x + width - stile, y, z + height]
     )
     r_face.pushpull(thickness)
-    right.entities.add_face(
-      [x + width - run, y, z],
-      [x + width - run, y, z + height],
-      [x + width - stile, groove_front_y, z + height],
-      [x + width - stile, groove_front_y, z]
+    bevel_right = right.entities.add_face(
+      [x + width - stile, groove_front_y, z],
+      [x + width - stile + run, y, z],
+      [x + width - stile, y, z]
     )
-    right_groove = right.entities.add_face(
+    bevel_right.pushpull(height)
+    groove_right = right.entities.add_face(
       [x + width - stile, groove_front_y, z],
       [x + width - stile, groove_back_y, z],
-      [x + width - stile, groove_back_y, z + height],
-      [x + width - stile, groove_front_y, z + height]
+      [x + width - stile + groove_depth, groove_back_y, z],
+      [x + width - stile + groove_depth, groove_front_y, z]
     )
-    right_groove.pushpull(groove_depth)
+    groove_right.pushpull(height)
 
     group
   end
