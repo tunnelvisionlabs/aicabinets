@@ -402,10 +402,9 @@ module AICabinets
           else
             [profile * Math.tan(bevel_angle), rail / 2.0, stile / 2.0].min
           end
-    inside_y = y + thickness
-    uncut = thickness - profile - groove_width
-    groove_back_y = inside_y - uncut
-    groove_front_y = groove_back_y - groove_width
+    front_y = y
+    groove_front_y = front_y + profile
+    groove_back_y = groove_front_y + groove_width
 
     # Panel
     panel = group.entities.add_group
