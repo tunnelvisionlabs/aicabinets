@@ -393,9 +393,9 @@ module AICabinets
     run = if bevel_angle.to_f.zero?
             groove
           else
-            [profile / Math.tan(bevel_angle), rail / 2.0, stile / 2.0].min
+            [profile * Math.tan(bevel_angle), rail / 2.0, stile / 2.0].min
           end
-    panel_offset = profile
+    panel_offset = profile - thickness
 
     # Panel
     panel = group.entities.add_group
