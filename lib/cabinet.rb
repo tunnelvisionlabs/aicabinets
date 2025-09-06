@@ -363,7 +363,7 @@ module AICabinets
         [x + width, y, z + height],
         [x, y, z + height]
       )
-      face.pushpull(-thickness)
+      face.pushpull(thickness)
       return group
     end
 
@@ -381,39 +381,69 @@ module AICabinets
       [x + width - stile - run, y + depth, z + height - rail - run],
       [x + stile + run, y + depth, z + height - rail - run]
     )
-    panel_face.pushpull(-(thickness - depth))
+    panel_face.pushpull(thickness - depth)
 
     # Bottom rail
     bottom = group.entities.add_group
     b_face = bottom.entities.add_face(
-      [x, y, z],
-      [x + width, y, z],
-      [x + width, y, z + rail],
-      [x, y, z + rail]
+      [x + stile, y, z],
+      [x + width - stile, y, z],
+      [x + width - stile, y, z + rail],
+      [x + stile, y, z + rail]
     )
-    b_face.pushpull(-thickness)
+    b_face.pushpull(thickness)
     bottom.entities.add_face(
       [x + stile, y, z + rail],
       [x + width - stile, y, z + rail],
       [x + width - stile - run, y + depth, z + rail + run],
       [x + stile + run, y + depth, z + rail + run]
     )
+    # Cope the rail ends to match the stile profile
+    left_cope = bottom.entities.add_face(
+      [x + stile, y, z],
+      [x + stile, y, z + rail],
+      [x + stile + run, y + depth, z + rail + run],
+      [x + stile + run, y + depth, z + run]
+    )
+    left_cope.pushpull(-thickness)
+    right_cope = bottom.entities.add_face(
+      [x + width - stile, y, z],
+      [x + width - stile, y, z + rail],
+      [x + width - stile - run, y + depth, z + rail + run],
+      [x + width - stile - run, y + depth, z + run]
+    )
+    right_cope.pushpull(-thickness)
 
     # Top rail
     top = group.entities.add_group
     t_face = top.entities.add_face(
-      [x, y, z + height - rail],
-      [x + width, y, z + height - rail],
-      [x + width, y, z + height],
-      [x, y, z + height]
+      [x + stile, y, z + height - rail],
+      [x + width - stile, y, z + height - rail],
+      [x + width - stile, y, z + height],
+      [x + stile, y, z + height]
     )
-    t_face.pushpull(-thickness)
+    t_face.pushpull(thickness)
     top.entities.add_face(
       [x + stile, y, z + height - rail],
       [x + width - stile, y, z + height - rail],
       [x + width - stile - run, y + depth, z + height - rail - run],
       [x + stile + run, y + depth, z + height - rail - run]
     )
+    # Cope the rail ends to match the stile profile
+    top_left_cope = top.entities.add_face(
+      [x + stile, y, z + height - rail],
+      [x + stile, y, z + height],
+      [x + stile + run, y + depth, z + height - run],
+      [x + stile + run, y + depth, z + height - rail - run]
+    )
+    top_left_cope.pushpull(-thickness)
+    top_right_cope = top.entities.add_face(
+      [x + width - stile, y, z + height - rail],
+      [x + width - stile, y, z + height],
+      [x + width - stile - run, y + depth, z + height - run],
+      [x + width - stile - run, y + depth, z + height - rail - run]
+    )
+    top_right_cope.pushpull(-thickness)
 
     # Left stile
     left = group.entities.add_group
@@ -423,12 +453,12 @@ module AICabinets
       [x + stile, y, z + height],
       [x, y, z + height]
     )
-    l_face.pushpull(-thickness)
+    l_face.pushpull(thickness)
     left.entities.add_face(
-      [x + stile, y, z + rail],
-      [x + stile, y, z + height - rail],
-      [x + stile + run, y + depth, z + height - rail - run],
-      [x + stile + run, y + depth, z + rail + run]
+      [x + stile, y, z],
+      [x + stile, y, z + height],
+      [x + stile + run, y + depth, z + height - run],
+      [x + stile + run, y + depth, z + run]
     )
 
     # Right stile
@@ -439,12 +469,12 @@ module AICabinets
       [x + width, y, z + height],
       [x + width - stile, y, z + height]
     )
-    r_face.pushpull(-thickness)
+    r_face.pushpull(thickness)
     right.entities.add_face(
-      [x + width - stile, y, z + rail],
-      [x + width - stile, y, z + height - rail],
-      [x + width - stile - run, y + depth, z + height - rail - run],
-      [x + width - stile - run, y + depth, z + rail + run]
+      [x + width - stile, y, z],
+      [x + width - stile, y, z + height],
+      [x + width - stile - run, y + depth, z + height - run],
+      [x + width - stile - run, y + depth, z + run]
     )
 
     group
