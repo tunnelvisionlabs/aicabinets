@@ -355,41 +355,97 @@ module AICabinets
   )
     group = entities.add_group
     y = -gap
-    base_face = group.entities.add_face(
-      [x, y, z],
-      [x + width, y, z],
-      [x + width, y, z + height],
-      [x, y, z + height]
-    )
-    base_face.pushpull(thickness)
 
-    return group if style == :slab
+    if style == :slab
+      face = group.entities.add_face(
+        [x, y, z],
+        [x + width, y, z],
+        [x + width, y, z + height],
+        [x, y, z + height]
+      )
+      face.pushpull(-thickness)
+      return group
+    end
 
     rail = rail_width
     stile = stile_width
 
-    outer_p1 = Geom::Point3d.new(x + stile, y, z + rail)
-    outer_p2 = Geom::Point3d.new(x + width - stile, y, z + rail)
-    outer_p3 = Geom::Point3d.new(x + width - stile, y, z + height - rail)
-    outer_p4 = Geom::Point3d.new(x + stile, y, z + height - rail)
-
-    group.entities.add_face(outer_p1, outer_p2, outer_p3, outer_p4).erase!
-
     run = bevel_angle.to_f.zero? ? 0 : [thickness, rail, stile].min / 2.0
     depth = bevel_angle.to_f.zero? ? thickness / 4.0 : run * Math.tan(bevel_angle)
 
-    panel_p1 = Geom::Point3d.new(outer_p1.x + run, y - depth, outer_p1.z + run)
-    panel_p2 = Geom::Point3d.new(outer_p2.x - run, y - depth, outer_p2.z + run)
-    panel_p3 = Geom::Point3d.new(outer_p3.x - run, y - depth, outer_p3.z - run)
-    panel_p4 = Geom::Point3d.new(outer_p4.x + run, y - depth, outer_p4.z - run)
+    # Panel
+    panel = group.entities.add_group
+    panel_face = panel.entities.add_face(
+      [x + stile + run, y + depth, z + rail + run],
+      [x + width - stile - run, y + depth, z + rail + run],
+      [x + width - stile - run, y + depth, z + height - rail - run],
+      [x + stile + run, y + depth, z + height - rail - run]
+    )
+    panel_face.pushpull(-(thickness - depth))
 
-    group.entities.add_face(outer_p1, outer_p2, panel_p2, panel_p1)
-    group.entities.add_face(outer_p2, outer_p3, panel_p3, panel_p2)
-    group.entities.add_face(outer_p3, outer_p4, panel_p4, panel_p3)
-    group.entities.add_face(outer_p4, outer_p1, panel_p1, panel_p4)
+    # Bottom rail
+    bottom = group.entities.add_group
+    b_face = bottom.entities.add_face(
+      [x, y, z],
+      [x + width, y, z],
+      [x + width, y, z + rail],
+      [x, y, z + rail]
+    )
+    b_face.pushpull(-thickness)
+    bottom.entities.add_face(
+      [x + stile, y, z + rail],
+      [x + width - stile, y, z + rail],
+      [x + width - stile - run, y + depth, z + rail + run],
+      [x + stile + run, y + depth, z + rail + run]
+    )
 
-    panel_face = group.entities.add_face(panel_p1, panel_p2, panel_p3, panel_p4)
-    panel_face.pushpull(thickness - depth)
+    # Top rail
+    top = group.entities.add_group
+    t_face = top.entities.add_face(
+      [x, y, z + height - rail],
+      [x + width, y, z + height - rail],
+      [x + width, y, z + height],
+      [x, y, z + height]
+    )
+    t_face.pushpull(-thickness)
+    top.entities.add_face(
+      [x + stile, y, z + height - rail],
+      [x + width - stile, y, z + height - rail],
+      [x + width - stile - run, y + depth, z + height - rail - run],
+      [x + stile + run, y + depth, z + height - rail - run]
+    )
+
+    # Left stile
+    left = group.entities.add_group
+    l_face = left.entities.add_face(
+      [x, y, z],
+      [x + stile, y, z],
+      [x + stile, y, z + height],
+      [x, y, z + height]
+    )
+    l_face.pushpull(-thickness)
+    left.entities.add_face(
+      [x + stile, y, z + rail],
+      [x + stile, y, z + height - rail],
+      [x + stile + run, y + depth, z + height - rail - run],
+      [x + stile + run, y + depth, z + rail + run]
+    )
+
+    # Right stile
+    right = group.entities.add_group
+    r_face = right.entities.add_face(
+      [x + width - stile, y, z],
+      [x + width, y, z],
+      [x + width, y, z + height],
+      [x + width - stile, y, z + height]
+    )
+    r_face.pushpull(-thickness)
+    right.entities.add_face(
+      [x + width - stile, y, z + rail],
+      [x + width - stile, y, z + height - rail],
+      [x + width - stile - run, y + depth, z + height - rail - run],
+      [x + width - stile - run, y + depth, z + rail + run]
+    )
 
     group
   end
