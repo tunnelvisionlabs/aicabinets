@@ -402,7 +402,7 @@ module AICabinets
           else
             [profile * Math.tan(bevel_angle), rail, stile].min
           end
-    front_y = y
+    front_y = y - thickness
     groove_front_y = front_y + profile
     groove_back_y = groove_front_y + groove_width
 
