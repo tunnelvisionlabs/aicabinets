@@ -317,6 +317,7 @@ module AICabinets
       reveal_between_drawers = [drawer_count - 1, 0].max * door_reveal
       door_gap = doors ? door_reveal : 0
       has_doors = false
+      heights = []
       loop do
         available_for_drawers = interior_height - reveal_between_drawers - door_gap
         specified = drawers.sum { |d| d[:height] || 0 }
