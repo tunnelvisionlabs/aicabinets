@@ -436,7 +436,7 @@ module AICabinets
 
     # Bottom rail from the left stile
     bottom = left.copy
-    rotate_bottom = Geom::Transformation.rotation([x, 0, z], Geom::Vector3d.new(0, 1, 0), 90.degrees)
+    rotate_bottom = Geom::Transformation.rotation([x, 0, z], Geom::Vector3d.new(0, 1, 0), -90.degrees)
     bottom.transform!(rotate_bottom)
     rail_length = width - 2 * stile + 2 * groove_depth
     length_scale = rail_length / height.to_f
@@ -449,7 +449,7 @@ module AICabinets
       end
     end
     bb = bottom.bounds
-    bottom.transform!(Geom::Transformation.translation([stile - groove_depth - bb.min.x, 0, z - bb.min.z]))
+    bottom.transform!(Geom::Transformation.translation([x + stile - groove_depth - bb.min.x, 0, z - bb.min.z]))
 
     # Right stile by mirroring the left stile across the door width
     right = left.copy
