@@ -411,58 +411,6 @@ module AICabinets
     groove_front_y = front_y + profile
     groove_back_y = groove_front_y + groove_width
 
-    # Panel set in grooves; bevel run only affects the front face width
-    panel = group.entities.add_group
-    panel_face = panel.entities.add_face(
-      [x + stile, groove_front_y, z + rail],
-      [x + width - stile, groove_front_y, z + rail],
-      [x + width - stile, groove_front_y, z + height - rail],
-      [x + stile, groove_front_y, z + height - rail]
-    )
-    panel_face.pushpull(-groove_width)
-
-    # Bottom rail
-    bottom = group.entities.add_group
-    b_face = bottom.entities.add_face(
-      [x + stile, y, z],
-      [x + width - stile, y, z],
-      [x + width - stile, y, z + rail],
-      [x + stile, y, z + rail]
-    )
-    b_face.pushpull(thickness)
-    bottom.entities.add_face(
-      [x + stile, front_y, z + rail],
-      [x + width - stile, front_y, z + rail],
-      [x + width - stile, groove_front_y, z + rail - run],
-      [x + stile, groove_front_y, z + rail - run]
-    )
-    groove_bottom = bottom.entities.add_face(
-      [x + stile, groove_front_y, z],
-      [x + width - stile, groove_front_y, z],
-      [x + width - stile, groove_back_y, z],
-      [x + stile, groove_back_y, z]
-    )
-    groove_bottom.pushpull(-groove_depth)
-    # Cope the rail ends to match the stile profile
-    left_cope = bottom.entities.add_face(
-      [x + stile, front_y, z],
-      [x + stile, front_y, z + rail],
-      [x + stile, groove_front_y, z + rail - run],
-      [x + stile, groove_front_y, z + run]
-    )
-    left_cope.pushpull(-thickness)
-    right_cope = bottom.entities.add_face(
-      [x + width - stile, front_y, z],
-      [x + width - stile, front_y, z + rail],
-      [x + width - stile, groove_front_y, z + rail - run],
-      [x + width - stile, groove_front_y, z + run]
-    )
-    right_cope.pushpull(-thickness)
-    # Top rail by mirroring the bottom rail around the door's center
-    top = bottom.copy
-    mirror_top = Geom::Transformation.scaling([0, 0, z + height / 2], 1, 1, -1)
-    top.transform!(mirror_top)
-
     # Left stile
     left = group.entities.add_group
     l_face = left.entities.add_face(
@@ -486,11 +434,42 @@ module AICabinets
     )
     groove_left.pushpull(-height)
 
+    # Bottom rail from the left stile
+    bottom = left.copy
+    rotate_bottom = Geom::Transformation.rotation([x, 0, z], Geom::Vector3d.new(0, 1, 0), 90.degrees)
+    bottom.transform!(rotate_bottom)
+    rail_length = width - 2 * stile + 2 * groove_depth
+    length_scale = rail_length / height.to_f
+    bottom.transform!(Geom::Transformation.scaling([x, 0, z], length_scale, 1, 1))
+    if rail != stile
+      delta = rail - stile
+      bottom.entities.grep(Sketchup::Face).each do |f|
+        next unless f.normal.parallel?(Geom::Vector3d.new(0, 0, -1))
+        f.pushpull(delta)
+      end
+    end
+    bb = bottom.bounds
+    bottom.transform!(Geom::Transformation.translation([stile - groove_depth - bb.min.x, 0, z - bb.min.z]))
+
     # Right stile by mirroring the left stile across the door width
     right = left.copy
     mirror_right = Geom::Transformation.scaling([x + width / 2, 0, 0], -1, 1, 1)
     right.transform!(mirror_right)
-    right.entities.grep(Sketchup::Face).each(&:reverse!)
+
+    # Top rail by mirroring the bottom rail around the door's center
+    top = bottom.copy
+    mirror_top = Geom::Transformation.scaling([0, 0, z + height / 2], 1, 1, -1)
+    top.transform!(mirror_top)
+
+    # Panel set in grooves; bevel run only affects the front face width
+    panel = group.entities.add_group
+    panel_face = panel.entities.add_face(
+      [x + stile, groove_front_y, z + rail],
+      [x + width - stile, groove_front_y, z + rail],
+      [x + width - stile, groove_front_y, z + height - rail],
+      [x + stile, groove_front_y, z + height - rail]
+    )
+    panel_face.pushpull(-groove_width)
 
     group
   end
