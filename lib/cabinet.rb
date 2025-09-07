@@ -308,14 +308,28 @@ module AICabinets
     end
 
     total_drawer_height = 0
+    door_height_param = height
+    door_z_offset = 0
+    door_orientation = doors
     interior_height = height - panel_thickness * 2
     if drawers.any?
-      specified = drawers.sum { |d| d[:height] || 0 }
-      unspecified = drawers.count { |d| d[:height].nil? }
-      remaining = [interior_height - specified, 0].max
-      default_height = unspecified.zero? ? 0 : remaining / unspecified.to_f
-      heights = drawers.map { |d| d[:height] || default_height }
-      total_drawer_height = heights.sum
+      drawer_count = drawers.length
+      reveal_between_drawers = [drawer_count - 1, 0].max * door_reveal
+      door_gap = doors ? door_reveal : 0
+      loop do
+        available_for_drawers = interior_height - reveal_between_drawers - door_gap
+        specified = drawers.sum { |d| d[:height] || 0 }
+        unspecified = drawers.count { |d| d[:height].nil? }
+        remaining = [available_for_drawers - specified, 0].max
+        default_height = unspecified.zero? ? 0 : remaining / unspecified.to_f
+        heights = drawers.map { |d| d[:height] || default_height }
+        total_drawer_height = heights.sum
+        remaining_for_doors = interior_height - total_drawer_height - reveal_between_drawers - door_gap
+        has_doors = doors && remaining_for_doors > 0
+        break if has_doors || door_gap.zero?
+        door_gap = 0
+      end
+      gap_after_last = has_doors ? door_reveal : 0
       drawer_depth_default = drawer_depth || depth - back_thickness
       interior_width = width - 2 * panel_thickness - 2 * drawer_side_clearance
       x_start = x_offset + panel_thickness + drawer_side_clearance
@@ -326,6 +340,8 @@ module AICabinets
           h = heights[i]
           bottom = current_top - h
           ddepth = drawer[:depth] || drawer_depth_default
+          extra_top = door_type == :overlay && i.zero? ? panel_thickness : 0
+          extra_bottom = door_type == :overlay && !has_doors && i == drawers.length - 1 ? panel_thickness : 0
           create_drawer_box(
             g,
             x: x_start,
@@ -342,8 +358,8 @@ module AICabinets
             g,
             x_offset + left_door_reveal,
             width - left_door_reveal - right_door_reveal,
-            h + 2 * door_reveal,
-            bottom - door_reveal,
+            h + 2 * door_reveal + extra_top + extra_bottom,
+            bottom - door_reveal - extra_bottom,
             door_thickness,
             DOOR_BUMPER_GAP,
             style: door_style,
@@ -354,14 +370,17 @@ module AICabinets
             groove_width: groove_width,
             groove_depth: groove_depth
           )
-          current_top = bottom
+          current_top = bottom - (i == drawers.length - 1 ? gap_after_last : door_reveal)
         end
+        door_start_z = current_top
       else
         current_bottom = panel_thickness
         drawers.each_with_index do |drawer, i|
           h = heights[i]
           bottom = current_bottom
           ddepth = drawer[:depth] || drawer_depth_default
+          extra_bottom = door_type == :overlay && i.zero? ? panel_thickness : 0
+          extra_top = door_type == :overlay && !has_doors && i == drawers.length - 1 ? panel_thickness : 0
           create_drawer_box(
             g,
             x: x_start,
@@ -378,8 +397,8 @@ module AICabinets
             g,
             x_offset + left_door_reveal,
             width - left_door_reveal - right_door_reveal,
-            h + 2 * door_reveal,
-            bottom - door_reveal,
+            h + 2 * door_reveal + extra_top + extra_bottom,
+            bottom - door_reveal - extra_bottom,
             door_thickness,
             DOOR_BUMPER_GAP,
             style: door_style,
@@ -390,19 +409,13 @@ module AICabinets
             groove_width: groove_width,
             groove_depth: groove_depth
           )
-          current_bottom += h
+          current_bottom += h + (i == drawers.length - 1 ? gap_after_last : door_reveal)
         end
+        door_start_z = current_bottom
       end
-    end
-
-    remaining_for_doors = interior_height - total_drawer_height
-    door_height_param = height
-    door_z_offset = 0
-    door_orientation = doors
-    if drawers.any?
-      if remaining_for_doors > 0
-        door_height_param = height - panel_thickness - total_drawer_height
-        door_z_offset = drawer_origin == :top ? 0 : panel_thickness + total_drawer_height
+      if has_doors
+        door_height_param = drawer_origin == :top ? door_start_z : height - door_start_z
+        door_z_offset = drawer_origin == :top ? 0 : door_start_z
       else
         door_orientation = nil
       end

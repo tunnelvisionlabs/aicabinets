@@ -10,7 +10,8 @@ AICabinets.create_frameless_cabinet(
     {
       width: 600.mm,
       drawers: [
-        { height: 100.mm }
+        { height: 100.mm },
+        { height: 140.mm }
       ],
       doors: :double
     },
