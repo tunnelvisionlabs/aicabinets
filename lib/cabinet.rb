@@ -12,7 +12,18 @@ module AICabinets
   DEFAULT_DOOR_TYPE = :full_overlay
   DEFAULT_DOOR_STYLE = :slab
   DEFAULT_DOOR_REVEAL = 2.mm
+  DEFAULT_RAIL_WIDTH = 70.mm
+  DEFAULT_STILE_WIDTH = 70.mm
+  DEFAULT_BEVEL_ANGLE = 15.degrees
+  DEFAULT_PROFILE_DEPTH = 6.mm
+  DEFAULT_GROOVE_WIDTH = 6.mm
+  DEFAULT_GROOVE_DEPTH = 9.5.mm
   DOOR_BUMPER_GAP = 2.mm
+
+  # Axis orientation helper:
+  #   X increases left → right
+  #   Y increases front → back (front has the lowest Y value)
+  #   Z increases bottom → top
 
   # Creates a row of simple frameless cabinets formed from discrete panels.
   #
@@ -58,7 +69,13 @@ module AICabinets
       door_thickness: DEFAULT_DOOR_THICKNESS,
       door_type: DEFAULT_DOOR_TYPE,
       door_style: DEFAULT_DOOR_STYLE,
-      door_reveal: DEFAULT_DOOR_REVEAL
+      door_reveal: DEFAULT_DOOR_REVEAL,
+      rail_width: DEFAULT_RAIL_WIDTH,
+      stile_width: DEFAULT_STILE_WIDTH,
+      bevel_angle: DEFAULT_BEVEL_ANGLE,
+      profile_depth: DEFAULT_PROFILE_DEPTH,
+      groove_width: DEFAULT_GROOVE_WIDTH,
+      groove_depth: DEFAULT_GROOVE_DEPTH
     }.merge(config)
 
     height = defaults[:height]
@@ -97,6 +114,12 @@ module AICabinets
         door_type: cab_opts[:door_type],
         door_style: cab_opts[:door_style],
         door_reveal: cab_opts[:door_reveal],
+        rail_width: cab_opts[:rail_width],
+        stile_width: cab_opts[:stile_width],
+        bevel_angle: cab_opts[:bevel_angle],
+        profile_depth: cab_opts[:profile_depth],
+        groove_width: cab_opts[:groove_width],
+        groove_depth: cab_opts[:groove_depth],
         left_door_reveal: cab_opts[:left_reveal],
         right_door_reveal: cab_opts[:right_reveal],
         doors: cab_opts[:doors]
@@ -136,6 +159,12 @@ module AICabinets
     door_type:,
     door_style:,
     door_reveal:,
+    rail_width:,
+    stile_width:,
+    bevel_angle:,
+    profile_depth:,
+    groove_width:,
+    groove_depth:,
     left_door_reveal: door_reveal,
     right_door_reveal: door_reveal,
     doors: nil
@@ -262,6 +291,12 @@ module AICabinets
       right_reveal: right_door_reveal,
       type: door_type,
       style: door_style,
+      rail_width: rail_width,
+      stile_width: stile_width,
+      bevel_angle: bevel_angle,
+      profile_depth: profile_depth,
+      groove_width: groove_width,
+      groove_depth: groove_depth,
       orientation: doors
     )
   end
@@ -277,10 +312,16 @@ module AICabinets
     right_reveal:,
     type:,
     style:,
+    rail_width:,
+    stile_width:,
+    bevel_angle:,
+    profile_depth:,
+    groove_width:,
+    groove_depth:,
     orientation:
   )
     return unless orientation
-    return unless type == :full_overlay && style == :slab
+    return unless type == :full_overlay
 
     door_height = height - 2 * door_reveal
     z = door_reveal
@@ -296,25 +337,141 @@ module AICabinets
           door_height,
           z,
           door_thickness,
-          gap
+          gap,
+          style: style,
+          rail_width: rail_width,
+          stile_width: stile_width,
+          bevel_angle: bevel_angle,
+          profile_depth: profile_depth,
+          groove_width: groove_width,
+          groove_depth: groove_depth
         )
       end
     else
       door_width = width - left_reveal - right_reveal
       x_start = x_offset + left_reveal
-      create_door_panel(entities, x_start, door_width, door_height, z, door_thickness, gap)
+      create_door_panel(
+        entities,
+        x_start,
+        door_width,
+        door_height,
+        z,
+        door_thickness,
+        gap,
+        style: style,
+        rail_width: rail_width,
+        stile_width: stile_width,
+        bevel_angle: bevel_angle,
+        profile_depth: profile_depth,
+        groove_width: groove_width,
+        groove_depth: groove_depth
+      )
     end
   end
 
-  def self.create_door_panel(entities, x, width, height, z, thickness, gap)
+  def self.create_door_panel(
+    entities,
+    x,
+    width,
+    height,
+    z,
+    thickness,
+    gap,
+    style: :slab,
+    rail_width: DEFAULT_RAIL_WIDTH,
+    stile_width: DEFAULT_STILE_WIDTH,
+    bevel_angle: DEFAULT_BEVEL_ANGLE,
+    profile_depth: DEFAULT_PROFILE_DEPTH,
+    groove_width: DEFAULT_GROOVE_WIDTH,
+    groove_depth: DEFAULT_GROOVE_DEPTH
+  )
     group = entities.add_group
     y = -gap
-    group.entities.add_face(
+
+    if style == :slab
+      face = group.entities.add_face(
+        [x, y, z],
+        [x + width, y, z],
+        [x + width, y, z + height],
+        [x, y, z + height]
+      )
+      face.pushpull(thickness)
+      return group
+    end
+
+    rail = rail_width
+    stile = stile_width
+    profile = profile_depth
+    run = if bevel_angle.to_f.zero?
+            0
+          else
+            [profile * Math.tan(bevel_angle), rail, stile].min
+          end
+    front_y = y - thickness
+    groove_front_y = front_y + profile
+    groove_back_y = groove_front_y + groove_width
+
+    # Left stile
+    left = group.entities.add_group
+    l_face = left.entities.add_face(
       [x, y, z],
-      [x + width, y, z],
-      [x + width, y, z + height],
+      [x + stile, y, z],
+      [x + stile, y, z + height],
       [x, y, z + height]
-    ).pushpull(thickness)
+    )
+    l_face.pushpull(thickness)
+    bevel_left = left.entities.add_face(
+      [x + stile, front_y, z],
+      [x + stile, groove_front_y, z],
+      [x + stile - run, front_y, z]
+    )
+    bevel_left.pushpull(-height)
+    groove_left = left.entities.add_face(
+      [x + stile, groove_front_y, z],
+      [x + stile, groove_back_y, z],
+      [x + stile - groove_depth, groove_back_y, z],
+      [x + stile - groove_depth, groove_front_y, z]
+    )
+    groove_left.pushpull(-height)
+
+    # Bottom rail from the left stile
+    bottom = left.copy
+    rotate_bottom = Geom::Transformation.rotation([x, 0, z], Geom::Vector3d.new(0, 1, 0), -90.degrees)
+    bottom.transform!(rotate_bottom)
+    rail_length = width - 2 * stile + 2 * groove_depth
+    length_scale = rail_length / height.to_f
+    bottom.transform!(Geom::Transformation.scaling([x, 0, z], length_scale, 1, 1))
+    if rail != stile
+      delta = rail - stile
+      bottom.entities.grep(Sketchup::Face).each do |f|
+        next unless f.normal.parallel?(Geom::Vector3d.new(0, 0, -1))
+        f.pushpull(delta)
+      end
+    end
+    bb = bottom.bounds
+    bottom.transform!(Geom::Transformation.translation([x + stile - groove_depth - bb.min.x, 0, z - bb.min.z]))
+
+    # Right stile by mirroring the left stile across the door width
+    right = left.copy
+    mirror_right = Geom::Transformation.scaling([x + width / 2, 0, 0], -1, 1, 1)
+    right.transform!(mirror_right)
+
+    # Top rail by mirroring the bottom rail around the door's center
+    top = bottom.copy
+    mirror_top = Geom::Transformation.scaling([0, 0, z + height / 2], 1, 1, -1)
+    top.transform!(mirror_top)
+
+    # Panel set in grooves; bevel run only affects the front face width
+    panel = group.entities.add_group
+    panel_face = panel.entities.add_face(
+      [x + stile - groove_depth, groove_front_y, z + rail - groove_depth],
+      [x + width - stile + groove_depth, groove_front_y, z + rail - groove_depth],
+      [x + width - stile + groove_depth, groove_front_y, z + height - rail + groove_depth],
+      [x + stile - groove_depth, groove_front_y, z + height - rail + groove_depth]
+    )
+    panel_face.pushpull(-groove_width)
+
+    group
   end
 
   def self.align_to_hole_top(z, base, spacing)
