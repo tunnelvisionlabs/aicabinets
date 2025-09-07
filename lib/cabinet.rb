@@ -20,6 +20,11 @@ module AICabinets
   DEFAULT_GROOVE_DEPTH = 9.5.mm
   DOOR_BUMPER_GAP = 2.mm
 
+  # Axis orientation helper:
+  #   X increases left → right
+  #   Y increases front → back (front has the lowest Y value)
+  #   Z increases bottom → top
+
   # Creates a row of simple frameless cabinets formed from discrete panels.
   #
   # The data structure is a hash with global defaults and an array of
@@ -506,14 +511,14 @@ module AICabinets
       [x + stile, groove_front_y, z],
       [x + stile - run, front_y, z]
     )
-    bevel_left.pushpull(height)
+    bevel_left.pushpull(-height)
     groove_left = left.entities.add_face(
       [x + stile, groove_front_y, z],
       [x + stile, groove_back_y, z],
       [x + stile - groove_depth, groove_back_y, z],
       [x + stile - groove_depth, groove_front_y, z]
     )
-    groove_left.pushpull(height)
+    groove_left.pushpull(-height)
 
     # Right stile
     right = group.entities.add_group
@@ -529,14 +534,14 @@ module AICabinets
       [x + width - stile + run, front_y, z],
       [x + width - stile, groove_front_y, z]
     )
-    bevel_right.pushpull(height)
+    bevel_right.pushpull(-height)
     groove_right = right.entities.add_face(
       [x + width - stile + groove_depth, groove_front_y, z],
       [x + width - stile + groove_depth, groove_back_y, z],
       [x + width - stile, groove_back_y, z],
       [x + width - stile, groove_front_y, z]
     )
-    groove_right.pushpull(height)
+    groove_right.pushpull(-height)
 
     group
   end
