@@ -462,7 +462,6 @@ module AICabinets
     top = bottom.copy
     mirror_top = Geom::Transformation.scaling([0, 0, z + height / 2], 1, 1, -1)
     top.transform!(mirror_top)
-    top.entities.grep(Sketchup::Face).each(&:reverse!)
 
     # Left stile
     left = group.entities.add_group
