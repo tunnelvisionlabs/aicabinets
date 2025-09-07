@@ -9,7 +9,7 @@ module AICabinets
   DEFAULT_HOLE_DEPTH = 13.mm
   DEFAULT_HOLE_SPACING = 32.mm
   DEFAULT_DOOR_THICKNESS = 19.mm
-  DEFAULT_DOOR_TYPE = :full_overlay
+  DEFAULT_DOOR_TYPE = :overlay
   DEFAULT_DOOR_STYLE = :slab
   DEFAULT_DOOR_REVEAL = 2.mm
   DEFAULT_RAIL_WIDTH = 70.mm
@@ -321,7 +321,7 @@ module AICabinets
     orientation:
   )
     return unless orientation
-    return unless type == :full_overlay
+    return unless type == :overlay
 
     door_height = height - 2 * door_reveal
     z = door_reveal
