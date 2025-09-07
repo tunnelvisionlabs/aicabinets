@@ -458,44 +458,11 @@ module AICabinets
       [x + width - stile, groove_front_y, z + run]
     )
     right_cope.pushpull(-thickness)
-
-    # Top rail
-    top = group.entities.add_group
-    t_face = top.entities.add_face(
-      [x + stile, y, z + height - rail],
-      [x + width - stile, y, z + height - rail],
-      [x + width - stile, y, z + height],
-      [x + stile, y, z + height]
-    )
-    t_face.pushpull(thickness)
-    top.entities.add_face(
-      [x + stile, front_y, z + height - rail],
-      [x + width - stile, front_y, z + height - rail],
-      [x + width - stile, groove_front_y, z + height - rail + run],
-      [x + stile, groove_front_y, z + height - rail + run]
-    )
-    groove_top = top.entities.add_face(
-      [x + stile, groove_front_y, z + height - rail],
-      [x + width - stile, groove_front_y, z + height - rail],
-      [x + width - stile, groove_back_y, z + height - rail],
-      [x + stile, groove_back_y, z + height - rail]
-    )
-    groove_top.pushpull(-groove_depth)
-    # Cope the rail ends to match the stile profile
-    top_left_cope = top.entities.add_face(
-      [x + stile, front_y, z + height - rail],
-      [x + stile, front_y, z + height],
-      [x + stile, groove_front_y, z + height - run],
-      [x + stile, groove_front_y, z + height - rail + run]
-    )
-    top_left_cope.pushpull(-thickness)
-    top_right_cope = top.entities.add_face(
-      [x + width - stile, front_y, z + height - rail],
-      [x + width - stile, front_y, z + height],
-      [x + width - stile, groove_front_y, z + height - run],
-      [x + width - stile, groove_front_y, z + height - rail + run]
-    )
-    top_right_cope.pushpull(-thickness)
+    # Top rail by mirroring the bottom rail around the door's center
+    top = bottom.copy
+    mirror_top = Geom::Transformation.scaling([0, 0, z + height / 2], 1, 1, -1)
+    top.transform!(mirror_top)
+    top.entities.grep(Sketchup::Face).each(&:reverse!)
 
     # Left stile
     left = group.entities.add_group
@@ -520,28 +487,11 @@ module AICabinets
     )
     groove_left.pushpull(-height)
 
-    # Right stile
-    right = group.entities.add_group
-    r_face = right.entities.add_face(
-      [x + width - stile, y, z],
-      [x + width, y, z],
-      [x + width, y, z + height],
-      [x + width - stile, y, z + height]
-    )
-    r_face.pushpull(thickness)
-    bevel_right = right.entities.add_face(
-      [x + width - stile, front_y, z],
-      [x + width - stile + run, front_y, z],
-      [x + width - stile, groove_front_y, z]
-    )
-    bevel_right.pushpull(-height)
-    groove_right = right.entities.add_face(
-      [x + width - stile + groove_depth, groove_front_y, z],
-      [x + width - stile + groove_depth, groove_back_y, z],
-      [x + width - stile, groove_back_y, z],
-      [x + width - stile, groove_front_y, z]
-    )
-    groove_right.pushpull(-height)
+    # Right stile by mirroring the left stile across the door width
+    right = left.copy
+    mirror_right = Geom::Transformation.scaling([x + width / 2, 0, 0], -1, 1, 1)
+    right.transform!(mirror_right)
+    right.entities.grep(Sketchup::Face).each(&:reverse!)
 
     group
   end
