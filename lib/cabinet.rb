@@ -464,10 +464,10 @@ module AICabinets
     # Panel set in grooves; bevel run only affects the front face width
     panel = group.entities.add_group
     panel_face = panel.entities.add_face(
-      [x + stile, groove_front_y, z + rail],
-      [x + width - stile, groove_front_y, z + rail],
-      [x + width - stile, groove_front_y, z + height - rail],
-      [x + stile, groove_front_y, z + height - rail]
+      [x + stile - groove_depth, groove_front_y, z + rail - groove_depth],
+      [x + width - stile + groove_depth, groove_front_y, z + rail - groove_depth],
+      [x + width - stile + groove_depth, groove_front_y, z + height - rail + groove_depth],
+      [x + stile - groove_depth, groove_front_y, z + height - rail + groove_depth]
     )
     panel_face.pushpull(-groove_width)
 
