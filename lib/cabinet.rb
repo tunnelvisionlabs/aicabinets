@@ -20,6 +20,12 @@ module AICabinets
   DEFAULT_GROOVE_DEPTH = 9.5.mm
   DOOR_BUMPER_GAP = 2.mm
 
+  DEFAULT_DRAWER_SIDE_THICKNESS = 16.mm
+  DEFAULT_DRAWER_BOTTOM_THICKNESS = 10.mm
+  DEFAULT_DRAWER_JOINERY = :butt
+  DEFAULT_DRAWER_SIDE_CLEARANCE = 5.mm
+  DEFAULT_DRAWER_ORIGIN = :top
+
   # Axis orientation helper:
   #   X increases left → right
   #   Y increases front → back (front has the lowest Y value)
@@ -75,13 +81,20 @@ module AICabinets
       bevel_angle: DEFAULT_BEVEL_ANGLE,
       profile_depth: DEFAULT_PROFILE_DEPTH,
       groove_width: DEFAULT_GROOVE_WIDTH,
-      groove_depth: DEFAULT_GROOVE_DEPTH
+      groove_depth: DEFAULT_GROOVE_DEPTH,
+      drawer_side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
+      drawer_bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
+      drawer_joinery: DEFAULT_DRAWER_JOINERY,
+      drawer_depth: nil,
+      drawer_side_clearance: DEFAULT_DRAWER_SIDE_CLEARANCE,
+      drawer_origin: DEFAULT_DRAWER_ORIGIN,
+      drawers: []
     }.merge(config)
 
     height = defaults[:height]
     depth = defaults[:depth]
 
-    cabinets = (config[:cabinets] || []).map { |cab| defaults.merge(cab) }
+    cabinets = (config[:cabinets] || []).map { |cab| defaults.merge(cab).tap { |c| c[:drawers] ||= [] } }
 
     cabinets.each do |cab|
       cab[:left_reveal] = cab[:door_reveal]
@@ -122,6 +135,13 @@ module AICabinets
         groove_depth: cab_opts[:groove_depth],
         left_door_reveal: cab_opts[:left_reveal],
         right_door_reveal: cab_opts[:right_reveal],
+        drawer_side_thickness: cab_opts[:drawer_side_thickness],
+        drawer_bottom_thickness: cab_opts[:drawer_bottom_thickness],
+        drawer_joinery: cab_opts[:drawer_joinery],
+        drawer_depth: cab_opts[:drawer_depth],
+        drawer_side_clearance: cab_opts[:drawer_side_clearance],
+        drawer_origin: cab_opts[:drawer_origin],
+        drawers: cab_opts[:drawers] || [],
         doors: cab_opts[:doors]
       )
 
@@ -167,6 +187,13 @@ module AICabinets
     groove_depth:,
     left_door_reveal: door_reveal,
     right_door_reveal: door_reveal,
+    drawer_side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
+    drawer_bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
+    drawer_joinery: DEFAULT_DRAWER_JOINERY,
+    drawer_depth: nil,
+    drawer_side_clearance: DEFAULT_DRAWER_SIDE_CLEARANCE,
+    drawer_origin: DEFAULT_DRAWER_ORIGIN,
+    drawers: [],
     doors: nil
   )
     cabinet = entities.add_group
@@ -280,11 +307,85 @@ module AICabinets
       end
     end
 
+    total_drawer_height = 0
+    interior_height = height - panel_thickness * 2
+    if drawers.any?
+      specified = drawers.sum { |d| d[:height] || 0 }
+      unspecified = drawers.count { |d| d[:height].nil? }
+      remaining = [interior_height - specified, 0].max
+      default_height = unspecified.zero? ? 0 : remaining / unspecified.to_f
+      heights = drawers.map { |d| d[:height] || default_height }
+      total_drawer_height = heights.sum
+      drawer_depth_default = drawer_depth || depth - back_thickness
+      interior_width = width - 2 * panel_thickness - 2 * drawer_side_clearance
+      x_start = x_offset + panel_thickness + drawer_side_clearance
+      y_start = 0
+      if drawer_origin == :top
+        current_top = height - panel_thickness
+        drawers.each_with_index do |drawer, i|
+          h = heights[i]
+          bottom = current_top - h
+          ddepth = drawer[:depth] || drawer_depth_default
+          create_drawer_box(
+            g,
+            x: x_start,
+            y: y_start,
+            z: bottom,
+            width: interior_width,
+            depth: ddepth,
+            height: h,
+            side_thickness: drawer_side_thickness,
+            bottom_thickness: drawer_bottom_thickness,
+            joinery: drawer_joinery
+          )
+          current_top = bottom
+        end
+      else
+        current_bottom = panel_thickness
+        drawers.each_with_index do |drawer, i|
+          h = heights[i]
+          bottom = current_bottom
+          ddepth = drawer[:depth] || drawer_depth_default
+          create_drawer_box(
+            g,
+            x: x_start,
+            y: y_start,
+            z: bottom,
+            width: interior_width,
+            depth: ddepth,
+            height: h,
+            side_thickness: drawer_side_thickness,
+            bottom_thickness: drawer_bottom_thickness,
+            joinery: drawer_joinery
+          )
+          current_bottom += h
+        end
+      end
+    end
+
+    remaining_for_doors = interior_height - total_drawer_height
+    door_height_param = height
+    door_z_offset = 0
+    door_orientation = doors
+    if drawers.any?
+      if remaining_for_doors > 0
+        door_height_param = remaining_for_doors + 2 * door_reveal
+        door_z_offset = if drawer_origin == :top
+                          panel_thickness
+                        else
+                          panel_thickness + total_drawer_height
+                        end
+      else
+        door_orientation = nil
+      end
+    end
+
     add_doors(
       g,
       x_offset: x_offset,
       width: width,
-      height: height,
+      height: door_height_param,
+      z_offset: door_z_offset,
       door_thickness: door_thickness,
       door_reveal: door_reveal,
       left_reveal: left_door_reveal,
@@ -297,7 +398,7 @@ module AICabinets
       profile_depth: profile_depth,
       groove_width: groove_width,
       groove_depth: groove_depth,
-      orientation: doors
+      orientation: door_orientation
     )
   end
 
@@ -306,6 +407,7 @@ module AICabinets
     x_offset:,
     width:,
     height:,
+    z_offset: 0,
     door_thickness:,
     door_reveal:,
     left_reveal:,
@@ -324,7 +426,7 @@ module AICabinets
     return unless type == :overlay
 
     door_height = height - 2 * door_reveal
-    z = door_reveal
+    z = z_offset + door_reveal
     gap = DOOR_BUMPER_GAP
     if orientation == :double
       door_width = (width - left_reveal - right_reveal - door_reveal) / 2
@@ -470,6 +572,63 @@ module AICabinets
       [x + stile - groove_depth, groove_front_y, z + height - rail + groove_depth]
     )
     panel_face.pushpull(-groove_width)
+
+    group
+  end
+
+  def self.create_drawer_box(
+    entities,
+    x:,
+    y:,
+    z:,
+    width:,
+    depth:,
+    height:,
+    side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
+    bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
+    joinery: DEFAULT_DRAWER_JOINERY
+  )
+    group = entities.add_group
+
+    # Left side
+    group.entities.add_face(
+      [x, y, z],
+      [x, y + depth, z],
+      [x, y + depth, z + height],
+      [x, y, z + height]
+    ).pushpull(side_thickness)
+
+    # Right side
+    group.entities.add_face(
+      [x + width - side_thickness, y, z],
+      [x + width - side_thickness, y + depth, z],
+      [x + width - side_thickness, y + depth, z + height],
+      [x + width - side_thickness, y, z + height]
+    ).pushpull(-side_thickness)
+
+    # Back
+    group.entities.add_face(
+      [x + side_thickness, y + depth - side_thickness, z],
+      [x + width - side_thickness, y + depth - side_thickness, z],
+      [x + width - side_thickness, y + depth - side_thickness, z + height],
+      [x + side_thickness, y + depth - side_thickness, z + height]
+    ).pushpull(side_thickness)
+
+    # Front
+    group.entities.add_face(
+      [x + side_thickness, y, z],
+      [x + width - side_thickness, y, z],
+      [x + width - side_thickness, y, z + height],
+      [x + side_thickness, y, z + height]
+    ).pushpull(-side_thickness)
+
+    # Bottom
+    group.entities.add_face(
+      [x + side_thickness, y, z],
+      [x + width - side_thickness, y, z],
+      [x + width - side_thickness, y + depth - side_thickness, z],
+      [x + side_thickness, y + depth - side_thickness, z]
+    ).pushpull(-bottom_thickness)
 
     group
   end
