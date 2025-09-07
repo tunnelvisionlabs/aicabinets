@@ -338,6 +338,22 @@ module AICabinets
             bottom_thickness: drawer_bottom_thickness,
             joinery: drawer_joinery
           )
+          create_door_panel(
+            g,
+            x_offset + left_door_reveal,
+            width - left_door_reveal - right_door_reveal,
+            h + 2 * door_reveal,
+            bottom - door_reveal,
+            door_thickness,
+            DOOR_BUMPER_GAP,
+            style: door_style,
+            rail_width: rail_width,
+            stile_width: stile_width,
+            bevel_angle: bevel_angle,
+            profile_depth: profile_depth,
+            groove_width: groove_width,
+            groove_depth: groove_depth
+          )
           current_top = bottom
         end
       else
@@ -358,6 +374,22 @@ module AICabinets
             bottom_thickness: drawer_bottom_thickness,
             joinery: drawer_joinery
           )
+          create_door_panel(
+            g,
+            x_offset + left_door_reveal,
+            width - left_door_reveal - right_door_reveal,
+            h + 2 * door_reveal,
+            bottom - door_reveal,
+            door_thickness,
+            DOOR_BUMPER_GAP,
+            style: door_style,
+            rail_width: rail_width,
+            stile_width: stile_width,
+            bevel_angle: bevel_angle,
+            profile_depth: profile_depth,
+            groove_width: groove_width,
+            groove_depth: groove_depth
+          )
           current_bottom += h
         end
       end
@@ -369,12 +401,8 @@ module AICabinets
     door_orientation = doors
     if drawers.any?
       if remaining_for_doors > 0
-        door_height_param = remaining_for_doors + 2 * door_reveal
-        door_z_offset = if drawer_origin == :top
-                          panel_thickness
-                        else
-                          panel_thickness + total_drawer_height
-                        end
+        door_height_param = height - panel_thickness - total_drawer_height
+        door_z_offset = drawer_origin == :top ? 0 : panel_thickness + total_drawer_height
       else
         door_orientation = nil
       end
@@ -604,7 +632,7 @@ module AICabinets
       [x + width - side_thickness, y + depth, z],
       [x + width - side_thickness, y + depth, z + height],
       [x + width - side_thickness, y, z + height]
-    ).pushpull(-side_thickness)
+    ).pushpull(side_thickness)
 
     # Back
     group.entities.add_face(
@@ -612,7 +640,7 @@ module AICabinets
       [x + width - side_thickness, y + depth - side_thickness, z],
       [x + width - side_thickness, y + depth - side_thickness, z + height],
       [x + side_thickness, y + depth - side_thickness, z + height]
-    ).pushpull(side_thickness)
+    ).pushpull(-side_thickness)
 
     # Front
     group.entities.add_face(
