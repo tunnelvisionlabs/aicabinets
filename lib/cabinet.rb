@@ -356,12 +356,14 @@ module AICabinets
             bottom_thickness: drawer_bottom_thickness,
             joinery: drawer_joinery
           )
+          front_height = h + extra_top + extra_bottom
+          front_bottom = bottom - door_reveal - extra_bottom
           create_door_panel(
             g,
             x_offset + left_door_reveal,
             width - left_door_reveal - right_door_reveal,
-            h + 2 * door_reveal + extra_top + extra_bottom,
-            bottom - door_reveal - extra_bottom,
+            front_height,
+            front_bottom,
             door_thickness,
             DOOR_BUMPER_GAP,
             style: door_style,
@@ -395,12 +397,14 @@ module AICabinets
             bottom_thickness: drawer_bottom_thickness,
             joinery: drawer_joinery
           )
+          front_height = h + extra_top + extra_bottom
+          front_bottom = bottom + door_reveal - extra_bottom
           create_door_panel(
             g,
             x_offset + left_door_reveal,
             width - left_door_reveal - right_door_reveal,
-            h + 2 * door_reveal + extra_top + extra_bottom,
-            bottom - door_reveal - extra_bottom,
+            front_height,
+            front_bottom,
             door_thickness,
             DOOR_BUMPER_GAP,
             style: door_style,
