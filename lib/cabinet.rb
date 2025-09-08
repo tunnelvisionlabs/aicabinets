@@ -624,12 +624,10 @@ module AICabinets
 
     # Trim rails where they intersect stiles
     [left, right].each do |stile|
-      new_bottom = bottom.subtract(stile)
-      bottom.erase!
-      bottom = new_bottom
-      new_top = top.subtract(stile)
-      top.erase!
-      top = new_top
+      # Boolean subtraction deletes both operands, so subtract using
+      # temporary copies to keep the original stiles intact.
+      bottom = bottom.subtract(stile.copy) || bottom
+      top = top.subtract(stile.copy) || top
     end
 
     # Panel set in grooves; bevel run only affects the front face width
