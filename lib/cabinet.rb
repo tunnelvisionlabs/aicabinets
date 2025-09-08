@@ -692,7 +692,7 @@ module AICabinets
       [x + width - side_thickness, y, z],
       [x + width - side_thickness, y + depth - side_thickness, z],
       [x + side_thickness, y + depth - side_thickness, z]
-    ).pushpull(-bottom_thickness)
+    ).pushpull(bottom_thickness)
 
     group
   end
