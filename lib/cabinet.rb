@@ -28,6 +28,23 @@ module AICabinets
   DEFAULT_DRAWER_BOTTOM_CLEARANCE = 16.mm
   DEFAULT_DRAWER_TOP_CLEARANCE = 7.mm
 
+  # Predefined hole patterns for various drawer slide types. Each entry
+  # is a hash keyed by slide length (in inches) mapping to an array of
+  # distances from the front of the cabinet side where mounting screws
+  # should be placed. Distances are expressed as {Length} objects.
+  SLIDE_HOLE_PATTERNS = {
+    salice_progressa_plus_short_us: {
+      # Distances are from the front of the cabinet side panel
+      # and reflect Salice's specified hole locations for the
+      # short-member Progressa+ slides in the US market.
+      18 => [37.mm, 261.mm, 325.mm, 357.mm],
+      21 => [37.mm, 261.mm, 389.mm, 430.mm],
+      24 => [37.mm, 261.mm, 389.mm, 453.mm],
+      27 => [37.mm, 261.mm, 389.mm, 517.mm],
+      30 => [37.mm, 261.mm, 389.mm, 517.mm]
+    }
+  }.freeze
+
   # Axis orientation helper:
   #   X increases left → right
   #   Y increases front → back (front has the lowest Y value)
