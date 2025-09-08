@@ -622,6 +622,12 @@ module AICabinets
     mirror_top = Geom::Transformation.scaling([0, 0, z + height / 2], 1, 1, -1)
     top.transform!(mirror_top)
 
+    # Trim rails where they intersect stiles
+    [left, right].each do |stile|
+      bottom = stile.trim(bottom) || bottom
+      top = stile.trim(top) || top
+    end
+
     # Panel set in grooves; bevel run only affects the front face width
     panel = group.entities.add_group
     panel_face = panel.entities.add_face(
