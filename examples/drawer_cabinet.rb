@@ -21,6 +21,8 @@ AICabinets.create_frameless_cabinet(
       drawers: [
         { height: 200.mm, depth: 250.mm }
       ],
+      drawer_bottom_clearance: 20.mm,
+      drawer_top_clearance: 10.mm,
       doors: :left
     }
   ]

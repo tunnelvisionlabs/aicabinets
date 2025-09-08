@@ -25,6 +25,8 @@ module AICabinets
   DEFAULT_DRAWER_JOINERY = :butt
   DEFAULT_DRAWER_SIDE_CLEARANCE = 5.mm
   DEFAULT_DRAWER_ORIGIN = :top
+  DEFAULT_DRAWER_BOTTOM_CLEARANCE = 16.mm
+  DEFAULT_DRAWER_TOP_CLEARANCE = 7.mm
 
   # Axis orientation helper:
   #   X increases left → right
@@ -87,6 +89,8 @@ module AICabinets
       drawer_joinery: DEFAULT_DRAWER_JOINERY,
       drawer_depth: nil,
       drawer_side_clearance: DEFAULT_DRAWER_SIDE_CLEARANCE,
+      drawer_bottom_clearance: DEFAULT_DRAWER_BOTTOM_CLEARANCE,
+      drawer_top_clearance: DEFAULT_DRAWER_TOP_CLEARANCE,
       drawer_origin: DEFAULT_DRAWER_ORIGIN,
       drawers: []
     }.merge(config)
@@ -140,6 +144,8 @@ module AICabinets
         drawer_joinery: cab_opts[:drawer_joinery],
         drawer_depth: cab_opts[:drawer_depth],
         drawer_side_clearance: cab_opts[:drawer_side_clearance],
+        drawer_bottom_clearance: cab_opts[:drawer_bottom_clearance],
+        drawer_top_clearance: cab_opts[:drawer_top_clearance],
         drawer_origin: cab_opts[:drawer_origin],
         drawers: cab_opts[:drawers] || [],
         doors: cab_opts[:doors]
@@ -192,6 +198,8 @@ module AICabinets
     drawer_joinery: DEFAULT_DRAWER_JOINERY,
     drawer_depth: nil,
     drawer_side_clearance: DEFAULT_DRAWER_SIDE_CLEARANCE,
+    drawer_bottom_clearance: DEFAULT_DRAWER_BOTTOM_CLEARANCE,
+    drawer_top_clearance: DEFAULT_DRAWER_TOP_CLEARANCE,
     drawer_origin: DEFAULT_DRAWER_ORIGIN,
     drawers: [],
     doors: nil
@@ -344,14 +352,16 @@ module AICabinets
           ddepth = drawer[:depth] || drawer_depth_default
           extra_top = door_type == :overlay && i.zero? ? panel_thickness : 0
           extra_bottom = door_type == :overlay && !has_doors && i == drawers.length - 1 ? panel_thickness : 0
+          box_bottom = bottom + drawer_bottom_clearance
+          box_height = h - drawer_bottom_clearance - drawer_top_clearance
           create_drawer_box(
             g,
             x: x_start,
             y: y_start,
-            z: bottom,
+            z: box_bottom,
             width: interior_width,
             depth: ddepth,
-            height: h,
+            height: box_height,
             side_thickness: drawer_side_thickness,
             bottom_thickness: drawer_bottom_thickness,
             joinery: drawer_joinery
@@ -385,14 +395,16 @@ module AICabinets
           ddepth = drawer[:depth] || drawer_depth_default
           extra_bottom = door_type == :overlay && i.zero? ? panel_thickness : 0
           extra_top = door_type == :overlay && !has_doors && i == drawers.length - 1 ? panel_thickness : 0
+          box_bottom = bottom + drawer_bottom_clearance
+          box_height = h - drawer_bottom_clearance - drawer_top_clearance
           create_drawer_box(
             g,
             x: x_start,
             y: y_start,
-            z: bottom,
+            z: box_bottom,
             width: interior_width,
             depth: ddepth,
-            height: h,
+            height: box_height,
             side_thickness: drawer_side_thickness,
             bottom_thickness: drawer_bottom_thickness,
             joinery: drawer_joinery
@@ -638,7 +650,8 @@ module AICabinets
     group = entities.add_group
 
     # Left side
-    group.entities.add_face(
+    left = group.entities.add_group
+    left.entities.add_face(
       [x, y, z],
       [x, y + depth, z],
       [x, y + depth, z + height],
@@ -646,7 +659,8 @@ module AICabinets
     ).pushpull(side_thickness)
 
     # Right side
-    group.entities.add_face(
+    right = group.entities.add_group
+    right.entities.add_face(
       [x + width - side_thickness, y, z],
       [x + width - side_thickness, y + depth, z],
       [x + width - side_thickness, y + depth, z + height],
@@ -654,7 +668,8 @@ module AICabinets
     ).pushpull(side_thickness)
 
     # Back
-    group.entities.add_face(
+    back = group.entities.add_group
+    back.entities.add_face(
       [x + side_thickness, y + depth - side_thickness, z],
       [x + width - side_thickness, y + depth - side_thickness, z],
       [x + width - side_thickness, y + depth - side_thickness, z + height],
@@ -662,7 +677,8 @@ module AICabinets
     ).pushpull(-side_thickness)
 
     # Front
-    group.entities.add_face(
+    front = group.entities.add_group
+    front.entities.add_face(
       [x + side_thickness, y, z],
       [x + width - side_thickness, y, z],
       [x + width - side_thickness, y, z + height],
@@ -670,7 +686,8 @@ module AICabinets
     ).pushpull(-side_thickness)
 
     # Bottom
-    group.entities.add_face(
+    bottom = group.entities.add_group
+    bottom.entities.add_face(
       [x + side_thickness, y, z],
       [x + width - side_thickness, y, z],
       [x + width - side_thickness, y + depth - side_thickness, z],
