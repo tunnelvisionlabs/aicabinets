@@ -42,6 +42,15 @@ module AICabinets
       24 => [37.mm, 261.mm, 389.mm, 453.mm],
       27 => [37.mm, 261.mm, 389.mm, 517.mm],
       30 => [37.mm, 261.mm, 389.mm, 517.mm]
+    },
+    salice_progressa_plus_standard_us: {
+      # Distances for the face-frame cabinet member Progressa+
+      # slides available in the US market.
+      9  => [37.mm, 133.mm, 197.mm, 229.mm],
+      12 => [37.mm, 165.mm, 261.mm, 293.mm],
+      15 => [37.mm, 165.mm, 261.mm, 357.mm],
+      18 => [37.mm, 261.mm, 357.mm, 389.mm, 453.mm],
+      21 => [37.mm, 261.mm, 357.mm, 389.mm, 517.mm]
     }
   }.freeze
 
