@@ -5,7 +5,7 @@ require_relative '../lib/cabinet'
 AICabinets.create_frameless_cabinet(
   height: 720.mm,
   depth: 350.mm,
-  drawer_depth: 300.mm,
+  drawer_slide: :salice_progressa_plus_standard_us,
   cabinets: [
     {
       width: 600.mm,
