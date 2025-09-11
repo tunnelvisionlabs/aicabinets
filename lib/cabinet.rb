@@ -123,6 +123,11 @@ module AICabinets
         &.fetch(:slide_length)
   end
 
+  def self.has_front?(section)
+    section[:doors] || section[:drawers]&.any? ||
+      section[:partitions]&.any? { |p| has_front?(p) }
+  end
+
   # Axis orientation helper:
   #   X increases left → right
   #   Y increases front → back (front has the lowest Y value)
@@ -213,7 +218,7 @@ module AICabinets
     end
 
     cabinets.each_cons(2) do |left, right|
-      next unless left[:doors] && right[:doors]
+      next unless has_front?(left) && has_front?(right)
 
       left[:right_reveal] = left[:door_reveal] / 2
       right[:left_reveal] = right[:door_reveal] / 2
@@ -508,7 +513,7 @@ module AICabinets
       end
 
       parts.each_cons(2) do |left, right|
-        next unless left[:doors] && right[:doors]
+        next unless has_front?(left) && has_front?(right)
         left[:right_reveal] = panel_thickness / 2 + left[:door_reveal] / 2
         right[:left_reveal] = panel_thickness / 2 + right[:door_reveal] / 2
       end
