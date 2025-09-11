@@ -15,6 +15,8 @@ AICabinets.create_frameless_cabinet(
   back_inset: 10.mm,
   door_thickness: 19.mm,
   door_reveal: 2.mm,
+  top_type: :stringers,
+  top_stringer_width: 120.mm,
   cabinets: [
     {
       width: 600.mm,

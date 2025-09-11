@@ -24,6 +24,9 @@ module AICabinets
   DEFAULT_BOTTOM_INSET = 0.mm
   DEFAULT_BACK_INSET = 0.mm
 
+  DEFAULT_TOP_TYPE = :panel
+  DEFAULT_TOP_STRINGER_WIDTH = 100.mm
+
   DEFAULT_DRAWER_SIDE_THICKNESS = 16.mm
   DEFAULT_DRAWER_BOTTOM_THICKNESS = 10.mm
   DEFAULT_DRAWER_JOINERY = :butt
@@ -179,6 +182,8 @@ module AICabinets
       top_inset: DEFAULT_TOP_INSET,
       bottom_inset: DEFAULT_BOTTOM_INSET,
       back_inset: DEFAULT_BACK_INSET,
+      top_type: DEFAULT_TOP_TYPE,
+      top_stringer_width: DEFAULT_TOP_STRINGER_WIDTH,
       drawer_side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
       drawer_bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
       drawer_joinery: DEFAULT_DRAWER_JOINERY,
@@ -236,6 +241,8 @@ module AICabinets
         top_inset: cab_opts[:top_inset],
         bottom_inset: cab_opts[:bottom_inset],
         back_inset: cab_opts[:back_inset],
+        top_type: cab_opts[:top_type],
+        top_stringer_width: cab_opts[:top_stringer_width],
         left_door_reveal: cab_opts[:left_reveal],
         right_door_reveal: cab_opts[:right_reveal],
         drawer_side_thickness: cab_opts[:drawer_side_thickness],
@@ -296,6 +303,8 @@ module AICabinets
     back_inset: DEFAULT_BACK_INSET,
     left_door_reveal: door_reveal,
     right_door_reveal: door_reveal,
+    top_type: DEFAULT_TOP_TYPE,
+    top_stringer_width: DEFAULT_TOP_STRINGER_WIDTH,
     drawer_side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
     drawer_bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
     drawer_joinery: DEFAULT_DRAWER_JOINERY,
@@ -364,13 +373,31 @@ module AICabinets
     ).pushpull(-panel_thickness)
 
     # Top
-    top = g.add_group
-    top.entities.add_face(
-      [x_offset + panel_thickness, 0, height - top_inset - panel_thickness],
-      [x_offset + width - panel_thickness, 0, height - top_inset - panel_thickness],
-      [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
-      [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
-    ).pushpull(panel_thickness)
+    if top_type == :stringers
+      front = g.add_group
+      front.entities.add_face(
+        [x_offset + panel_thickness, 0, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, 0, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, top_stringer_width, height - top_inset - panel_thickness],
+        [x_offset + panel_thickness, top_stringer_width, height - top_inset - panel_thickness]
+      ).pushpull(panel_thickness)
+
+      back_stringer = g.add_group
+      back_stringer.entities.add_face(
+        [x_offset + panel_thickness, depth - top_stringer_width, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, depth - top_stringer_width, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
+        [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
+      ).pushpull(panel_thickness)
+    else
+      top = g.add_group
+      top.entities.add_face(
+        [x_offset + panel_thickness, 0, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, 0, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
+        [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
+      ).pushpull(panel_thickness)
+    end
 
     # Back inset between the sides and flush with the top of the bottom panel
     # and the underside of the top panel
