@@ -11,13 +11,14 @@ AICabinets.create_frameless_cabinet(
   cabinets: [
     {
       width: 536.mm,
-      top_reveal: 1.mm,
-      bottom_reveal: 2.mm,
       partitions: [
-        { width: 100.mm, doors: :left },
-        { drawers: [ { pitch: 3 } ] },
-        { drawers: [ { pitch: 3 } ] },
-        { width: 150.mm, doors: :right }
+        {
+          start: :top,
+          partitions: [
+            { height: 300.mm, doors: :left },
+            { drawers: [ { pitch: 3 } ] }
+          ]
+        }
       ]
     }
   ]
