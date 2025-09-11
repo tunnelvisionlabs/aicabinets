@@ -28,6 +28,94 @@ module AICabinets
   DEFAULT_DRAWER_BOTTOM_CLEARANCE = 16.mm
   DEFAULT_DRAWER_TOP_CLEARANCE = 7.mm
 
+  # Specifications for drawer slides including hole locations, required
+  # cabinet depth, nominal slide length, and the offset of the first hole
+  # of the 32 mm system from the bottom of the box. Each slide type maps to
+  # a hash with a :first_hole_from_bottom entry and a :lengths subhash keyed
+  # by nominal length in inches.
+  SLIDE_HOLE_PATTERNS = {
+    salice_progressa_plus_short_us: {
+      first_hole_from_bottom: 38.mm,
+      lengths: {
+        # Distances are from the front of the cabinet side panel and reflect
+        # Salice's specified hole locations for the short-member Progressa+
+        # slides in the US market.
+        15 => {
+          holes: [37.mm, 261.mm], # rear hole positions TBD
+          min_depth: 399.mm,
+          slide_length: 381.mm
+        },
+        18 => {
+          holes: [37.mm, 261.mm, 325.mm, 357.mm],
+          min_depth: 474.mm,
+          slide_length: 457.mm
+        },
+        21 => {
+          holes: [37.mm, 261.mm, 389.mm, 430.mm],
+          min_depth: 550.mm,
+          slide_length: 533.mm
+        },
+        24 => {
+          holes: [37.mm, 261.mm, 389.mm, 453.mm],
+          min_depth: 627.mm,
+          slide_length: 610.mm
+        },
+        27 => {
+          holes: [37.mm, 261.mm, 389.mm, 517.mm],
+          min_depth: 703.mm,
+          slide_length: 686.mm
+        },
+        30 => {
+          holes: [37.mm, 261.mm, 389.mm, 517.mm],
+          min_depth: 779.mm,
+          slide_length: 762.mm
+        }
+      }
+    },
+    salice_progressa_plus_standard_us: {
+      first_hole_from_bottom: 38.mm,
+      lengths: {
+        # Distances for the face-frame cabinet member Progressa+ slides
+        # available in the US market.
+        9 => {
+          holes: [37.mm, 133.mm, 197.mm, 229.mm],
+          min_depth: 270.mm,
+          slide_length: 229.mm
+        },
+        12 => {
+          holes: [37.mm, 165.mm, 261.mm, 293.mm],
+          min_depth: 323.mm,
+          slide_length: 305.mm
+        },
+        15 => {
+          holes: [37.mm, 165.mm, 261.mm, 357.mm],
+          min_depth: 399.mm,
+          slide_length: 381.mm
+        },
+        18 => {
+          holes: [37.mm, 261.mm, 357.mm, 389.mm, 453.mm],
+          min_depth: 475.mm,
+          slide_length: 457.mm
+        },
+        21 => {
+          holes: [37.mm, 261.mm, 357.mm, 389.mm, 517.mm],
+          min_depth: 551.mm,
+          slide_length: 533.mm
+        }
+      }
+    }
+  }.freeze
+
+  def self.select_slide_depth(kind, interior_depth, material_thickness)
+    spec = SLIDE_HOLE_PATTERNS[kind]
+    return unless spec
+    offset = material_thickness >= 17.mm ? 3.mm : 0.mm
+    spec[:lengths].values
+        .select { |data| data[:min_depth] + offset <= interior_depth }
+        .max_by { |data| data[:slide_length].to_f }
+        &.fetch(:slide_length)
+  end
+
   # Axis orientation helper:
   #   X increases left → right
   #   Y increases front → back (front has the lowest Y value)
@@ -88,6 +176,7 @@ module AICabinets
       drawer_bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
       drawer_joinery: DEFAULT_DRAWER_JOINERY,
       drawer_depth: nil,
+      drawer_slide: nil,
       drawer_side_clearance: DEFAULT_DRAWER_SIDE_CLEARANCE,
       drawer_bottom_clearance: DEFAULT_DRAWER_BOTTOM_CLEARANCE,
       drawer_top_clearance: DEFAULT_DRAWER_TOP_CLEARANCE,
@@ -143,6 +232,7 @@ module AICabinets
         drawer_bottom_thickness: cab_opts[:drawer_bottom_thickness],
         drawer_joinery: cab_opts[:drawer_joinery],
         drawer_depth: cab_opts[:drawer_depth],
+        drawer_slide: cab_opts[:drawer_slide],
         drawer_side_clearance: cab_opts[:drawer_side_clearance],
         drawer_bottom_clearance: cab_opts[:drawer_bottom_clearance],
         drawer_top_clearance: cab_opts[:drawer_top_clearance],
@@ -197,6 +287,7 @@ module AICabinets
     drawer_bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
     drawer_joinery: DEFAULT_DRAWER_JOINERY,
     drawer_depth: nil,
+    drawer_slide: nil,
     drawer_side_clearance: DEFAULT_DRAWER_SIDE_CLEARANCE,
     drawer_bottom_clearance: DEFAULT_DRAWER_BOTTOM_CLEARANCE,
     drawer_top_clearance: DEFAULT_DRAWER_TOP_CLEARANCE,
@@ -322,6 +413,9 @@ module AICabinets
     interior_height = height - panel_thickness * 2
     if drawers.any?
       drawer_count = drawers.length
+      drawers.each do |d|
+        d[:height] ||= d[:pitch] && d[:pitch] * hole_spacing
+      end
       reveal_between_drawers = [drawer_count - 1, 0].max * door_reveal
       door_gap = doors ? door_reveal : 0
       has_doors = false
@@ -340,7 +434,21 @@ module AICabinets
         door_gap = 0
       end
       gap_after_last = has_doors ? door_reveal : 0
-      drawer_depth_default = drawer_depth || depth - back_thickness
+      interior_depth = depth - back_thickness
+      drawer_depth_default =
+        if drawer_depth
+          drawer_depth
+        elsif drawer_slide
+          select_slide_depth(drawer_slide, interior_depth, drawer_side_thickness) || interior_depth
+        else
+          interior_depth
+        end
+      slide_spec = drawer_slide && SLIDE_HOLE_PATTERNS[drawer_slide]
+      extra_bottom_from_slide = if slide_spec && slide_spec[:first_hole_from_bottom]
+                                  slide_spec[:first_hole_from_bottom] - hole_spacing
+                                else
+                                  0.mm
+                                end
       interior_width = width - 2 * panel_thickness - 2 * drawer_side_clearance
       x_start = x_offset + panel_thickness + drawer_side_clearance
       y_start = 0
@@ -352,8 +460,9 @@ module AICabinets
           ddepth = drawer[:depth] || drawer_depth_default
           extra_top = door_type == :overlay && i.zero? ? panel_thickness : 0
           extra_bottom = door_type == :overlay && !has_doors && i == drawers.length - 1 ? panel_thickness : 0
-          box_bottom = bottom + drawer_bottom_clearance
-          box_height = h - drawer_bottom_clearance - drawer_top_clearance
+          offset = (i == drawers.length - 1 ? extra_bottom_from_slide : 0)
+          box_bottom = bottom + drawer_bottom_clearance + offset
+          box_height = h - drawer_bottom_clearance - drawer_top_clearance - offset
           create_drawer_box(
             g,
             x: x_start,
@@ -395,8 +504,9 @@ module AICabinets
           ddepth = drawer[:depth] || drawer_depth_default
           extra_bottom = door_type == :overlay && i.zero? ? panel_thickness : 0
           extra_top = door_type == :overlay && !has_doors && i == drawers.length - 1 ? panel_thickness : 0
-          box_bottom = bottom + drawer_bottom_clearance
-          box_height = h - drawer_bottom_clearance - drawer_top_clearance
+          offset = (i.zero? ? extra_bottom_from_slide : 0)
+          box_bottom = bottom + drawer_bottom_clearance + offset
+          box_height = h - drawer_bottom_clearance - drawer_top_clearance - offset
           create_drawer_box(
             g,
             x: x_start,

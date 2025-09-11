@@ -5,13 +5,13 @@ require_relative '../lib/cabinet'
 AICabinets.create_frameless_cabinet(
   height: 720.mm,
   depth: 350.mm,
-  drawer_depth: 300.mm,
+  drawer_slide: :salice_progressa_plus_standard_us,
   cabinets: [
     {
       width: 600.mm,
       drawers: [
-        { height: 100.mm },
-        { height: 140.mm }
+        { pitch: 3 },
+        { pitch: 4 }
       ],
       doors: :double
     },
@@ -19,7 +19,7 @@ AICabinets.create_frameless_cabinet(
       width: 600.mm,
       drawer_origin: :bottom,
       drawers: [
-        { height: 200.mm, depth: 250.mm }
+        { pitch: 6 }
       ],
       drawer_bottom_clearance: 20.mm,
       drawer_top_clearance: 10.mm,
