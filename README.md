@@ -11,3 +11,22 @@ This repository contains Ruby scripts for SketchUp that generate simple cabinetr
 - `examples/partitioned_cabinet.rb` – demonstrates dividing a cabinet interior with fixed partitions.
 
 Copy the library and sample code into SketchUp's Ruby console or load them as scripts to build cabinet geometry automatically.
+
+## API
+
+The library exposes the `AICabinets` module with helpers for creating cabinet geometry.
+
+### `create_frameless_cabinet(config)`
+
+`AICabinets.create_frameless_cabinet(config)` builds a row of frameless cabinets from a configuration hash. Global options such as `height`, `depth`, `panel_thickness`, `back_thickness`, and `shelf_count` establish defaults for all cabinets. Each entry in the `cabinets` array describes an individual cabinet and may override these defaults.
+
+Within a cabinet you can configure:
+
+- **Shelves and holes** – specify `shelf_count` and `hole_columns` for adjustable shelves.
+- **Doors** – choose overlay or inset with `door_type`, slab or rail-and-stile via `door_style`, and adjust reveals and gaps.
+- **Drawers** – provide a `drawers` array with front heights; options cover box thicknesses, clearances, joinery, and slide selection.
+- **Partitions** – add fixed panels with `partitions` to divide the interior into sections.
+- **Tops** – model a full top panel or stringers using `top_type` and `top_stringer_width`.
+
+Utility helpers like `select_slide_depth`, `align_to_hole_top`, and `drill_hole_columns` are also available for hardware layout and hole placement.
+
