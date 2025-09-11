@@ -20,13 +20,72 @@ The library exposes the `AICabinets` module with helpers for creating cabinet ge
 
 `AICabinets.create_frameless_cabinet(config)` builds a row of frameless cabinets from a configuration hash. Global options such as `height`, `depth`, `panel_thickness`, `back_thickness`, and `shelf_count` establish defaults for all cabinets. Each entry in the `cabinets` array describes an individual cabinet and may override these defaults.
 
-Within a cabinet you can configure:
+The configuration hash is defined below using [JSON Schema](https://json-schema.org/), enabling automated validation and generation of configuration data.
 
-- **Shelves and holes** – specify `shelf_count` and `hole_columns` for adjustable shelves.
-- **Doors** – choose overlay or inset with `door_type`, slab or rail-and-stile via `door_style`, and adjust reveals and gaps.
-- **Drawers** – provide a `drawers` array with front heights; options cover box thicknesses, clearances, joinery, and slide selection.
-- **Partitions** – add fixed panels with `partitions` to divide the interior into sections.
-- **Tops** – model a full top panel or stringers using `top_type` and `top_stringer_width`.
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "height": { "type": "number" },
+    "depth": { "type": "number" },
+    "panel_thickness": { "type": "number" },
+    "back_thickness": { "type": "number" },
+    "shelf_count": { "type": "integer" },
+    "cabinets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "width": { "type": "number" },
+          "shelf_count": { "type": "integer" },
+          "hole_columns": { "type": "integer" },
+          "door_type": { "enum": ["overlay", "inset"] },
+          "door_style": { "enum": ["slab", "rail_and_stile"] },
+          "door_reveal": { "type": "number" },
+          "top_reveal": { "type": "number" },
+          "bottom_reveal": { "type": "number" },
+          "door_gap": { "type": "number" },
+          "drawers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "front_height": { "type": "number" },
+                "box_thickness": { "type": "number" },
+                "clearance": { "type": "number" },
+                "joinery": { "enum": ["dovetail", "butt", "rabbet"] },
+                "slide": { "enum": ["side", "undermount"] }
+              },
+              "required": ["front_height"]
+            }
+          },
+          "partitions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "offset": { "type": "number" }
+              },
+              "required": ["offset"]
+            }
+          },
+          "top_type": { "enum": ["panel", "stringers"] },
+          "top_stringer_width": { "type": "number" }
+        },
+        "required": ["width"]
+      }
+    }
+  },
+  "required": ["cabinets"]
+}
+```
+
+Machine algorithms can generate a matching Ruby hash and invoke:
+
+```ruby
+AICabinets.create_frameless_cabinet(config)
+```
 
 Utility helpers like `select_slide_depth`, `align_to_hole_top`, and `drill_hole_columns` are also available for hardware layout and hole placement.
 
