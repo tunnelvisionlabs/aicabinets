@@ -1,5 +1,6 @@
 # Example usage of the AICabinets library.
-# Creates two frameless cabinets side by side.
+# Creates two frameless cabinets side by side, demonstrating top, bottom,
+# and back insets.
 
 require_relative '../lib/cabinet'
 
@@ -9,6 +10,9 @@ AICabinets.create_frameless_cabinet(
   depth: 350.mm,
   panel_thickness: 19.mm,
   back_thickness: 6.mm,
+  top_inset: 20.mm,
+  bottom_inset: 20.mm,
+  back_inset: 10.mm,
   door_thickness: 19.mm,
   door_reveal: 2.mm,
   cabinets: [

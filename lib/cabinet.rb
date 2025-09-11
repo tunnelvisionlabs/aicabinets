@@ -20,6 +20,10 @@ module AICabinets
   DEFAULT_GROOVE_DEPTH = 9.5.mm
   DOOR_BUMPER_GAP = 2.mm
 
+  DEFAULT_TOP_INSET = 0.mm
+  DEFAULT_BOTTOM_INSET = 0.mm
+  DEFAULT_BACK_INSET = 0.mm
+
   DEFAULT_DRAWER_SIDE_THICKNESS = 16.mm
   DEFAULT_DRAWER_BOTTOM_THICKNESS = 10.mm
   DEFAULT_DRAWER_JOINERY = :butt
@@ -172,6 +176,9 @@ module AICabinets
       profile_depth: DEFAULT_PROFILE_DEPTH,
       groove_width: DEFAULT_GROOVE_WIDTH,
       groove_depth: DEFAULT_GROOVE_DEPTH,
+      top_inset: DEFAULT_TOP_INSET,
+      bottom_inset: DEFAULT_BOTTOM_INSET,
+      back_inset: DEFAULT_BACK_INSET,
       drawer_side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
       drawer_bottom_thickness: DEFAULT_DRAWER_BOTTOM_THICKNESS,
       drawer_joinery: DEFAULT_DRAWER_JOINERY,
@@ -226,6 +233,9 @@ module AICabinets
         profile_depth: cab_opts[:profile_depth],
         groove_width: cab_opts[:groove_width],
         groove_depth: cab_opts[:groove_depth],
+        top_inset: cab_opts[:top_inset],
+        bottom_inset: cab_opts[:bottom_inset],
+        back_inset: cab_opts[:back_inset],
         left_door_reveal: cab_opts[:left_reveal],
         right_door_reveal: cab_opts[:right_reveal],
         drawer_side_thickness: cab_opts[:drawer_side_thickness],
@@ -281,6 +291,9 @@ module AICabinets
     profile_depth:,
     groove_width:,
     groove_depth:,
+    top_inset: DEFAULT_TOP_INSET,
+    bottom_inset: DEFAULT_BOTTOM_INSET,
+    back_inset: DEFAULT_BACK_INSET,
     left_door_reveal: door_reveal,
     right_door_reveal: door_reveal,
     drawer_side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
@@ -318,8 +331,8 @@ module AICabinets
     drill_hole_columns(
       left.entities,
       x: x_offset + panel_thickness,
-      depth: depth,
-      panel_thickness: panel_thickness,
+      depth: depth - back_inset,
+      panel_thickness: panel_thickness + bottom_inset,
       back_thickness: back_thickness,
       hole_diameter: hole_diameter,
       hole_depth: hole_depth,
@@ -331,8 +344,8 @@ module AICabinets
     drill_hole_columns(
       right.entities,
       x: x_offset + width - panel_thickness,
-      depth: depth,
-      panel_thickness: panel_thickness,
+      depth: depth - back_inset,
+      panel_thickness: panel_thickness + bottom_inset,
       back_thickness: back_thickness,
       hole_diameter: hole_diameter,
       hole_depth: hole_depth,
@@ -344,36 +357,36 @@ module AICabinets
     # Bottom
     bottom = g.add_group
     bottom.entities.add_face(
-      [x_offset + panel_thickness, 0, 0],
-      [x_offset + width - panel_thickness, 0, 0],
-      [x_offset + width - panel_thickness, depth, 0],
-      [x_offset + panel_thickness, depth, 0]
+      [x_offset + panel_thickness, 0, bottom_inset + panel_thickness],
+      [x_offset + width - panel_thickness, 0, bottom_inset + panel_thickness],
+      [x_offset + width - panel_thickness, depth, bottom_inset + panel_thickness],
+      [x_offset + panel_thickness, depth, bottom_inset + panel_thickness]
     ).pushpull(-panel_thickness)
 
     # Top
     top = g.add_group
     top.entities.add_face(
-      [x_offset + panel_thickness, 0, height - panel_thickness],
-      [x_offset + width - panel_thickness, 0, height - panel_thickness],
-      [x_offset + width - panel_thickness, depth, height - panel_thickness],
-      [x_offset + panel_thickness, depth, height - panel_thickness]
+      [x_offset + panel_thickness, 0, height - top_inset - panel_thickness],
+      [x_offset + width - panel_thickness, 0, height - top_inset - panel_thickness],
+      [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
+      [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
     ).pushpull(panel_thickness)
 
     # Back inset between the sides and flush with the top of the bottom panel
     # and the underside of the top panel
     back = g.add_group
     back.entities.add_face(
-      [x_offset + panel_thickness, depth, panel_thickness],
-      [x_offset + width - panel_thickness, depth, panel_thickness],
-      [x_offset + width - panel_thickness, depth, height - panel_thickness],
-      [x_offset + panel_thickness, depth, height - panel_thickness]
+      [x_offset + panel_thickness, depth - back_inset, bottom_inset + panel_thickness],
+      [x_offset + width - panel_thickness, depth - back_inset, bottom_inset + panel_thickness],
+      [x_offset + width - panel_thickness, depth - back_inset, height - top_inset - panel_thickness],
+      [x_offset + panel_thickness, depth - back_inset, height - top_inset - panel_thickness]
     ).pushpull(back_thickness)
 
     # Shelves
     if shelf_count > 0
       shelf_thickness = panel_thickness
-      interior_height = height - panel_thickness * 2
-      shelf_depth = depth - back_thickness
+      interior_height = height - top_inset - bottom_inset - panel_thickness * 2
+      shelf_depth = depth - back_inset - back_thickness
 
       positions = if shelf_count > 0 && hole_columns.any?
                     col = hole_columns.first
@@ -381,18 +394,18 @@ module AICabinets
                     first = col[:first_hole] || 0
                     skip = col[:skip].to_i
                     diameter = col[:diameter] || hole_diameter
-                    base = panel_thickness + first + spacing_holes * skip + diameter / 2
+                    base = bottom_inset + panel_thickness + first + spacing_holes * skip + diameter / 2
                     spacing_even = interior_height / (shelf_count + 1)
 
                     Array.new(shelf_count) do |i|
-                      desired_top = panel_thickness + spacing_even * (i + 1)
+                      desired_top = bottom_inset + panel_thickness + spacing_even * (i + 1)
                       desired_bottom = desired_top - shelf_thickness
                       hole_top = align_to_hole_top(desired_bottom, base, spacing_holes)
                       hole_top + shelf_thickness
                     end
                   else
                     spacing_even = interior_height / (shelf_count + 1)
-                    Array.new(shelf_count) { |i| panel_thickness + spacing_even * (i + 1) }
+                    Array.new(shelf_count) { |i| bottom_inset + panel_thickness + spacing_even * (i + 1) }
                   end
 
       positions.each do |z|
@@ -410,7 +423,7 @@ module AICabinets
     door_height_param = height
     door_z_offset = 0
     door_orientation = doors
-    interior_height = height - panel_thickness * 2
+    interior_height = height - top_inset - bottom_inset - panel_thickness * 2
     if drawers.any?
       drawer_count = drawers.length
       drawers.each do |d|
@@ -434,7 +447,7 @@ module AICabinets
         door_gap = 0
       end
       gap_after_last = has_doors ? door_reveal : 0
-      interior_depth = depth - back_thickness
+      interior_depth = depth - back_inset - back_thickness
       drawer_depth_default =
         if drawer_depth
           drawer_depth
@@ -453,7 +466,7 @@ module AICabinets
       x_start = x_offset + panel_thickness + drawer_side_clearance
       y_start = 0
       if drawer_origin == :top
-        current_top = height - panel_thickness
+        current_top = height - top_inset - panel_thickness
         drawers.each_with_index do |drawer, i|
           h = heights[i]
           bottom = current_top - h
@@ -497,7 +510,7 @@ module AICabinets
         end
         door_start_z = current_top
       else
-        current_bottom = panel_thickness
+        current_bottom = bottom_inset + panel_thickness
         drawers.each_with_index do |drawer, i|
           h = heights[i]
           bottom = current_bottom
