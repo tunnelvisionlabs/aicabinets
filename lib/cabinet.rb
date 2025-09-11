@@ -12,6 +12,7 @@ module AICabinets
   DEFAULT_DOOR_TYPE = :overlay
   DEFAULT_DOOR_STYLE = :slab
   DEFAULT_DOOR_REVEAL = 2.mm
+  DEFAULT_DOOR_GAP = 2.mm
   DEFAULT_RAIL_WIDTH = 70.mm
   DEFAULT_STILE_WIDTH = 70.mm
   DEFAULT_BEVEL_ANGLE = 15.degrees
@@ -178,6 +179,9 @@ module AICabinets
       door_type: DEFAULT_DOOR_TYPE,
       door_style: DEFAULT_DOOR_STYLE,
       door_reveal: DEFAULT_DOOR_REVEAL,
+      door_gap: DEFAULT_DOOR_GAP,
+      top_reveal: nil,
+      bottom_reveal: nil,
       rail_width: DEFAULT_RAIL_WIDTH,
       stile_width: DEFAULT_STILE_WIDTH,
       bevel_angle: DEFAULT_BEVEL_ANGLE,
@@ -213,15 +217,17 @@ module AICabinets
     end
 
     cabinets.each do |cab|
-      cab[:left_reveal] = cab[:door_reveal]
-      cab[:right_reveal] = cab[:door_reveal]
+      cab[:left_reveal] ||= cab[:door_reveal]
+      cab[:right_reveal] ||= cab[:door_reveal]
+      cab[:top_reveal] ||= cab[:door_reveal]
+      cab[:bottom_reveal] ||= cab[:door_reveal]
     end
 
     cabinets.each_cons(2) do |left, right|
       next unless has_front?(left) && has_front?(right)
 
-      left[:right_reveal] = left[:door_reveal] / 2
-      right[:left_reveal] = right[:door_reveal] / 2
+      left[:right_reveal] = left[:door_gap] / 2
+      right[:left_reveal] = right[:door_gap] / 2
     end
 
     x_offset = 0
@@ -243,6 +249,7 @@ module AICabinets
         door_type: cab_opts[:door_type],
         door_style: cab_opts[:door_style],
         door_reveal: cab_opts[:door_reveal],
+        door_gap: cab_opts[:door_gap],
         rail_width: cab_opts[:rail_width],
         stile_width: cab_opts[:stile_width],
         bevel_angle: cab_opts[:bevel_angle],
@@ -256,6 +263,8 @@ module AICabinets
         top_stringer_width: cab_opts[:top_stringer_width],
         left_door_reveal: cab_opts[:left_reveal],
         right_door_reveal: cab_opts[:right_reveal],
+        top_door_reveal: cab_opts[:top_reveal],
+        bottom_door_reveal: cab_opts[:bottom_reveal],
         drawer_side_thickness: cab_opts[:drawer_side_thickness],
         drawer_bottom_thickness: cab_opts[:drawer_bottom_thickness],
         drawer_joinery: cab_opts[:drawer_joinery],
@@ -305,6 +314,7 @@ module AICabinets
     door_type:,
     door_style:,
     door_reveal:,
+    door_gap: door_reveal,
     rail_width:,
     stile_width:,
     bevel_angle:,
@@ -316,6 +326,8 @@ module AICabinets
     back_inset: DEFAULT_BACK_INSET,
     left_door_reveal: door_reveal,
     right_door_reveal: door_reveal,
+    top_door_reveal: door_reveal,
+    bottom_door_reveal: door_reveal,
     top_type: DEFAULT_TOP_TYPE,
     top_stringer_width: DEFAULT_TOP_STRINGER_WIDTH,
     drawer_side_thickness: DEFAULT_DRAWER_SIDE_THICKNESS,
@@ -474,6 +486,7 @@ module AICabinets
           door_type: door_type,
           door_style: door_style,
           door_reveal: door_reveal,
+          door_gap: door_gap,
           rail_width: rail_width,
           stile_width: stile_width,
           bevel_angle: bevel_angle,
@@ -498,6 +511,8 @@ module AICabinets
         opts[:x] = outer_x
         opts[:left_reveal] = idx.zero? ? left_door_reveal : opts[:door_reveal]
         opts[:right_reveal] = idx == partitions.length - 1 ? right_door_reveal : opts[:door_reveal]
+        opts[:top_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : top_door_reveal
+        opts[:bottom_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : bottom_door_reveal
         x_current += w
         if idx < partitions.length - 1
           divider = g.add_group
@@ -514,8 +529,8 @@ module AICabinets
 
       parts.each_cons(2) do |left, right|
         next unless has_front?(left) && has_front?(right)
-        left[:right_reveal] = panel_thickness / 2 + left[:door_reveal] / 2
-        right[:left_reveal] = panel_thickness / 2 + right[:door_reveal] / 2
+        left[:right_reveal] = panel_thickness / 2 + left[:door_gap] / 2
+        right[:left_reveal] = panel_thickness / 2 + right[:door_gap] / 2
       end
 
       parts.each do |part|
@@ -533,9 +548,11 @@ module AICabinets
           door_thickness: part[:door_thickness],
           door_type: part[:door_type],
           door_style: part[:door_style],
-          door_reveal: part[:door_reveal],
+          door_gap: part[:door_gap],
           left_door_reveal: part[:left_reveal],
           right_door_reveal: part[:right_reveal],
+          top_door_reveal: part[:top_reveal],
+          bottom_door_reveal: part[:bottom_reveal],
           rail_width: part[:rail_width],
           stile_width: part[:stile_width],
           bevel_angle: part[:bevel_angle],
@@ -571,9 +588,11 @@ module AICabinets
         door_thickness: door_thickness,
         door_type: door_type,
         door_style: door_style,
-        door_reveal: door_reveal,
+        door_gap: door_gap,
         left_door_reveal: left_door_reveal,
         right_door_reveal: right_door_reveal,
+        top_door_reveal: top_door_reveal,
+        bottom_door_reveal: bottom_door_reveal,
         rail_width: rail_width,
         stile_width: stile_width,
         bevel_angle: bevel_angle,
@@ -603,7 +622,9 @@ module AICabinets
     height:,
     z_offset: 0,
     door_thickness:,
-    door_reveal:,
+    top_reveal:,
+    bottom_reveal:,
+    door_gap: top_reveal,
     left_reveal:,
     right_reveal:,
     type:,
@@ -619,16 +640,16 @@ module AICabinets
     return unless orientation
     return unless type == :overlay
 
-    door_height = height - 2 * door_reveal
-    z = z_offset + door_reveal
+    door_height = height - top_reveal - bottom_reveal
+    z = z_offset + bottom_reveal
     gap = DOOR_BUMPER_GAP
     if orientation == :double
-      door_width = (width - left_reveal - right_reveal - door_reveal) / 2
+      door_width = (width - left_reveal - right_reveal - door_gap) / 2
       x_start = x_offset + left_reveal
       2.times do |i|
         create_door_panel(
           entities,
-          x_start + i * (door_width + door_reveal),
+          x_start + i * (door_width + door_gap),
           door_width,
           door_height,
           z,
@@ -852,9 +873,11 @@ module AICabinets
     door_thickness:,
     door_type:,
     door_style:,
-    door_reveal:,
+    door_gap:,
     left_door_reveal:,
     right_door_reveal:,
+    top_door_reveal:,
+    bottom_door_reveal:,
     rail_width:,
     stile_width:,
     bevel_angle:,
@@ -884,24 +907,24 @@ module AICabinets
       drawers.each do |d|
         d[:height] ||= d[:pitch] && d[:pitch] * hole_spacing
       end
-      reveal_between_drawers = [drawer_count - 1, 0].max * door_reveal
-      door_gap = doors ? door_reveal : 0
+      reveal_between_drawers = [drawer_count - 1, 0].max * door_gap
+      gap_between_doors = doors ? door_gap : 0
       has_doors = false
       heights = []
       loop do
-        available_for_drawers = interior_height - reveal_between_drawers - door_gap
+        available_for_drawers = interior_height - reveal_between_drawers - gap_between_doors
         specified = drawers.sum { |d| d[:height] || 0 }
         unspecified = drawers.count { |d| d[:height].nil? }
         remaining = [available_for_drawers - specified, 0].max
         default_height = unspecified.zero? ? 0 : remaining / unspecified.to_f
         heights = drawers.map { |d| d[:height] || default_height }
         total_drawer_height = heights.sum
-        remaining_for_doors = interior_height - total_drawer_height - reveal_between_drawers - door_gap
+        remaining_for_doors = interior_height - total_drawer_height - reveal_between_drawers - gap_between_doors
         has_doors = doors && remaining_for_doors > 0
-        break if has_doors || door_gap.zero?
-        door_gap = 0
+        break if has_doors || gap_between_doors.zero?
+        gap_between_doors = 0
       end
-      gap_after_last = has_doors ? door_reveal : 0
+      gap_after_last = has_doors ? door_gap : 0
       interior_depth = depth - back_inset - back_thickness
       drawer_depth_default =
         if drawer_depth
@@ -944,7 +967,7 @@ module AICabinets
             joinery: drawer_joinery
           )
           front_height = h + extra_top + extra_bottom
-          front_bottom = bottom - door_reveal - extra_bottom
+          front_bottom = bottom - top_door_reveal - extra_bottom
           create_door_panel(
             entities,
             x_offset + left_door_reveal,
@@ -961,7 +984,7 @@ module AICabinets
             groove_width: groove_width,
             groove_depth: groove_depth
           )
-          current_top = bottom - (i == drawers.length - 1 ? gap_after_last : door_reveal)
+          current_top = bottom - (i == drawers.length - 1 ? gap_after_last : door_gap)
         end
         door_start_z = current_top
       else
@@ -988,7 +1011,7 @@ module AICabinets
             joinery: drawer_joinery
           )
           front_height = h + extra_top + extra_bottom
-          front_bottom = bottom + door_reveal - extra_bottom
+          front_bottom = bottom + bottom_door_reveal - extra_bottom
           create_door_panel(
             entities,
             x_offset + left_door_reveal,
@@ -1005,7 +1028,7 @@ module AICabinets
             groove_width: groove_width,
             groove_depth: groove_depth
           )
-          current_bottom += h + (i == drawers.length - 1 ? gap_after_last : door_reveal)
+          current_bottom += h + (i == drawers.length - 1 ? gap_after_last : door_gap)
         end
         door_start_z = current_bottom
       end
@@ -1024,7 +1047,9 @@ module AICabinets
       height: door_height_param,
       z_offset: door_z_offset,
       door_thickness: door_thickness,
-      door_reveal: door_reveal,
+      top_reveal: top_door_reveal,
+      bottom_reveal: bottom_door_reveal,
+      door_gap: door_gap,
       left_reveal: left_door_reveal,
       right_reveal: right_door_reveal,
       type: door_type,
