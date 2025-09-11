@@ -461,6 +461,7 @@ module AICabinets
       unspecified = partitions.count { |p| p[:width].nil? }
       remaining = interior_width - specified - (partitions.length - 1) * panel_thickness
       default_width = unspecified.zero? ? 0 : remaining / unspecified.to_f
+      partition_depth = depth - back_inset - back_thickness
       x_current = x_offset + panel_thickness
       parts = partitions.map.with_index do |part, idx|
         opts = {
@@ -497,8 +498,8 @@ module AICabinets
           divider = g.add_group
           divider.entities.add_face(
             [x_current, 0, bottom_inset + panel_thickness],
-            [x_current, depth, bottom_inset + panel_thickness],
-            [x_current, depth, height - top_inset - panel_thickness],
+            [x_current, partition_depth, bottom_inset + panel_thickness],
+            [x_current, partition_depth, height - top_inset - panel_thickness],
             [x_current, 0, height - top_inset - panel_thickness]
           ).pushpull(panel_thickness)
           x_current += panel_thickness
@@ -508,8 +509,8 @@ module AICabinets
 
       parts.each_cons(2) do |left, right|
         next unless left[:doors] && right[:doors]
-        left[:right_reveal] = left[:door_reveal] / 2
-        right[:left_reveal] = right[:door_reveal] / 2
+        left[:right_reveal] = panel_thickness / 2 + left[:door_reveal] / 2
+        right[:left_reveal] = panel_thickness / 2 + right[:door_reveal] / 2
       end
 
       parts.each do |part|
