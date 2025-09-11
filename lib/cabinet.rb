@@ -472,147 +472,46 @@ module AICabinets
       end
     end
 
-    if partitions.any?
-      interior_width = width - 2 * panel_thickness
-      specified = partitions.sum { |p| p[:width] || 0 }
-      unspecified = partitions.count { |p| p[:width].nil? }
-      remaining = interior_width - specified - (partitions.length - 1) * panel_thickness
-      default_width = unspecified.zero? ? 0 : remaining / unspecified.to_f
-      partition_depth = depth - back_inset - back_thickness
-      x_current = x_offset + panel_thickness
-      parts = partitions.map.with_index do |part, idx|
-        opts = {
-          door_thickness: door_thickness,
-          door_type: door_type,
-          door_style: door_style,
-          door_reveal: door_reveal,
-          door_gap: door_gap,
-          rail_width: rail_width,
-          stile_width: stile_width,
-          bevel_angle: bevel_angle,
-          profile_depth: profile_depth,
-          groove_width: groove_width,
-          groove_depth: groove_depth,
-          drawer_side_thickness: drawer_side_thickness,
-          drawer_bottom_thickness: drawer_bottom_thickness,
-          drawer_joinery: drawer_joinery,
-          drawer_depth: drawer_depth,
-          drawer_slide: drawer_slide,
-          drawer_side_clearance: drawer_side_clearance,
-          drawer_bottom_clearance: drawer_bottom_clearance,
-          drawer_top_clearance: drawer_top_clearance,
-          drawer_origin: drawer_origin,
-          drawers: []
-        }.merge(part)
-        w = opts[:width] || default_width
-        outer_x = x_current - panel_thickness
-        outer_width = w + 2 * panel_thickness
-        opts[:width] = outer_width
-        opts[:x] = outer_x
-        opts[:left_reveal] = idx.zero? ? left_door_reveal : opts[:door_reveal]
-        opts[:right_reveal] = idx == partitions.length - 1 ? right_door_reveal : opts[:door_reveal]
-        opts[:top_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : top_door_reveal
-        opts[:bottom_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : bottom_door_reveal
-        x_current += w
-        if idx < partitions.length - 1
-          divider = g.add_group
-          divider.entities.add_face(
-            [x_current, 0, bottom_inset + panel_thickness],
-            [x_current, partition_depth, bottom_inset + panel_thickness],
-            [x_current, partition_depth, height - top_inset - panel_thickness],
-            [x_current, 0, height - top_inset - panel_thickness]
-          ).pushpull(panel_thickness)
-          x_current += panel_thickness
-        end
-        opts
-      end
-
-      parts.each_cons(2) do |left, right|
-        next unless has_front?(left) && has_front?(right)
-        left[:right_reveal] = panel_thickness / 2 + left[:door_gap] / 2
-        right[:left_reveal] = panel_thickness / 2 + right[:door_gap] / 2
-      end
-
-      parts.each do |part|
-        add_fronts(
-          g,
-          x_offset: part[:x],
-          width: part[:width],
-          height: height,
-          depth: depth,
-          panel_thickness: panel_thickness,
-          back_thickness: back_thickness,
-          top_inset: top_inset,
-          bottom_inset: bottom_inset,
-          back_inset: back_inset,
-          door_thickness: part[:door_thickness],
-          door_type: part[:door_type],
-          door_style: part[:door_style],
-          door_gap: part[:door_gap],
-          left_door_reveal: part[:left_reveal],
-          right_door_reveal: part[:right_reveal],
-          top_door_reveal: part[:top_reveal],
-          bottom_door_reveal: part[:bottom_reveal],
-          rail_width: part[:rail_width],
-          stile_width: part[:stile_width],
-          bevel_angle: part[:bevel_angle],
-          profile_depth: part[:profile_depth],
-          groove_width: part[:groove_width],
-          groove_depth: part[:groove_depth],
-          drawer_side_thickness: part[:drawer_side_thickness],
-          drawer_bottom_thickness: part[:drawer_bottom_thickness],
-          drawer_joinery: part[:drawer_joinery],
-          drawer_depth: part[:drawer_depth],
-          drawer_slide: part[:drawer_slide],
-          drawer_side_clearance: part[:drawer_side_clearance],
-          drawer_bottom_clearance: part[:drawer_bottom_clearance],
-          drawer_top_clearance: part[:drawer_top_clearance],
-          drawer_origin: part[:drawer_origin],
-          hole_spacing: hole_spacing,
-          drawers: part[:drawers] || [],
-          doors: part[:doors]
-        )
-      end
-    else
-      add_fronts(
-        g,
-        x_offset: x_offset,
-        width: width,
-        height: height,
-        depth: depth,
-        panel_thickness: panel_thickness,
-        back_thickness: back_thickness,
-        top_inset: top_inset,
-        bottom_inset: bottom_inset,
-        back_inset: back_inset,
-        door_thickness: door_thickness,
-        door_type: door_type,
-        door_style: door_style,
-        door_gap: door_gap,
-        left_door_reveal: left_door_reveal,
-        right_door_reveal: right_door_reveal,
-        top_door_reveal: top_door_reveal,
-        bottom_door_reveal: bottom_door_reveal,
-        rail_width: rail_width,
-        stile_width: stile_width,
-        bevel_angle: bevel_angle,
-        profile_depth: profile_depth,
-        groove_width: groove_width,
-        groove_depth: groove_depth,
-        drawer_side_thickness: drawer_side_thickness,
-        drawer_bottom_thickness: drawer_bottom_thickness,
-        drawer_joinery: drawer_joinery,
-        drawer_depth: drawer_depth,
-        drawer_slide: drawer_slide,
-        drawer_side_clearance: drawer_side_clearance,
-        drawer_bottom_clearance: drawer_bottom_clearance,
-        drawer_top_clearance: drawer_top_clearance,
-        drawer_origin: drawer_origin,
-        hole_spacing: hole_spacing,
-        drawers: drawers,
-        doors: doors
-      )
-    end
+    add_fronts(
+      g,
+      x_offset: x_offset,
+      width: width,
+      height: height,
+      depth: depth,
+      panel_thickness: panel_thickness,
+      back_thickness: back_thickness,
+      top_inset: top_inset,
+      bottom_inset: bottom_inset,
+      back_inset: back_inset,
+      door_thickness: door_thickness,
+      door_type: door_type,
+      door_style: door_style,
+      door_gap: door_gap,
+      left_door_reveal: left_door_reveal,
+      right_door_reveal: right_door_reveal,
+      top_door_reveal: top_door_reveal,
+      bottom_door_reveal: bottom_door_reveal,
+      rail_width: rail_width,
+      stile_width: stile_width,
+      bevel_angle: bevel_angle,
+      profile_depth: profile_depth,
+      groove_width: groove_width,
+      groove_depth: groove_depth,
+      drawer_side_thickness: drawer_side_thickness,
+      drawer_bottom_thickness: drawer_bottom_thickness,
+      drawer_joinery: drawer_joinery,
+      drawer_depth: drawer_depth,
+      drawer_slide: drawer_slide,
+      drawer_side_clearance: drawer_side_clearance,
+      drawer_bottom_clearance: drawer_bottom_clearance,
+      drawer_top_clearance: drawer_top_clearance,
+      drawer_origin: drawer_origin,
+      hole_spacing: hole_spacing,
+      drawers: drawers,
+      doors: doors,
+      partitions: partitions,
+      start: :left
+    )
   end
 
   def self.add_doors(
@@ -894,9 +793,119 @@ module AICabinets
     drawer_top_clearance:,
     drawer_origin:,
     hole_spacing:,
+    start: :left,
     drawers: [],
-    doors: nil
+    doors: nil,
+    partitions: []
   )
+    if partitions.any?
+      interior_width = width - 2 * panel_thickness
+      specified = partitions.sum { |p| p[:width] || 0 }
+      unspecified = partitions.count { |p| p[:width].nil? }
+      remaining = interior_width - specified - (partitions.length - 1) * panel_thickness
+      default_width = unspecified.zero? ? 0 : remaining / unspecified.to_f
+      partition_depth = depth - back_inset - back_thickness
+      x_current = x_offset + panel_thickness
+      parts = partitions.map.with_index do |part, idx|
+        opts = {
+          door_thickness: door_thickness,
+          door_type: door_type,
+          door_style: door_style,
+          door_reveal: door_gap,
+          door_gap: door_gap,
+          rail_width: rail_width,
+          stile_width: stile_width,
+          bevel_angle: bevel_angle,
+          profile_depth: profile_depth,
+          groove_width: groove_width,
+          groove_depth: groove_depth,
+          drawer_side_thickness: drawer_side_thickness,
+          drawer_bottom_thickness: drawer_bottom_thickness,
+          drawer_joinery: drawer_joinery,
+          drawer_depth: drawer_depth,
+          drawer_slide: drawer_slide,
+          drawer_side_clearance: drawer_side_clearance,
+          drawer_bottom_clearance: drawer_bottom_clearance,
+          drawer_top_clearance: drawer_top_clearance,
+          drawer_origin: drawer_origin,
+          drawers: [],
+          partitions: []
+        }.merge(part)
+        opts[:start] = part.key?(:start) ? part[:start] : ([:left, :right].include?(start) ? :top : :left)
+        w = opts[:width] || default_width
+        outer_x = x_current - panel_thickness
+        outer_width = w + 2 * panel_thickness
+        opts[:width] = outer_width
+        opts[:x] = outer_x
+        opts[:left_reveal] = idx.zero? ? left_door_reveal : opts[:door_reveal]
+        opts[:right_reveal] = idx == partitions.length - 1 ? right_door_reveal : opts[:door_reveal]
+        opts[:top_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : top_door_reveal
+        opts[:bottom_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : bottom_door_reveal
+        x_current += w
+        if idx < partitions.length - 1
+          divider = entities.add_group
+          divider.entities.add_face(
+            [x_current, 0, bottom_inset + panel_thickness],
+            [x_current, partition_depth, bottom_inset + panel_thickness],
+            [x_current, partition_depth, height - top_inset - panel_thickness],
+            [x_current, 0, height - top_inset - panel_thickness]
+          ).pushpull(panel_thickness)
+          x_current += panel_thickness
+        end
+        opts
+      end
+
+      parts.each_cons(2) do |left, right|
+        next unless has_front?(left) && has_front?(right)
+        left[:right_reveal] = panel_thickness / 2 + left[:door_gap] / 2
+        right[:left_reveal] = panel_thickness / 2 + right[:door_gap] / 2
+      end
+
+      parts.each do |part|
+        add_fronts(
+          entities,
+          x_offset: part[:x],
+          width: part[:width],
+          height: height,
+          depth: depth,
+          panel_thickness: panel_thickness,
+          back_thickness: back_thickness,
+          top_inset: top_inset,
+          bottom_inset: bottom_inset,
+          back_inset: back_inset,
+          door_thickness: part[:door_thickness],
+          door_type: part[:door_type],
+          door_style: part[:door_style],
+          door_gap: part[:door_gap],
+          left_door_reveal: part[:left_reveal],
+          right_door_reveal: part[:right_reveal],
+          top_door_reveal: part[:top_reveal],
+          bottom_door_reveal: part[:bottom_reveal],
+          rail_width: part[:rail_width],
+          stile_width: part[:stile_width],
+          bevel_angle: part[:bevel_angle],
+          profile_depth: part[:profile_depth],
+          groove_width: part[:groove_width],
+          groove_depth: part[:groove_depth],
+          drawer_side_thickness: part[:drawer_side_thickness],
+          drawer_bottom_thickness: part[:drawer_bottom_thickness],
+          drawer_joinery: part[:drawer_joinery],
+          drawer_depth: part[:drawer_depth],
+          drawer_slide: part[:drawer_slide],
+          drawer_side_clearance: part[:drawer_side_clearance],
+          drawer_bottom_clearance: part[:drawer_bottom_clearance],
+          drawer_top_clearance: part[:drawer_top_clearance],
+          drawer_origin: part[:drawer_origin],
+          hole_spacing: hole_spacing,
+          start: part[:start],
+          drawers: part[:drawers] || [],
+          doors: part[:doors],
+          partitions: part[:partitions] || []
+        )
+      end
+      return
+    end
+
     total_drawer_height = 0
     door_height_param = height
     door_z_offset = 0
