@@ -2,6 +2,61 @@
 
 require 'sketchup.rb'
 
+# Provides a best-effort "Maple" material even when the model or bundled
+# libraries do not already contain one. It attempts, in order, to find an
+# existing Maple in the model, load a built-in material library entry, or fall
+# back to a warm maple-like color.
+module MapleMaterialHelper
+  module_function
+
+  def ensure_maple_material(model = Sketchup.active_model, name: 'Maple', texture_size: 8.inch)
+    materials = model.materials
+
+    mat = materials[name] || materials.find { |m| (m.display_name || m.name).to_s =~ /\bmaple\b/i }
+    return mat if mat
+
+    if (skm = find_builtin_maple_skm)
+      begin
+        mat = materials.load(skm)
+        mat.name = name rescue nil
+        mat.texture.size = [texture_size, texture_size] if mat.texture
+        return mat
+      rescue
+        # ignore and fall through
+      end
+    end
+
+    mat = materials.add(name)
+    mat.color = Sketchup::Color.new(224, 200, 160)
+    mat
+  end
+
+  def find_builtin_maple_skm
+    roots = support_material_roots
+    return nil if roots.empty?
+
+    candidates = []
+    roots.each do |root|
+      next unless File.directory?(root)
+      Dir.glob(File.join(root, '**', '*maple*.skm'), File::FNM_CASEFOLD) { |p| candidates << p }
+    end
+    candidates.min_by(&:length)
+  rescue
+    nil
+  end
+
+  def support_material_roots
+    roots = []
+    roots << File.join(ENV['PROGRAMDATA'], 'SketchUp', '*', 'SketchUp', 'Materials') if ENV['PROGRAMDATA']
+    roots << File.join(ENV['APPDATA'], 'SketchUp', '*', 'SketchUp', 'Materials') if ENV['APPDATA']
+    roots << '/Library/Application Support/SketchUp */SketchUp/Materials'
+    roots << File.expand_path('~/Library/Application Support/SketchUp */SketchUp/Materials')
+    roots << '/Applications/SketchUp */SketchUp.app/Contents/Resources/Content/Materials'
+    roots << '/Applications/SketchUp */SketchUp.app/Contents/Resources/Materials'
+    roots.flat_map { |pattern| Dir.glob(pattern) }.uniq
+  end
+end
+
 module AICabinets
   DEFAULT_PANEL_THICKNESS = 19.mm
   DEFAULT_BACK_THICKNESS = 6.mm
@@ -51,12 +106,7 @@ module AICabinets
       mat = materials.add(name)
       mat.color = Sketchup::Color.new(164, 143, 122)
     when 'Maple'
-      source = materials['Wood_Veneer_27_1K']
-      mat = materials.add(name)
-      if source
-        mat.color = source.color if source.color
-        mat.texture = source.texture if source.texture
-      end
+      mat = MapleMaterialHelper.ensure_maple_material(Sketchup.active_model, name: name)
     when 'Birch Plywood'
       source = materials['Wood_Veneer_18_1K']
       mat = materials.add(name)
