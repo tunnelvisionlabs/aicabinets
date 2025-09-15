@@ -43,7 +43,31 @@ module AICabinets
   def self.material(name)
     return nil unless name
     materials = Sketchup.active_model.materials
-    materials[name] || materials.add(name)
+    existing = materials[name]
+    return existing if existing
+
+    case name
+    when 'MDF'
+      mat = materials.add(name)
+      mat.color = Sketchup::Color.new(164, 143, 122)
+    when 'Maple'
+      source = materials['Wood_Veneer_27_1K']
+      mat = materials.add(name)
+      if source
+        mat.color = source.color if source.color
+        mat.texture = source.texture if source.texture
+      end
+    when 'Birch Plywood'
+      source = materials['Wood_Veneer_18_1K']
+      mat = materials.add(name)
+      if source
+        mat.color = source.color if source.color
+        mat.texture = source.texture if source.texture
+      end
+    else
+      mat = materials.add(name)
+    end
+    mat
   end
 
   # Specifications for drawer slides including hole locations, required
