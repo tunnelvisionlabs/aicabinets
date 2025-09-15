@@ -21,6 +21,10 @@ module AICabinets
   DEFAULT_GROOVE_DEPTH = 9.5.mm
   DOOR_BUMPER_GAP = 2.mm
 
+  DEFAULT_CABINET_MATERIAL = 'Birch Plywood'
+  DEFAULT_DOOR_MATERIAL = 'MDF'
+  DEFAULT_DOOR_FRAME_MATERIAL = 'Maple'
+
   DEFAULT_TOP_INSET = 0.mm
   DEFAULT_BOTTOM_INSET = 0.mm
   DEFAULT_BACK_INSET = 0.mm
@@ -35,6 +39,24 @@ module AICabinets
   DEFAULT_DRAWER_ORIGIN = :top
   DEFAULT_DRAWER_BOTTOM_CLEARANCE = 16.mm
   DEFAULT_DRAWER_TOP_CLEARANCE = 7.mm
+
+  def self.material(name)
+    return nil unless name
+    materials = Sketchup.active_model.materials
+    existing = materials[name]
+    return existing if existing
+
+    mat = materials.add(name)
+    case name
+    when 'MDF'
+      mat.color = Sketchup::Color.new(164, 143, 122)
+    when 'Maple'
+      mat.color = Sketchup::Color.new(224, 200, 160)
+    when 'Birch Plywood'
+      mat.color = Sketchup::Color.new(222, 206, 170)
+    end
+    mat
+  end
 
   # Specifications for drawer slides including hole locations, required
   # cabinet depth, nominal slide length, and the offset of the first hole
@@ -203,7 +225,11 @@ module AICabinets
       drawer_top_clearance: DEFAULT_DRAWER_TOP_CLEARANCE,
       drawer_origin: DEFAULT_DRAWER_ORIGIN,
       drawers: [],
-      partitions: []
+      partitions: [],
+      cabinet_material: DEFAULT_CABINET_MATERIAL,
+      door_material: DEFAULT_DOOR_MATERIAL,
+      door_frame_material: DEFAULT_DOOR_FRAME_MATERIAL,
+      door_panel_material: DEFAULT_DOOR_MATERIAL
     }.merge(config)
 
     height = defaults[:height]
@@ -276,7 +302,11 @@ module AICabinets
         drawer_origin: cab_opts[:drawer_origin],
         drawers: cab_opts[:drawers] || [],
         partitions: cab_opts[:partitions] || [],
-        doors: cab_opts[:doors]
+        doors: cab_opts[:doors],
+        cabinet_material: cab_opts[:cabinet_material],
+        door_material: cab_opts[:door_material],
+        door_frame_material: cab_opts[:door_frame_material],
+        door_panel_material: cab_opts[:door_panel_material]
       )
 
       x_offset += cab_opts[:width]
@@ -341,10 +371,16 @@ module AICabinets
     drawer_origin: DEFAULT_DRAWER_ORIGIN,
     drawers: [],
     partitions: [],
-    doors: nil
+    doors: nil,
+    cabinet_material: DEFAULT_CABINET_MATERIAL,
+    door_material: DEFAULT_DOOR_MATERIAL,
+    door_frame_material: DEFAULT_DOOR_FRAME_MATERIAL,
+    door_panel_material: DEFAULT_DOOR_MATERIAL
   )
     cabinet = entities.add_group
     g = cabinet.entities
+
+    cab_mat = material(cabinet_material)
 
     # Sides
     left = g.add_group
@@ -375,6 +411,8 @@ module AICabinets
       columns: hole_columns,
       from_right: false
     )
+    left_comp = left.to_component
+    left_comp.material = cab_mat
 
     drill_hole_columns(
       right.entities,
@@ -388,6 +426,8 @@ module AICabinets
       columns: hole_columns,
       from_right: true
     )
+    right_comp = right.to_component
+    right_comp.material = cab_mat
 
     # Bottom
     bottom = g.add_group
@@ -397,6 +437,8 @@ module AICabinets
       [x_offset + width - panel_thickness, depth, bottom_inset + panel_thickness],
       [x_offset + panel_thickness, depth, bottom_inset + panel_thickness]
     ).pushpull(-panel_thickness)
+    bottom_comp = bottom.to_component
+    bottom_comp.material = cab_mat
 
     # Top
     if top_type == :stringers
@@ -407,6 +449,8 @@ module AICabinets
         [x_offset + width - panel_thickness, top_stringer_width, height - top_inset - panel_thickness],
         [x_offset + panel_thickness, top_stringer_width, height - top_inset - panel_thickness]
       ).pushpull(panel_thickness)
+      front_comp = front.to_component
+      front_comp.material = cab_mat
 
       back_stringer = g.add_group
       back_stringer.entities.add_face(
@@ -415,6 +459,8 @@ module AICabinets
         [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
         [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
       ).pushpull(panel_thickness)
+      back_stringer_comp = back_stringer.to_component
+      back_stringer_comp.material = cab_mat
     else
       top = g.add_group
       top.entities.add_face(
@@ -423,6 +469,8 @@ module AICabinets
         [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
         [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
       ).pushpull(panel_thickness)
+      top_comp = top.to_component
+      top_comp.material = cab_mat
     end
 
     # Back inset between the sides and flush with the top of the bottom panel
@@ -434,6 +482,8 @@ module AICabinets
       [x_offset + width - panel_thickness, depth - back_inset, height - top_inset - panel_thickness],
       [x_offset + panel_thickness, depth - back_inset, height - top_inset - panel_thickness]
     ).pushpull(back_thickness)
+    back_comp = back.to_component
+    back_comp.material = cab_mat
 
     # Shelves
     if shelf_count > 0
@@ -469,6 +519,8 @@ module AICabinets
           [x_offset + width - panel_thickness, shelf_depth, z],
           [x_offset + panel_thickness, shelf_depth, z]
         ).pushpull(-shelf_thickness)
+        shelf_comp = shelf.to_component
+        shelf_comp.material = cab_mat
       end
     end
 
@@ -511,7 +563,11 @@ module AICabinets
       drawers: drawers,
       doors: doors,
       partitions: partitions,
-      start: :left
+      start: :left,
+      cabinet_material: cabinet_material,
+      door_material: door_material,
+      door_frame_material: door_frame_material,
+      door_panel_material: door_panel_material
     )
   end
 
@@ -535,7 +591,10 @@ module AICabinets
     profile_depth:,
     groove_width:,
     groove_depth:,
-    orientation:
+    orientation:,
+    door_material: DEFAULT_DOOR_MATERIAL,
+    door_frame_material: DEFAULT_DOOR_FRAME_MATERIAL,
+    door_panel_material: DEFAULT_DOOR_MATERIAL
   )
     return unless orientation
     return unless type == :overlay
@@ -561,7 +620,10 @@ module AICabinets
           bevel_angle: bevel_angle,
           profile_depth: profile_depth,
           groove_width: groove_width,
-          groove_depth: groove_depth
+          groove_depth: groove_depth,
+          material: door_material,
+          frame_material: door_frame_material,
+          panel_material: door_panel_material
         )
       end
     else
@@ -581,7 +643,10 @@ module AICabinets
         bevel_angle: bevel_angle,
         profile_depth: profile_depth,
         groove_width: groove_width,
-        groove_depth: groove_depth
+        groove_depth: groove_depth,
+        material: door_material,
+        frame_material: door_frame_material,
+        panel_material: door_panel_material
       )
     end
   end
@@ -600,7 +665,10 @@ module AICabinets
     bevel_angle: DEFAULT_BEVEL_ANGLE,
     profile_depth: DEFAULT_PROFILE_DEPTH,
     groove_width: DEFAULT_GROOVE_WIDTH,
-    groove_depth: DEFAULT_GROOVE_DEPTH
+    groove_depth: DEFAULT_GROOVE_DEPTH,
+    material: DEFAULT_DOOR_MATERIAL,
+    frame_material: DEFAULT_DOOR_FRAME_MATERIAL,
+    panel_material: DEFAULT_DOOR_MATERIAL
   )
     group = entities.add_group
     y = -gap
@@ -613,7 +681,9 @@ module AICabinets
         [x, y, z + height]
       )
       face.pushpull(thickness)
-      return group
+       comp = group.to_component
+       comp.material = self.material(material)
+       return comp
     end
 
     rail = rail_width
@@ -694,7 +764,14 @@ module AICabinets
     )
     panel_face.pushpull(-groove_width)
 
-    group
+    frame_comp_material = self.material(frame_material)
+    [left, right, bottom, top].each do |frm|
+      comp = frm.to_component
+      comp.material = frame_comp_material
+    end
+    panel_comp = panel.to_component
+    panel_comp.material = self.material(panel_material)
+    group.to_component
   end
 
   def self.create_drawer_box(
@@ -719,6 +796,7 @@ module AICabinets
       [x, y + depth, z + height],
       [x, y, z + height]
     ).pushpull(side_thickness)
+    left.to_component
 
     # Right side
     right = group.entities.add_group
@@ -728,6 +806,7 @@ module AICabinets
       [x + width - side_thickness, y + depth, z + height],
       [x + width - side_thickness, y, z + height]
     ).pushpull(side_thickness)
+    right.to_component
 
     # Back
     back = group.entities.add_group
@@ -737,6 +816,7 @@ module AICabinets
       [x + width - side_thickness, y + depth - side_thickness, z + height],
       [x + side_thickness, y + depth - side_thickness, z + height]
     ).pushpull(-side_thickness)
+    back.to_component
 
     # Front
     front = group.entities.add_group
@@ -746,6 +826,7 @@ module AICabinets
       [x + width - side_thickness, y, z + height],
       [x + side_thickness, y, z + height]
     ).pushpull(-side_thickness)
+    front.to_component
 
     # Bottom
     bottom = group.entities.add_group
@@ -755,8 +836,9 @@ module AICabinets
       [x + width - side_thickness, y + depth - side_thickness, z],
       [x + side_thickness, y + depth - side_thickness, z]
     ).pushpull(bottom_thickness)
+    bottom.to_component
 
-    group
+    group.to_component
   end
 
   def self.add_fronts(
@@ -798,8 +880,14 @@ module AICabinets
     start: :left,
     drawers: [],
     doors: nil,
-    partitions: []
+    partitions: [],
+    cabinet_material: DEFAULT_CABINET_MATERIAL,
+    door_material: DEFAULT_DOOR_MATERIAL,
+    door_frame_material: DEFAULT_DOOR_FRAME_MATERIAL,
+    door_panel_material: DEFAULT_DOOR_MATERIAL
   )
+    cab_mat = material(cabinet_material)
+
     if partitions.any?
       partition_depth = depth - back_inset - back_thickness
       if start == :left
@@ -854,6 +942,8 @@ module AICabinets
               [x_current, partition_depth, z_offset + height - top_inset - panel_thickness],
               [x_current, 0, z_offset + height - top_inset - panel_thickness]
             ).pushpull(panel_thickness)
+            divider_comp = divider.to_component
+            divider_comp.material = cab_mat
             x_current += panel_thickness
           end
           opts
@@ -910,6 +1000,8 @@ module AICabinets
                 [x_offset + width - panel_thickness, partition_depth, z_offset + z_current],
                 [x_offset + panel_thickness, partition_depth, z_offset + z_current]
               ).pushpull(-panel_thickness)
+              divider_comp = divider.to_component
+              divider_comp.material = cab_mat
               z_current -= panel_thickness
             end
           else
@@ -924,6 +1016,8 @@ module AICabinets
                 [x_offset + width - panel_thickness, partition_depth, z_offset + z_current],
                 [x_offset + panel_thickness, partition_depth, z_offset + z_current]
               ).pushpull(panel_thickness)
+              divider_comp = divider.to_component
+              divider_comp.material = cab_mat
               z_current += panel_thickness
             end
           end
@@ -987,7 +1081,11 @@ module AICabinets
           start: part[:start],
           drawers: part[:drawers] || [],
           doors: part[:doors],
-          partitions: part[:partitions] || []
+          partitions: part[:partitions] || [],
+          cabinet_material: cabinet_material,
+          door_material: door_material,
+          door_frame_material: door_frame_material,
+          door_panel_material: door_panel_material
         )
       end
       return
@@ -1078,7 +1176,10 @@ module AICabinets
             bevel_angle: bevel_angle,
             profile_depth: profile_depth,
             groove_width: groove_width,
-            groove_depth: groove_depth
+            groove_depth: groove_depth,
+            material: door_material,
+            frame_material: door_frame_material,
+            panel_material: door_panel_material
           )
           current_top = bottom - (i == drawers.length - 1 ? gap_after_last : door_gap)
         end
@@ -1122,7 +1223,10 @@ module AICabinets
             bevel_angle: bevel_angle,
             profile_depth: profile_depth,
             groove_width: groove_width,
-            groove_depth: groove_depth
+            groove_depth: groove_depth,
+            material: door_material,
+            frame_material: door_frame_material,
+            panel_material: door_panel_material
           )
           current_bottom += h + (i == drawers.length - 1 ? gap_after_last : door_gap)
         end
@@ -1156,7 +1260,10 @@ module AICabinets
       profile_depth: profile_depth,
       groove_width: groove_width,
       groove_depth: groove_depth,
-      orientation: door_orientation
+      orientation: door_orientation,
+      door_material: door_material,
+      door_frame_material: door_frame_material,
+      door_panel_material: door_panel_material
     )
   end
 
