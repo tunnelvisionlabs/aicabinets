@@ -1,15 +1,24 @@
 # frozen_string_literal: true
 
 module AICabinets
-  Sketchup.require('aicabinets/version') if defined?(Sketchup)
+  if defined?(Sketchup)
+    Sketchup.require('aicabinets/version')
+    Sketchup.require('aicabinets/ui/commands')
+    Sketchup.require('aicabinets/ui/menu_and_toolbar')
+  end
 
   module Loader
     module_function
 
-    # Placeholder entry point for future extension bootstrapping.
+    # Entry point invoked when the extension is loaded. Keeps load-time side
+    # effects to the absolute minimum by only registering UI wiring.
     def bootstrap
-      # Intentionally left blank to keep load time near zero.
+      return unless defined?(Sketchup)
+
+      AICabinets::UI.register_ui! if AICabinets::UI.respond_to?(:register_ui!)
       nil
     end
   end
 end
+
+AICabinets::Loader.bootstrap if defined?(Sketchup)

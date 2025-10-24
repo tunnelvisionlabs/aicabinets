@@ -16,7 +16,7 @@ Copy the library and sample code into SketchUp's Ruby console or load them as sc
 
 ## SketchUp Extension Packaging
 
-Place `aicabinets.rb` and the `aicabinets/` folder inside SketchUp's `Plugins` directory to load AI Cabinets as an extension. The registrar exposes metadata so the Extension Manager lists "AI Cabinets" with version information from `aicabinets/version.rb`. The loader currently performs no modeling or UI work, providing a clean foundation for future commands and dialogs.
+Place `aicabinets.rb` and the `aicabinets/` folder inside SketchUp's `Plugins` directory to load AI Cabinets as an extension. The registrar exposes metadata so the Extension Manager lists "AI Cabinets" with version information from `aicabinets/version.rb`. The loader registers UI commands and toolbars without creating geometry at load time, keeping startup cost minimal while exposing extension entry points.
 
 To verify Ruby syntax locally, run:
 
@@ -29,3 +29,7 @@ To package the extension for manual installation, run:
 ```sh
 zip -r aicabinets-$(ruby -e "load 'aicabinets/version.rb'; puts AICabinets::VERSION").rbz aicabinets.rb aicabinets/
 ```
+
+## Extension UI
+
+After installing the extension, launch its placeholder action from **Extensions → AI Cabinets → Insert Base Cabinet…** or by showing the **AI Cabinets** toolbar. Both entry points share the same command, which currently opens a simple placeholder message while the full cabinet insertion dialog is under development.
