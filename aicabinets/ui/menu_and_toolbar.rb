@@ -46,13 +46,30 @@ module AICabinets
 
         state = toolbar.get_last_state if toolbar.respond_to?(:get_last_state)
 
-        case state
-        when ::UI::Toolbar::VISIBLE, ::UI::Toolbar::FLOATING
+        visible_states = toolbar_states(:VISIBLE, :FLOATING)
+        hidden_state = toolbar_states(:HIDDEN).first
+
+        if visible_states.include?(state)
           toolbar.restore
-        when ::UI::Toolbar::HIDDEN
+        elsif hidden_state && state == hidden_state
           # Respect the user's preference to keep the toolbar hidden.
         else
           toolbar.show
+        end
+      end
+
+      def toolbar_states(*names)
+        return [] unless defined?(::UI::Toolbar)
+
+        toolbar_class = ::UI::Toolbar
+        return [] unless toolbar_class.respond_to?(:const_defined?)
+
+        names.filter_map do |name|
+          next unless toolbar_class.const_defined?(name)
+
+          toolbar_class.const_get(name)
+        rescue NameError
+          nil
         end
       end
     end
