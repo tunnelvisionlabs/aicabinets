@@ -13,3 +13,19 @@ This repository contains Ruby scripts for SketchUp that generate simple cabinetr
 - `examples/partitioned_cabinet.rb` – demonstrates dividing a cabinet interior with fixed partitions.
 
 Copy the library and sample code into SketchUp's Ruby console or load them as scripts to build cabinet geometry automatically.
+
+## SketchUp Extension Packaging
+
+Place `aicabinets.rb` and the `aicabinets/` folder inside SketchUp's `Plugins` directory to load AI Cabinets as an extension. The registrar exposes metadata so the Extension Manager lists "AI Cabinets" with version information from `aicabinets/version.rb`. The loader currently performs no modeling or UI work, providing a clean foundation for future commands and dialogs.
+
+To verify Ruby syntax locally, run:
+
+```sh
+ruby -c aicabinets.rb && find aicabinets -type f -name '*.rb' -print0 | xargs -0 -n1 ruby -c
+```
+
+To package the extension for manual installation, run:
+
+```sh
+zip -r aicabinets-$(ruby -e "load 'aicabinets/version.rb'; puts AICabinets::VERSION").rbz aicabinets.rb aicabinets/
+```
