@@ -3,6 +3,7 @@
 module AICabinets
   if defined?(Sketchup)
     Sketchup.require('aicabinets/version')
+    Sketchup.require('aicabinets/ui/icons')
     Sketchup.require('aicabinets/ui/commands')
     Sketchup.require('aicabinets/ui/menu_and_toolbar')
   end
