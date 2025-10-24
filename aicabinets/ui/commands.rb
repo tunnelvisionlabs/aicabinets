@@ -25,7 +25,18 @@ module AICabinets
         end
         command.tooltip = 'Insert Base Cabinet…'
         command.status_bar_text = 'Insert a base cabinet using AI Cabinets.'
+        assign_command_icons(command, 'insert_base_cabinet')
         command
+      end
+
+      def assign_command_icons(command, base_name)
+        return unless defined?(::UI::Command)
+
+        small_icon = Icons.small_icon_path(base_name)
+        large_icon = Icons.large_icon_path(base_name)
+
+        command.small_icon = small_icon if small_icon
+        command.large_icon = large_icon if large_icon
       end
 
       def handle_insert_base_cabinet
