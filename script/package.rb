@@ -165,11 +165,7 @@ module AICabinets
           manifest[:directories].each do |dir|
             next if dir.empty?
             zipfile.mkdir(dir) unless zipfile.find_entry(dir)
-            entry = zipfile.find_entry(dir)
-            next unless entry
-            entry.time = DEFAULT_TIMESTAMP
-            entry.extra = ''.b
-            entry.comment = nil
+            normalize_zip_entry(zipfile.find_entry(dir))
           end
 
           manifest[:files].each do |entry_info|
@@ -178,11 +174,7 @@ module AICabinets
                 IO.copy_stream(file, stream)
               end
             end
-            entry = zipfile.find_entry(entry_info[:relative])
-            next unless entry
-            entry.time = DEFAULT_TIMESTAMP
-            entry.extra = ''.b
-            entry.comment = nil
+            normalize_zip_entry(zipfile.find_entry(entry_info[:relative]))
           end
         end
         if Zip::File.const_defined?(:CREATE)
@@ -203,6 +195,14 @@ module AICabinets
         else
           pack_with_zip_command(manifest, output_path)
         end
+      end
+
+      def normalize_zip_entry(entry)
+        return unless entry
+
+        entry.time = DEFAULT_TIMESTAMP if entry.respond_to?(:time=)
+        entry.extra = ''.b if entry.respond_to?(:extra=)
+        entry.comment = nil if entry.respond_to?(:comment=)
       end
 
       def pack_with_powershell(manifest, output_path)
