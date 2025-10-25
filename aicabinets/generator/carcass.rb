@@ -7,6 +7,7 @@ Sketchup.require('aicabinets/generator/parts/bottom_panel')
 Sketchup.require('aicabinets/generator/parts/top_panel')
 Sketchup.require('aicabinets/generator/parts/back_panel')
 Sketchup.require('aicabinets/generator/shelves')
+Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/generator/partitions')
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/ops/tags')
@@ -65,6 +66,7 @@ module AICabinets
           entities = resolve_entities(@parent)
           model = entities.respond_to?(:model) ? entities.model : nil
           default_material = model.is_a?(Sketchup::Model) ? Ops::Materials.default_carcass(model) : nil
+          front_material = model.is_a?(Sketchup::Model) ? Ops::Materials.default_door(model) : nil
           instances = {}
           created = []
 
@@ -160,6 +162,16 @@ module AICabinets
             instances[:shelves] = shelves
             register_created(created, shelves)
             apply_category(shelves, 'AICabinets/Shelves', default_material)
+          end
+
+          fronts = Fronts.build(
+            parent_entities: entities,
+            params: params
+          )
+          unless fronts.empty?
+            instances[:fronts] = fronts
+            register_created(created, fronts)
+            apply_category(fronts, 'AICabinets/Fronts', front_material)
           end
 
           bounds = Geom::BoundingBox.new
@@ -330,7 +342,12 @@ module AICabinets
                     :shelf_thickness_mm, :interior_depth, :interior_depth_mm,
                     :interior_bottom_z_mm, :interior_top_z_mm,
                     :interior_clear_height_mm, :partition_left_faces_mm,
-                    :partition_thickness_mm
+                    :partition_thickness_mm, :front_mode, :door_thickness,
+                    :door_thickness_mm, :door_edge_reveal_mm,
+                    :door_top_reveal_mm, :door_bottom_reveal_mm,
+                    :door_center_reveal_mm, :door_edge_reveal,
+                    :door_top_reveal, :door_bottom_reveal,
+                    :door_center_reveal
 
         def initialize(params_mm)
           @width_mm = params_mm[:width_mm].to_f
@@ -364,6 +381,36 @@ module AICabinets
           @interior_top_z_mm = @height_mm - @top_thickness_mm
           @interior_clear_height_mm =
             [@interior_top_z_mm - @interior_bottom_z_mm, 0.0].max
+
+          @front_mode = normalize_front(params_mm[:front])
+
+          thickness_override = coerce_positive_numeric(params_mm[:door_thickness_mm])
+          @door_thickness_mm =
+            (thickness_override || Fronts::DOOR_THICKNESS_MM).to_f
+          @door_thickness = length_mm(@door_thickness_mm)
+
+          edge_reveal_override =
+            coerce_non_negative_numeric(params_mm[:door_reveal_mm] || params_mm[:door_reveal])
+          top_reveal_override =
+            coerce_non_negative_numeric(params_mm[:top_reveal_mm] || params_mm[:top_reveal])
+          bottom_reveal_override =
+            coerce_non_negative_numeric(params_mm[:bottom_reveal_mm] || params_mm[:bottom_reveal])
+          center_reveal_override =
+            coerce_non_negative_numeric(params_mm[:door_gap_mm] || params_mm[:door_gap])
+
+          @door_edge_reveal_mm =
+            (edge_reveal_override || Fronts::REVEAL_EDGE_MM).to_f
+          @door_top_reveal_mm =
+            (top_reveal_override || Fronts::REVEAL_TOP_MM).to_f
+          @door_bottom_reveal_mm =
+            (bottom_reveal_override || Fronts::REVEAL_BOTTOM_MM).to_f
+          @door_center_reveal_mm =
+            (center_reveal_override || Fronts::REVEAL_CENTER_MM).to_f
+
+          @door_edge_reveal = length_mm(@door_edge_reveal_mm)
+          @door_top_reveal = length_mm(@door_top_reveal_mm)
+          @door_bottom_reveal = length_mm(@door_bottom_reveal_mm)
+          @door_center_reveal = length_mm(@door_center_reveal_mm)
 
           layout = compute_partition_layout(params_mm[:partitions])
           @partition_left_faces_mm = layout.partition_left_faces_mm
@@ -436,6 +483,40 @@ module AICabinets
           numeric
         rescue ArgumentError, TypeError
           nil
+        end
+
+        def coerce_non_negative_numeric(value)
+          return nil if value.nil?
+
+          numeric =
+            if value.is_a?(Numeric)
+              value.to_f
+            else
+              Float(value)
+            end
+          return nil unless numeric >= 0.0
+
+          numeric
+        rescue ArgumentError, TypeError
+          nil
+        end
+
+        def normalize_front(value)
+          candidate =
+            case value
+            when Symbol
+              value
+            when String
+              value.strip.downcase.to_sym
+            else
+              nil
+            end
+
+          return candidate if Fronts::FRONT_MODES.include?(candidate)
+
+          :empty
+        rescue StandardError
+          :empty
         end
 
         def compute_partition_layout(raw)

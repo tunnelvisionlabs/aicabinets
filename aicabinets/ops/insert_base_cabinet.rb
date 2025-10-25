@@ -45,6 +45,8 @@ module AICabinets
         toe_kick_depth_mm
       ].freeze
 
+      FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
+
       IDENTITY_TRANSFORMATION = Geom::Transformation.new
 
       def place_at_point!(model:, point3d:, params_mm:)
@@ -125,7 +127,28 @@ module AICabinets
           raise ArgumentError, 'toe_kick_depth_mm must be less than depth_mm'
         end
 
-        deep_copy(params_mm)
+        copy = deep_copy(params_mm)
+
+        if copy.key?(:front)
+          front_value = copy[:front]
+          front_string =
+            case front_value
+            when NilClass
+              nil
+            when Symbol
+              front_value.to_s
+            else
+              String(front_value)
+            end
+
+          if front_string && !FRONT_OPTIONS.include?(front_string)
+            raise ArgumentError, 'front must be one of: empty, doors_left, doors_right, doors_double'
+          end
+
+          copy[:front] = front_string if front_string
+        end
+
+        copy
       end
       private_class_method :validate_params!
 
