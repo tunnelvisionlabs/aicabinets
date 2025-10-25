@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'sketchup.rb'
-Sketchup.require('aicabinets/generator/base_carcass')
+Sketchup.require('aicabinets/generator/carcass')
 
 module AICabinets
   # Builds a base carcass using the new generator namespace. Callers should
@@ -9,7 +9,7 @@ module AICabinets
   # backwards compatibility with the example scripts and will be removed once
   # migrated.
   def self.build_base_carcass!(parent:, params_mm:)
-    Generator::Carcass.build_base_carcass!(parent: parent, params_mm: params_mm)
+    Generator.build_base_carcass!(parent: parent, params_mm: params_mm)
   end
 
   DEFAULT_PANEL_THICKNESS = 19.mm
