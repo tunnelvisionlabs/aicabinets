@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module AICabinets
   module UI
     module Dialogs
@@ -49,6 +51,10 @@ module AICabinets
         private_class_method :build_dialog
 
         def attach_callbacks(dialog)
+          dialog.add_action_callback('dialog_ready') do |_action_context, _payload|
+            deliver_units_bootstrap(dialog)
+          end
+
           dialog.add_action_callback('insert') do |_action_context, _payload|
             # Reserved for future geometry generation wiring.
           end
@@ -58,6 +64,130 @@ module AICabinets
           end
         end
         private_class_method :attach_callbacks
+
+        def deliver_units_bootstrap(dialog)
+          payload = JSON.generate(current_unit_settings)
+          script = <<~JS
+            (function () {
+              var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertBaseCabinet;
+              if (root && typeof root.bootstrap === 'function') {
+                root.bootstrap(#{payload});
+              }
+            })();
+          JS
+
+          dialog.execute_script(script)
+        end
+        private_class_method :deliver_units_bootstrap
+
+        def current_unit_settings
+          model = ::Sketchup.active_model
+          options = model&.options&.[]('UnitsOptions')
+
+          return default_unit_settings unless options
+
+          unit = length_unit_to_symbol(options['LengthUnit'])
+          format = length_format_to_symbol(options['LengthFormat'])
+          unit = normalize_unit_for_format(unit, format)
+          {
+            unit: unit,
+            unit_label: unit_label_for(unit),
+            unit_name: unit_name_for(unit),
+            format: format,
+            precision: options['LengthPrecision'],
+            fractional_precision: options['LengthFractionalPrecision']
+          }
+        rescue StandardError
+          default_unit_settings
+        end
+        private_class_method :current_unit_settings
+
+        def default_unit_settings
+          {
+            unit: 'millimeter',
+            unit_label: 'mm',
+            unit_name: 'millimeters',
+            format: 'decimal',
+            precision: 0,
+            fractional_precision: 3
+          }
+        end
+        private_class_method :default_unit_settings
+
+        def length_unit_to_symbol(code)
+          case code
+          when 0
+            'inch'
+          when 1
+            'foot'
+          when 2
+            'millimeter'
+          when 3
+            'centimeter'
+          when 4
+            'meter'
+          else
+            'millimeter'
+          end
+        end
+        private_class_method :length_unit_to_symbol
+
+        def length_format_to_symbol(code)
+          case code
+          when 1
+            'architectural'
+          when 2
+            'engineering'
+          when 3
+            'fractional'
+          else
+            'decimal'
+          end
+        end
+        private_class_method :length_format_to_symbol
+
+        def normalize_unit_for_format(unit, format)
+          return unit unless unit == 'foot'
+
+          if %w[architectural fractional].include?(format)
+            'inch'
+          else
+            unit
+          end
+        end
+        private_class_method :normalize_unit_for_format
+
+        def unit_label_for(unit)
+          case unit
+          when 'inch'
+            'in'
+          when 'foot'
+            'ft'
+          when 'centimeter'
+            'cm'
+          when 'meter'
+            'm'
+          else
+            'mm'
+          end
+        end
+        private_class_method :unit_label_for
+
+        def unit_name_for(unit)
+          case unit
+          when 'inch'
+            'inches'
+          when 'foot'
+            'feet'
+          when 'centimeter'
+            'centimeters'
+          when 'meter'
+            'meters'
+          else
+            'millimeters'
+          end
+        end
+        private_class_method :unit_name_for
 
         def set_dialog_file(dialog)
           html_path = File.join(__dir__, HTML_FILENAME)
