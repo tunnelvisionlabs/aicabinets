@@ -4,6 +4,7 @@ module AICabinets
   if defined?(Sketchup)
     Sketchup.require('aicabinets/version')
     Sketchup.require('aicabinets/ui/icons')
+    Sketchup.require('aicabinets/ops/defaults')
     Sketchup.require('aicabinets/ui/dialogs/insert_base_cabinet_dialog')
     Sketchup.require('aicabinets/ui/commands')
     Sketchup.require('aicabinets/ui/menu_and_toolbar')

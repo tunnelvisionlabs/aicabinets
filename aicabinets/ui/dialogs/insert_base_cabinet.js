@@ -17,6 +17,7 @@
 
   var controller = null;
   var pendingUnitSettings = null;
+  var pendingDefaults = null;
 
   var UNIT_TO_MM = {
     inch: 25.4,
@@ -34,6 +35,15 @@
     'toe_kick_height',
     'toe_kick_depth'
   ];
+
+  var LENGTH_DEFAULT_KEYS = {
+    width: 'width_mm',
+    depth: 'depth_mm',
+    height: 'height_mm',
+    panel_thickness: 'panel_thickness_mm',
+    toe_kick_height: 'toe_kick_height_mm',
+    toe_kick_depth: 'toe_kick_depth_mm'
+  };
 
   var INTEGER_FIELDS = ['shelves', 'partitions_count'];
 
@@ -524,6 +534,123 @@
     this.reformatPartitionPositions();
   };
 
+  FormController.prototype.applyDefaults = function applyDefaults(defaults) {
+    if (!defaults || typeof defaults !== 'object') {
+      return;
+    }
+
+    var formatLength = this.lengthService.format.bind(this.lengthService);
+
+    LENGTH_FIELDS.forEach(
+      function (name) {
+        var key = LENGTH_DEFAULT_KEYS[name];
+        var input = this.inputs[name];
+        if (!key || !input) {
+          return;
+        }
+
+        var mmValue = defaults[key];
+        if (typeof mmValue !== 'number') {
+          mmValue = Number(mmValue);
+        }
+
+        if (!isFinite(mmValue)) {
+          return;
+        }
+
+        this.values.lengths[name] = mmValue;
+        this.touched[name] = false;
+        input.dataset.mmValue = String(mmValue);
+        input.value = formatLength(mmValue);
+        input.removeAttribute('data-invalid');
+        this.setFieldError(name, null, true);
+      }.bind(this)
+    );
+
+    if (typeof defaults.front === 'string' && this.inputs.front) {
+      this.inputs.front.value = defaults.front;
+      this.values.front = this.inputs.front.value;
+    }
+
+    if (this.inputs.shelves) {
+      var shelves = defaults.shelves;
+      if (typeof shelves !== 'number') {
+        shelves = Number(shelves);
+      }
+
+      if (isFinite(shelves)) {
+        shelves = Math.max(0, Math.round(shelves));
+        this.inputs.shelves.value = String(shelves);
+        this.values.shelves = shelves;
+        this.inputs.shelves.removeAttribute('data-invalid');
+        this.setFieldError('shelves', null, true);
+        this.touched.shelves = false;
+      }
+    }
+
+    if (defaults.partitions && typeof defaults.partitions === 'object') {
+      var partitions = defaults.partitions;
+      var mode = typeof partitions.mode === 'string' ? partitions.mode : null;
+
+      if (mode) {
+        if (this.inputs.partitions_mode) {
+          this.inputs.partitions_mode.value = mode;
+        }
+        this.values.partitions.mode = mode;
+        this.updatePartitionMode(mode);
+      }
+
+      var count = partitions.count;
+      if (typeof count !== 'number') {
+        count = Number(count);
+      }
+      if (!isFinite(count)) {
+        count = mode === 'even' ? null : 0;
+      } else {
+        count = Math.max(0, Math.round(count));
+      }
+
+      this.values.partitions.count = count;
+      if (this.inputs.partitions_count) {
+        if (mode === 'even' && count != null) {
+          this.inputs.partitions_count.value = String(count);
+        } else {
+          this.inputs.partitions_count.value = '';
+        }
+        this.inputs.partitions_count.removeAttribute('data-invalid');
+      }
+      this.setFieldError('partitions_count', null, true);
+      this.touched.partitions_count = false;
+
+      var positions = Array.isArray(partitions.positions_mm)
+        ? partitions.positions_mm.slice()
+        : [];
+      if (mode === 'positions') {
+        this.values.partitions.positions_mm = positions;
+        if (this.inputs.partitions_positions) {
+          if (positions.length) {
+            var formattedPositions = positions.map(formatLength);
+            this.inputs.partitions_positions.value = formattedPositions.join(', ');
+          } else {
+            this.inputs.partitions_positions.value = '';
+          }
+          this.inputs.partitions_positions.removeAttribute('data-invalid');
+        }
+      } else {
+        this.values.partitions.positions_mm = [];
+        if (this.inputs.partitions_positions) {
+          this.inputs.partitions_positions.value = '';
+          this.inputs.partitions_positions.removeAttribute('data-invalid');
+        }
+      }
+
+      this.setFieldError('partitions_positions', null, true);
+      this.touched.partitions_positions = false;
+    }
+
+    this.updateInsertButtonState();
+  };
+
   FormController.prototype.updateUnitsNotice = function updateUnitsNotice() {
     if (!this.unitsNote) {
       return;
@@ -867,6 +994,14 @@
     }
   };
 
+  namespace.applyDefaults = function applyDefaults(defaults) {
+    if (controller) {
+      controller.applyDefaults(defaults);
+    } else {
+      pendingDefaults = defaults;
+    }
+  };
+
   function handleButtonClick(event) {
     var target = event.target;
     if (!(target instanceof HTMLButtonElement)) {
@@ -896,8 +1031,13 @@
       controller.setUnits(pendingUnitSettings);
       pendingUnitSettings = null;
     }
+    if (pendingDefaults) {
+      controller.applyDefaults(pendingDefaults);
+      pendingDefaults = null;
+    }
 
     invokeSketchUp('dialog_ready');
+    invokeSketchUp('request_defaults');
   }
 
   document.addEventListener('DOMContentLoaded', initialize);

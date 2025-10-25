@@ -55,6 +55,10 @@ module AICabinets
             deliver_units_bootstrap(dialog)
           end
 
+          dialog.add_action_callback('request_defaults') do |_action_context, _payload|
+            deliver_insert_defaults(dialog)
+          end
+
           dialog.add_action_callback('insert') do |_action_context, _payload|
             # Reserved for future geometry generation wiring.
           end
@@ -79,6 +83,22 @@ module AICabinets
           dialog.execute_script(script)
         end
         private_class_method :deliver_units_bootstrap
+
+        def deliver_insert_defaults(dialog)
+          defaults = AICabinets::Ops::Defaults.load_insert_base_cabinet
+          payload = JSON.generate(defaults)
+          script = <<~JS
+            (function () {
+              var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertBaseCabinet;
+              if (root && typeof root.applyDefaults === 'function') {
+                root.applyDefaults(#{payload});
+              }
+            })();
+          JS
+
+          dialog.execute_script(script)
+        end
+        private_class_method :deliver_insert_defaults
 
         def current_unit_settings
           model = ::Sketchup.active_model
