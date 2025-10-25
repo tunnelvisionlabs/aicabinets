@@ -19,12 +19,12 @@ module AICabinets
           @placing = false
         end
 
-        def activate(view)
+        def activate(view = nil)
           @input_point = Sketchup::InputPoint.new
           view.invalidate if view
         end
 
-        def deactivate(_view)
+        def deactivate(_view = nil)
           @input_point = nil
         end
 
