@@ -11,6 +11,8 @@ module AICabinets
       # picked point. The tool performs a single placement action and then
       # deactivates itself so the user immediately returns to the previous tool.
       class InsertBaseCabinetTool
+        STATUS_HINT = 'Tip: Use Move (M) with Ctrl/Option to copy the new cabinet.'
+
         def initialize(params_mm)
           raise ArgumentError, 'params_mm must be a Hash' unless params_mm.is_a?(Hash)
 
@@ -57,7 +59,8 @@ module AICabinets
             params_mm: @params_mm
           )
 
-          exit_tool
+          status_message = instance ? STATUS_HINT : nil
+          exit_tool(status_message: status_message)
 
           instance
         ensure
@@ -76,8 +79,14 @@ module AICabinets
           nil
         end
 
-        def exit_tool
-          Sketchup.active_model.select_tool(nil) if defined?(Sketchup) && Sketchup.active_model
+        def exit_tool(status_message: nil)
+          model = defined?(Sketchup) ? Sketchup.active_model : nil
+          return unless model
+
+          model.select_tool(nil)
+          return unless status_message && Sketchup.respond_to?(:set_status_text)
+
+          Sketchup.set_status_text(status_message)
         end
 
         def deep_freeze(object)
