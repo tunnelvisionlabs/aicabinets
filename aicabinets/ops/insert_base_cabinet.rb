@@ -5,6 +5,7 @@ require 'digest'
 require 'sketchup.rb'
 
 Sketchup.require('aicabinets/generator/carcass')
+Sketchup.require('aicabinets/ops/tags')
 
 module AICabinets
   module Ops
@@ -13,10 +14,15 @@ module AICabinets
 
       OPERATION_NAME = 'AI Cabinets — Insert Base Cabinet'
       DICTIONARY_NAME = 'AICabinets'
+      SCHEMA_VERSION = 1
+      SCHEMA_VERSION_KEY = 'schema_version'
       TYPE_KEY = 'type'
-      TYPE_VALUE = 'base_cabinet'
-      FINGERPRINT_KEY = 'fingerprint'
+      TYPE_VALUE = 'base'
+      LEGACY_TYPE_VALUES = [TYPE_VALUE, 'base_cabinet'].freeze
+      DEF_KEY = 'def_key'
+      LEGACY_FINGERPRINT_KEY = 'fingerprint'
       PARAMS_JSON_KEY = 'params_json_mm'
+      WRAPPER_TAG_NAME = 'AICabinets/Cabinet'
 
       REQUIRED_LENGTH_KEYS = %i[
         width_mm
@@ -46,15 +52,16 @@ module AICabinets
         validate_point!(point3d)
 
         params = validate_params!(params_mm)
-        fingerprint, params_json = build_fingerprint(params)
+        def_key, params_json = build_definition_key(params)
 
         operation_open = false
         model.start_operation(OPERATION_NAME, true)
         operation_open = true
 
-        definition = ensure_definition(model, params, fingerprint, params_json)
+        definition = ensure_definition(model, params, def_key, params_json)
         transform = placement_transform(model, point3d)
         instance = add_instance(model, definition, transform)
+        Tags.assign!(instance, WRAPPER_TAG_NAME)
         select_instance(model, instance)
         model.commit_operation
         operation_open = false
@@ -122,31 +129,39 @@ module AICabinets
       end
       private_class_method :validate_params!
 
-      def build_fingerprint(params)
+      def build_definition_key(params)
         canonical = canonicalize(params)
         json = JSON.generate(canonical)
         digest = Digest::SHA256.hexdigest(json)
         [digest, json]
       end
-      private_class_method :build_fingerprint
+      private_class_method :build_definition_key
 
-      def ensure_definition(model, params, fingerprint, params_json)
-        existing = find_definition(model, fingerprint)
-        return existing if existing
+      def ensure_definition(model, params, def_key, params_json)
+        existing = find_definition(model, def_key)
+        if existing
+          assign_definition_attributes(existing, def_key, params_json)
+          return existing
+        end
 
-        create_definition(model, params, fingerprint, params_json)
+        create_definition(model, params, def_key, params_json)
       end
       private_class_method :ensure_definition
 
-      def find_definition(model, fingerprint)
+      def find_definition(model, def_key)
         model.definitions.each do |definition|
           next unless definition.is_a?(Sketchup::ComponentDefinition)
           next if definition.image?
 
           dict = definition.attribute_dictionary(DICTIONARY_NAME)
           next unless dict
-          next unless dict[FINGERPRINT_KEY] == fingerprint
-          next unless dict[TYPE_KEY] == TYPE_VALUE
+
+          type = dict[TYPE_KEY]
+          next if type && !LEGACY_TYPE_VALUES.include?(type)
+
+          stored_def_key = dict[DEF_KEY]
+          legacy_fingerprint = dict[LEGACY_FINGERPRINT_KEY]
+          next unless stored_def_key == def_key || legacy_fingerprint == def_key
 
           return definition
         end
@@ -155,10 +170,10 @@ module AICabinets
       end
       private_class_method :find_definition
 
-      def create_definition(model, params, fingerprint, params_json)
+      def create_definition(model, params, def_key, params_json)
         definitions = model.definitions
         definition = definitions.add('AI Cabinets Base Cabinet')
-        assign_definition_attributes(definition, fingerprint, params_json)
+        assign_definition_attributes(definition, def_key, params_json)
         AICabinets::Generator.build_base_carcass!(parent: definition, params_mm: params)
         definition
       rescue StandardError => e
@@ -167,9 +182,11 @@ module AICabinets
       end
       private_class_method :create_definition
 
-      def assign_definition_attributes(definition, fingerprint, params_json)
+      def assign_definition_attributes(definition, def_key, params_json)
+        definition.set_attribute(DICTIONARY_NAME, SCHEMA_VERSION_KEY, SCHEMA_VERSION)
         definition.set_attribute(DICTIONARY_NAME, TYPE_KEY, TYPE_VALUE)
-        definition.set_attribute(DICTIONARY_NAME, FINGERPRINT_KEY, fingerprint)
+        definition.set_attribute(DICTIONARY_NAME, DEF_KEY, def_key)
+        definition.set_attribute(DICTIONARY_NAME, LEGACY_FINGERPRINT_KEY, def_key)
         definition.set_attribute(DICTIONARY_NAME, PARAMS_JSON_KEY, params_json)
       end
       private_class_method :assign_definition_attributes
