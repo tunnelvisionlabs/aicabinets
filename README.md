@@ -30,6 +30,14 @@ To package the extension for manual installation, run:
 zip -r aicabinets-$(ruby -e "load 'aicabinets/version.rb'; puts AICabinets::VERSION").rbz aicabinets.rb aicabinets/
 ```
 
+## Install (SketchUp 2026, unsigned RBZ)
+
+1. Open **Extension Manager** from the **Extensions** menu or its toolbar icon.
+2. Click **Install Extension…**, choose the downloaded `aicabinets-<VERSION>.rbz`, and confirm SketchUp’s warning for third-party packages. [SketchUp Help: Manually Installing Extensions](https://help.sketchup.com/en/sketchup/installing-extensions)
+3. If SketchUp 2026 blocks the load because the extension is **Unsigned**, open **Extension Manager → Settings (gear)** and review the **Loading Policy**, selecting the mode that matches your security posture. SketchUp documents the three modes—**Identified Extensions Only**, **Approve Unidentified Extensions**, and **Unrestricted**—in its [Loading Policy Preferences](https://help.sketchup.com/en/sketchup/loading-policy-preferences) guide. Changes may require restarting SketchUp before the unsigned extension loads.
+4. Only install RBZ files from sources you trust. **Unrestricted** allows all extensions and is the least secure option.
+5. Enable the extension in Extension Manager if it did not auto-activate after installation.
+
 ## Extension UI
 
 After installing the extension, launch its placeholder action from **Extensions → AI Cabinets → Insert Base Cabinet…** or by showing the **AI Cabinets** toolbar. Both entry points share the same command, which currently opens a simple placeholder message while the full cabinet insertion dialog is under development.
