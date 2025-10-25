@@ -23,6 +23,11 @@ module AICabinets
           toe_kick_height_mm: 'Toe kick height',
           toe_kick_depth_mm: 'Toe kick depth'
         }.freeze
+        CONFIRM_EDIT_ALL_COPY = {
+          title: 'AI Cabinets — Edit All Instances',
+          message: 'This change will update %{count} instances of this cabinet.',
+          hint: 'Apply to all (%{count}) — choose Yes. Cancel — choose No.'
+        }.freeze
 
         class PayloadError < StandardError
           attr_reader :code, :field
@@ -257,6 +262,16 @@ module AICabinets
           params = deep_copy_params(raw_params)
           scope = params.delete(:scope) || 'instance'
 
+          if scope == 'all'
+            definition, selection_ack = fetch_definition_for_all_scope(model)
+            return selection_ack if selection_ack
+
+            instance_count = count_definition_instances(definition)
+            if instance_count > 1 && !confirm_edit_all_instances?(instance_count)
+              return build_user_cancelled_ack
+            end
+          end
+
           result = AICabinets::Ops::EditBaseCabinet.apply_to_selection!(
             model: model,
             params_mm: params,
@@ -455,6 +470,55 @@ module AICabinets
           { ok: false, error: error }
         end
         private_class_method :build_error_ack
+
+        def build_user_cancelled_ack
+          { ok: false, error: { code: 'user_cancelled' } }
+        end
+        private_class_method :build_user_cancelled_ack
+
+        def fetch_definition_for_all_scope(model)
+          definition, error_code = AICabinets::Ops::EditBaseCabinet.selected_cabinet_definition(model)
+          if error_code
+            ack = AICabinets::Ops::EditBaseCabinet.selection_error_result(error_code)
+            return [nil, ack]
+          end
+
+          [definition, nil]
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to resolve cabinet definition for edit confirmation: #{e.message}")
+          [nil, build_error_ack('internal_error', 'Unable to edit the selected cabinet.')]
+        end
+        private_class_method :fetch_definition_for_all_scope
+
+        def count_definition_instances(definition)
+          return 0 unless definition&.respond_to?(:instances)
+
+          instances = definition.instances
+          instances.respond_to?(:size) ? instances.size : Array(instances).size
+        rescue StandardError
+          0
+        end
+        private_class_method :count_definition_instances
+
+        def confirm_edit_all_instances?(instance_count)
+          return true unless instance_count && instance_count > 1
+          return true unless defined?(::UI) && ::UI.respond_to?(:messagebox)
+
+          message = build_confirm_all_instances_message(instance_count)
+          response = ::UI.messagebox(message, MB_YESNO, CONFIRM_EDIT_ALL_COPY[:title])
+          response == IDYES
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to show confirmation message box: #{e.message}")
+          true
+        end
+        private_class_method :confirm_edit_all_instances?
+
+        def build_confirm_all_instances_message(instance_count)
+          body = format(CONFIRM_EDIT_ALL_COPY[:message], count: instance_count)
+          hint = format(CONFIRM_EDIT_ALL_COPY[:hint], count: instance_count)
+          "#{body}\n\n#{hint}"
+        end
+        private_class_method :build_confirm_all_instances_message
 
         def deliver_submit_ack(dialog, ack)
           return unless dialog && dialog.visible?

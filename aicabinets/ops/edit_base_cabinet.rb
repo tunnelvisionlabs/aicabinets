@@ -27,7 +27,7 @@ module AICabinets
       WRAPPER_TAG_NAME = InsertBaseCabinet::WRAPPER_TAG_NAME
       OWNED_TAG_PREFIX = 'AICabinets/'.freeze
 
-      Result = Struct.new(:instance, :error_code, keyword_init: true)
+      Result = Struct.new(:instance, :definition, :error_code, keyword_init: true)
       private_constant :Result
 
       def apply_to_selection!(model:, params_mm:, scope: 'instance')
@@ -42,7 +42,7 @@ module AICabinets
         end
 
         instance = selection_result.instance
-        definition = instance&.definition
+        definition = selection_result.definition
         unless definition&.valid?
           return build_selection_error(:not_cabinet)
         end
@@ -120,9 +120,20 @@ module AICabinets
           return Result.new(error_code: :not_cabinet)
         end
 
-        Result.new(instance: instance)
+        Result.new(instance: instance, definition: definition)
       end
       private_class_method :selected_cabinet_instance
+
+      def selected_cabinet_definition(model)
+        result = selected_cabinet_instance(model)
+        return [nil, result.error_code] if result.error_code
+
+        [result.definition, nil]
+      end
+
+      def selection_error_result(code)
+        build_selection_error(code)
+      end
 
       def cabinet_definition?(definition)
         return false unless definition&.valid?
