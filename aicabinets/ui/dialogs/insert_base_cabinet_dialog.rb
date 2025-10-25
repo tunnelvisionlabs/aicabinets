@@ -53,8 +53,8 @@ module AICabinets
             # Reserved for future geometry generation wiring.
           end
 
-          dialog.add_action_callback('cancel') do |action_context, _payload|
-            action_context.close
+          dialog.add_action_callback('cancel') do |_action_context, _payload|
+            dialog.close
           end
         end
         private_class_method :attach_callbacks
