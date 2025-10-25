@@ -15,6 +15,7 @@ module AICabinets
         return unless defined?(::UI::Command)
 
         commands[:insert_base_cabinet] ||= build_insert_base_cabinet_command
+        commands[:edit_base_cabinet] ||= build_edit_base_cabinet_command
       end
 
       private
@@ -26,6 +27,16 @@ module AICabinets
         command.tooltip = 'Insert Base Cabinet…'
         command.status_bar_text = 'Insert a base cabinet using AI Cabinets.'
         assign_command_icons(command, 'insert_base_cabinet')
+        command
+      end
+
+      def build_edit_base_cabinet_command
+        command = ::UI::Command.new('Edit Selected Cabinet…') do
+          handle_edit_base_cabinet
+        end
+        command.tooltip = 'Edit Selected Cabinet…'
+        command.status_bar_text = 'Edit the selected AI Cabinets base cabinet.'
+        assign_command_icons(command, 'edit_base_cabinet')
         command
       end
 
@@ -52,6 +63,63 @@ module AICabinets
         end
 
         nil
+      end
+
+      def handle_edit_base_cabinet
+        dialog = if defined?(AICabinets::UI::Dialogs::InsertBaseCabinet) &&
+                    AICabinets::UI::Dialogs::InsertBaseCabinet.respond_to?(:show_for_edit)
+                   AICabinets::UI::Dialogs::InsertBaseCabinet
+                 end
+
+        unless dialog
+          warn('AI Cabinets: Edit Base Cabinet dialog is unavailable.')
+          return nil
+        end
+
+        instance = selected_cabinet_instance
+        unless instance
+          notify_selection_issue('Select one AI Cabinets base cabinet to edit.')
+          return nil
+        end
+
+        unless dialog.show_for_edit(instance)
+          notify_selection_issue('Unable to open the edit dialog for the selected cabinet.')
+        end
+        nil
+      end
+
+      def selected_cabinet_instance
+        return unless defined?(Sketchup) && defined?(Sketchup::Model)
+
+        model = Sketchup.active_model
+        return unless model.is_a?(Sketchup::Model)
+
+        selection = model.selection
+        return unless selection&.count == 1
+
+        entity = selection.first
+        return unless entity.is_a?(Sketchup::ComponentInstance)
+
+        definition = entity.definition
+        return unless definition.is_a?(Sketchup::ComponentDefinition)
+
+        dictionary_name = AICabinets::Ops::InsertBaseCabinet::DICTIONARY_NAME
+        params_key = AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY
+        dict = definition.attribute_dictionary(dictionary_name)
+        return unless dict
+
+        params_json = dict[params_key]
+        return unless params_json.is_a?(String) && !params_json.empty?
+
+        entity
+      end
+
+      def notify_selection_issue(message)
+        if defined?(::UI) && ::UI.respond_to?(:show_notification)
+          ::UI.show_notification('AI Cabinets', message)
+        else
+          warn("AI Cabinets: #{message}")
+        end
       end
     end
   end

@@ -8,7 +8,8 @@ module AICabinets
       module InsertBaseCabinet
         module_function
 
-        DIALOG_TITLE = 'AI Cabinets — Insert Base Cabinet'
+        INSERT_DIALOG_TITLE = 'AI Cabinets — Insert Base Cabinet'
+        EDIT_DIALOG_TITLE = 'AI Cabinets — Edit Base Cabinet'
         PREFERENCES_KEY = 'AICabinets.InsertBaseCabinet'
         HTML_FILENAME = 'insert_base_cabinet.html'
         MAX_LENGTH_MM = 100_000.0
@@ -41,12 +42,27 @@ module AICabinets
           return unless ensure_html_dialog_support
 
           dialog = ensure_dialog
-          if dialog.visible?
-            dialog.bring_to_front
-          else
-            dialog.show
+          set_dialog_context(mode: :insert, prefill: nil)
+          update_dialog_title(dialog)
+          show_dialog(dialog)
+          dialog
+        end
+
+        def show_for_edit(instance)
+          return unless ensure_html_dialog_support
+          return unless defined?(Sketchup::ComponentInstance)
+          return unless instance&.is_a?(Sketchup::ComponentInstance)
+
+          params = extract_definition_params(instance)
+          unless params
+            warn('AI Cabinets: Selected cabinet is missing stored parameters.')
+            return nil
           end
 
+          dialog = ensure_dialog
+          set_dialog_context(mode: :edit, prefill: params)
+          update_dialog_title(dialog)
+          show_dialog(dialog)
           dialog
         end
 
@@ -57,7 +73,7 @@ module AICabinets
 
         def build_dialog
           options = {
-            dialog_title: DIALOG_TITLE,
+            dialog_title: INSERT_DIALOG_TITLE,
             preferences_key: PREFERENCES_KEY,
             style: ::UI::HtmlDialog::STYLE_DIALOG,
             resizable: true,
@@ -73,13 +89,35 @@ module AICabinets
         end
         private_class_method :build_dialog
 
+        def dialog_context
+          @dialog_context ||= { mode: :insert, prefill: nil }
+        end
+        private_class_method :dialog_context
+
+        def set_dialog_context(mode:, prefill: nil)
+          dialog_context[:mode] = mode
+          dialog_context[:prefill] = prefill
+        end
+        private_class_method :set_dialog_context
+
+        def dialog_mode
+          dialog_context[:mode] || :insert
+        end
+        private_class_method :dialog_mode
+
+        def dialog_prefill
+          dialog_context[:prefill]
+        end
+        private_class_method :dialog_prefill
+
         def attach_callbacks(dialog)
           dialog.add_action_callback('dialog_ready') do |_action_context, _payload|
             deliver_units_bootstrap(dialog)
+            deliver_dialog_configuration(dialog)
           end
 
           dialog.add_action_callback('request_defaults') do |_action_context, _payload|
-            deliver_insert_defaults(dialog)
+            deliver_form_defaults(dialog)
           end
 
           dialog.add_action_callback('aicb_submit_params') do |_action_context, json|
@@ -107,6 +145,33 @@ module AICabinets
         end
         private_class_method :deliver_units_bootstrap
 
+        def deliver_dialog_configuration(dialog)
+          configuration = { mode: dialog_mode.to_s }
+          configuration[:scope] = 'instance' if dialog_mode == :edit
+          payload = JSON.generate(configuration)
+          script = <<~JS
+            (function () {
+              var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertBaseCabinet;
+              if (root && typeof root.configure === 'function') {
+                root.configure(#{payload});
+              }
+            })();
+          JS
+
+          dialog.execute_script(script)
+        end
+        private_class_method :deliver_dialog_configuration
+
+        def deliver_form_defaults(dialog)
+          case dialog_mode
+          when :edit
+            deliver_edit_prefill(dialog)
+          else
+            deliver_insert_defaults(dialog)
+          end
+        end
+        private_class_method :deliver_form_defaults
+
         def deliver_insert_defaults(dialog)
           defaults = AICabinets::Ops::Defaults.load_insert_base_cabinet
           payload = JSON.generate(defaults)
@@ -122,6 +187,27 @@ module AICabinets
           dialog.execute_script(script)
         end
         private_class_method :deliver_insert_defaults
+
+        def deliver_edit_prefill(dialog)
+          prefill = dialog_prefill
+          unless prefill.is_a?(Hash)
+            warn('AI Cabinets: No prefill payload available for edit dialog.')
+            return
+          end
+
+          payload = JSON.generate(prefill)
+          script = <<~JS
+            (function () {
+              var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertBaseCabinet;
+              if (root && typeof root.applyDefaults === 'function') {
+                root.applyDefaults(#{payload});
+              }
+            })();
+          JS
+
+          dialog.execute_script(script)
+        end
+        private_class_method :deliver_edit_prefill
 
         def handle_submit_params(dialog, json)
           ack = nil
@@ -141,10 +227,13 @@ module AICabinets
             deliver_submit_ack(dialog, ack) if ack
           end
 
-          return unless ack && ack[:ok] && params_for_tool
+          return unless ack && ack[:ok]
 
-          close_dialog_if_visible(dialog)
-          activate_insert_tool(params_for_tool)
+          if dialog_mode == :insert && params_for_tool
+            params_for_tool.delete(:scope)
+            close_dialog_if_visible(dialog)
+            activate_insert_tool(params_for_tool)
+          end
         end
         private_class_method :handle_submit_params
 
@@ -182,9 +271,30 @@ module AICabinets
             params[:ui_version] = version unless version.empty?
           end
 
+          params[:scope] = validate_scope(raw[:scope]) if raw.key?(:scope)
+
           params
         end
         private_class_method :build_typed_params
+
+        def validate_scope(value)
+          return 'instance' if value.nil?
+
+          unless value.is_a?(String)
+            raise PayloadError.new('invalid_type', 'Scope selection is invalid.', 'scope')
+          end
+
+          normalized = value.strip.downcase
+          case normalized
+          when 'instance'
+            'instance'
+          when 'all'
+            'all'
+          else
+            raise PayloadError.new('invalid_value', 'Scope selection is invalid.', 'scope')
+          end
+        end
+        private_class_method :validate_scope
 
         def coerce_length_field(raw, key)
           unless raw.key?(key)
@@ -332,6 +442,44 @@ module AICabinets
           @last_valid_params = params
         end
         private_class_method :store_last_valid_params
+
+        def extract_definition_params(instance)
+          dictionary_name = AICabinets::Ops::InsertBaseCabinet::DICTIONARY_NAME
+          params_key = AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY
+          definition = instance.definition
+          return unless definition
+
+          dict = definition.attribute_dictionary(dictionary_name)
+          return unless dict
+
+          params_json = dict[params_key]
+          return unless params_json.is_a?(String) && !params_json.empty?
+
+          JSON.parse(params_json, symbolize_names: true)
+        rescue JSON::ParserError => e
+          warn("AI Cabinets: Unable to parse stored cabinet parameters: #{e.message}")
+          nil
+        end
+        private_class_method :extract_definition_params
+
+        def update_dialog_title(dialog)
+          title = dialog_mode == :edit ? EDIT_DIALOG_TITLE : INSERT_DIALOG_TITLE
+          if dialog.respond_to?(:set_title)
+            dialog.set_title(title)
+          elsif dialog.respond_to?(:title=)
+            dialog.title = title
+          end
+        end
+        private_class_method :update_dialog_title
+
+        def show_dialog(dialog)
+          if dialog.visible?
+            dialog.bring_to_front
+          else
+            dialog.show
+          end
+        end
+        private_class_method :show_dialog
 
         def deep_copy_params(value)
           case value
