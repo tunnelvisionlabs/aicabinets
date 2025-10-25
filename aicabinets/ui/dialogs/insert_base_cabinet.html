@@ -17,13 +17,173 @@
       </header>
 
       <main class="dialog__content" role="main">
-        <p class="dialog__placeholder">
-          Parameter controls will appear here in a future update.
-        </p>
+        <form class="form" data-role="insert-form" novalidate>
+          <p class="form__notice" data-role="units-note">
+            Values without a suffix use the model’s display unit. Examples: 600, 450mm, 2' 3-1/2", 24 in.
+          </p>
+
+          <section class="form__section">
+            <h2 class="form__section-title">Dimensions</h2>
+            <div class="form__grid">
+              <div class="form-field" data-field="width">
+                <label for="field-width">Width</label>
+                <input
+                  type="text"
+                  id="field-width"
+                  name="width"
+                  autocomplete="off"
+                  inputmode="decimal"
+                />
+                <p class="field-help">Overall cabinet width.</p>
+                <p class="field-error" data-error-for="width" aria-live="polite"></p>
+              </div>
+
+              <div class="form-field" data-field="depth">
+                <label for="field-depth">Depth</label>
+                <input
+                  type="text"
+                  id="field-depth"
+                  name="depth"
+                  autocomplete="off"
+                  inputmode="decimal"
+                />
+                <p class="field-help">Overall cabinet depth.</p>
+                <p class="field-error" data-error-for="depth" aria-live="polite"></p>
+              </div>
+
+              <div class="form-field" data-field="height">
+                <label for="field-height">Height</label>
+                <input
+                  type="text"
+                  id="field-height"
+                  name="height"
+                  autocomplete="off"
+                  inputmode="decimal"
+                />
+                <p class="field-help">Overall cabinet height.</p>
+                <p class="field-error" data-error-for="height" aria-live="polite"></p>
+              </div>
+
+              <div class="form-field" data-field="panel_thickness">
+                <label for="field-panel-thickness">Panel thickness</label>
+                <input
+                  type="text"
+                  id="field-panel-thickness"
+                  name="panel_thickness"
+                  autocomplete="off"
+                  inputmode="decimal"
+                />
+                <p class="field-help">Carcass panel thickness.</p>
+                <p class="field-error" data-error-for="panel_thickness" aria-live="polite"></p>
+              </div>
+
+              <div class="form-field" data-field="toe_kick_height">
+                <label for="field-toe-kick-height">Toe kick height</label>
+                <input
+                  type="text"
+                  id="field-toe-kick-height"
+                  name="toe_kick_height"
+                  autocomplete="off"
+                  inputmode="decimal"
+                />
+                <p class="field-help">Height of the toe kick recess.</p>
+                <p class="field-error" data-error-for="toe_kick_height" aria-live="polite"></p>
+              </div>
+
+              <div class="form-field" data-field="toe_kick_depth">
+                <label for="field-toe-kick-depth">Toe kick depth</label>
+                <input
+                  type="text"
+                  id="field-toe-kick-depth"
+                  name="toe_kick_depth"
+                  autocomplete="off"
+                  inputmode="decimal"
+                />
+                <p class="field-help">Depth of the toe kick recess.</p>
+                <p class="field-error" data-error-for="toe_kick_depth" aria-live="polite"></p>
+              </div>
+            </div>
+          </section>
+
+          <section class="form__section">
+            <h2 class="form__section-title">Configuration</h2>
+            <div class="form__grid form__grid--columns">
+              <div class="form-field" data-field="front">
+                <label for="field-front">Front layout</label>
+                <select id="field-front" name="front">
+                  <option value="empty">Open (no doors)</option>
+                  <option value="doors_left">Doors — left hinge</option>
+                  <option value="doors_right">Doors — right hinge</option>
+                  <option value="doors_double">Doors — double</option>
+                </select>
+                <p class="field-help">Choose the door configuration for the cabinet front.</p>
+              </div>
+
+              <div class="form-field" data-field="shelves">
+                <label for="field-shelves">Shelves</label>
+                <input
+                  type="number"
+                  id="field-shelves"
+                  name="shelves"
+                  inputmode="numeric"
+                  min="0"
+                  step="1"
+                />
+                <p class="field-help">Number of adjustable shelves.</p>
+                <p class="field-error" data-error-for="shelves" aria-live="polite"></p>
+              </div>
+            </div>
+          </section>
+
+          <section class="form__section">
+            <h2 class="form__section-title">Partitions</h2>
+            <div class="form-field" data-field="partitions_mode">
+              <label for="field-partitions-mode">Partition mode</label>
+              <select id="field-partitions-mode" name="partitions_mode">
+                <option value="none">None</option>
+                <option value="even">Even spacing</option>
+                <option value="positions">Specific positions</option>
+              </select>
+              <p class="field-help">
+                Add vertical partitions to divide the interior. Choose even spacing or provide explicit positions.
+              </p>
+            </div>
+
+            <div class="form-field is-hidden" data-field="partitions_count" data-partitions-control="even">
+              <label for="field-partitions-count">Partition count</label>
+              <input
+                type="number"
+                id="field-partitions-count"
+                name="partitions_count"
+                inputmode="numeric"
+                min="0"
+                step="1"
+              />
+              <p class="field-help">Number of evenly spaced partitions.</p>
+              <p class="field-error" data-error-for="partitions_count" aria-live="polite"></p>
+            </div>
+
+            <div class="form-field is-hidden" data-field="partitions_positions" data-partitions-control="positions">
+              <label for="field-partitions-positions">Partition positions</label>
+              <input
+                type="text"
+                id="field-partitions-positions"
+                name="partitions_positions"
+                autocomplete="off"
+                inputmode="decimal"
+                placeholder="e.g., 100mm, 250mm, 400mm"
+              />
+              <p class="field-help">
+                Comma-separated distances from the left interior wall. Values must increase and use allowed units.
+              </p>
+              <p class="field-error" data-error-for="partitions_positions" aria-live="polite"></p>
+            </div>
+          </section>
+        </form>
       </main>
 
       <footer class="dialog__footer">
-        <button type="button" class="button button--primary" data-action="insert">
+        <button type="button" class="button button--primary" data-action="insert" disabled>
           Insert
         </button>
         <button type="button" class="button" data-action="cancel">
