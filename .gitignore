@@ -1,0 +1,11 @@
+# Packaging artifacts
+/dist/*.rbz
+/dist/*.zip
+/dist/*.tmp
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
