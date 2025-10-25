@@ -125,10 +125,12 @@ module AICabinets
 
         def handle_submit_params(dialog, json)
           ack = nil
+          params_for_tool = nil
 
           begin
             typed_params = parse_submit_params(json)
             store_last_valid_params(typed_params)
+            params_for_tool = deep_copy_params(typed_params)
             ack = { ok: true }
           rescue PayloadError => e
             ack = build_error_ack(e.code, e.message, e.field)
@@ -138,6 +140,11 @@ module AICabinets
           ensure
             deliver_submit_ack(dialog, ack) if ack
           end
+
+          return unless ack && ack[:ok] && params_for_tool
+
+          close_dialog_if_visible(dialog)
+          activate_insert_tool(params_for_tool)
         end
         private_class_method :handle_submit_params
 
@@ -325,6 +332,58 @@ module AICabinets
           @last_valid_params = params
         end
         private_class_method :store_last_valid_params
+
+        def deep_copy_params(value)
+          case value
+          when Hash
+            value.each_with_object({}) do |(key, val), memo|
+              memo[key] = deep_copy_params(val)
+            end
+          when Array
+            value.map { |item| deep_copy_params(item) }
+          else
+            value
+          end
+        end
+        private_class_method :deep_copy_params
+
+        def close_dialog_if_visible(dialog)
+          return unless dialog
+
+          dialog.close if dialog.visible?
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to close Insert Base Cabinet dialog: #{e.message}")
+        end
+        private_class_method :close_dialog_if_visible
+
+        def activate_insert_tool(params_mm)
+          unless defined?(Sketchup) && defined?(Sketchup::Model)
+            warn('AI Cabinets: SketchUp environment is unavailable for tool activation.')
+            return
+          end
+
+          unless defined?(AICabinets::UI::Tools::InsertBaseCabinetTool)
+            warn('AI Cabinets: Insert Base Cabinet tool is not available.')
+            return
+          end
+
+          model = Sketchup.active_model
+          unless model.is_a?(Sketchup::Model)
+            warn('AI Cabinets: No active model is available for insertion.')
+            return
+          end
+
+          tools = model.tools
+          unless tools.respond_to?(:push_tool)
+            warn('AI Cabinets: Tool stack is unavailable for activation.')
+            return
+          end
+
+          tools.push_tool(AICabinets::UI::Tools::InsertBaseCabinetTool.new(params_mm))
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to activate base cabinet placement tool: #{e.message}")
+        end
+        private_class_method :activate_insert_tool
 
         def current_unit_settings
           model = ::Sketchup.active_model
