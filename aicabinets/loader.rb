@@ -3,6 +3,7 @@
 module AICabinets
   if defined?(Sketchup)
     Sketchup.require('aicabinets/version')
+    Sketchup.require('aicabinets/ops/units')
     Sketchup.require('aicabinets/generator/carcass')
     Sketchup.require('aicabinets/ui/icons')
     Sketchup.require('aicabinets/ops/defaults')
