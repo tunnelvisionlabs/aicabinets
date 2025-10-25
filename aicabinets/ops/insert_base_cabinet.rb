@@ -62,9 +62,9 @@ module AICabinets
         transform = placement_transform(model, point3d)
         instance = add_instance(model, definition, transform)
         Tags.assign!(instance, WRAPPER_TAG_NAME)
-        select_instance(model, instance)
         model.commit_operation
         operation_open = false
+        select_instance(model, instance)
         instance
       ensure
         model.abort_operation if operation_open
