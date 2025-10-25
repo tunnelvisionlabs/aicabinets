@@ -21,7 +21,8 @@ module AICabinets
         partitions: {
           mode: 'none',
           count: 0,
-          positions_mm: []
+          positions_mm: [],
+          panel_thickness_mm: nil
         }
       }.freeze
 
@@ -130,6 +131,12 @@ module AICabinets
 
         count = coerce_non_negative_integer(raw['count'], 'partitions.count', MAX_PARTITIONS)
         positions = coerce_partition_positions(raw['positions_mm'])
+        panel_thickness =
+          if raw.key?('panel_thickness_mm') && !raw['panel_thickness_mm'].nil?
+            coerce_partition_thickness(raw['panel_thickness_mm'])
+          else
+            nil
+          end
 
         if mode == 'positions'
           raise ArgumentError, 'partitions.positions_mm must not be empty when mode is positions' if positions.empty?
@@ -140,7 +147,8 @@ module AICabinets
         {
           mode: mode,
           count: count,
-          positions_mm: positions
+          positions_mm: positions,
+          panel_thickness_mm: panel_thickness
         }
       end
       private_class_method :coerce_partitions
@@ -164,6 +172,19 @@ module AICabinets
         values
       end
       private_class_method :coerce_partition_positions
+
+      def coerce_partition_thickness(raw)
+        numeric = Float(raw)
+        raise ArgumentError, 'partition panel thickness must be positive' unless numeric.positive?
+
+        limits = LENGTH_CLAMP_MM.fetch(:panel_thickness_mm)
+        clamp(numeric, limits[:min], limits[:max])
+      rescue KeyError
+        raise ArgumentError, 'partition panel thickness must be positive'
+      rescue ArgumentError, TypeError
+        raise ArgumentError, 'partition panel thickness must be a positive number'
+      end
+      private_class_method :coerce_partition_thickness
 
       def clamp(value, min_value, max_value)
         [[value, max_value].min, min_value].max

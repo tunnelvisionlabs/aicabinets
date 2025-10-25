@@ -7,6 +7,7 @@ Sketchup.require('aicabinets/generator/parts/bottom_panel')
 Sketchup.require('aicabinets/generator/parts/top_panel')
 Sketchup.require('aicabinets/generator/parts/back_panel')
 Sketchup.require('aicabinets/generator/shelves')
+Sketchup.require('aicabinets/generator/partitions')
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/ops/materials')
@@ -138,6 +139,17 @@ module AICabinets
           )
           register_created(created, instances[:back])
           apply_category(instances[:back], 'AICabinets/Back', default_material)
+
+          partitions = Partitions.build(
+            parent_entities: entities,
+            params: params,
+            material: default_material
+          )
+          unless partitions.empty?
+            instances[:partitions] = partitions
+            register_created(created, partitions)
+            apply_category(partitions, 'AICabinets/Partitions', default_material)
+          end
 
           shelves = Shelves.build(
             parent_entities: entities,
@@ -317,7 +329,8 @@ module AICabinets
                     :bottom_thickness_mm, :shelf_count, :shelf_thickness,
                     :shelf_thickness_mm, :interior_depth, :interior_depth_mm,
                     :interior_bottom_z_mm, :interior_top_z_mm,
-                    :interior_clear_height_mm
+                    :interior_clear_height_mm, :partition_left_faces_mm,
+                    :partition_thickness_mm
 
         def initialize(params_mm)
           @width_mm = params_mm[:width_mm].to_f
@@ -352,7 +365,13 @@ module AICabinets
           @interior_clear_height_mm =
             [@interior_top_z_mm - @interior_bottom_z_mm, 0.0].max
 
-          @partition_bay_ranges_mm = compute_partition_bay_ranges(params_mm[:partitions])
+          layout = compute_partition_layout(params_mm[:partitions])
+          @partition_left_faces_mm = layout.partition_left_faces_mm
+          @partition_thickness_mm = layout.partition_thickness_mm
+          layout.warnings.each do |message|
+            warn("AI Cabinets: #{message}")
+          end
+          @partition_bay_ranges_mm = layout.bay_ranges_mm
           if @partition_bay_ranges_mm.empty?
             left = interior_left_face_mm
             right = interior_right_face_mm
@@ -370,6 +389,14 @@ module AICabinets
           @partition_bay_ranges ||= @partition_bay_ranges_mm.map do |start_mm, end_mm|
             [length_mm(start_mm), length_mm(end_mm)]
           end
+        end
+
+        def partition_left_faces
+          @partition_left_faces ||= partition_left_faces_mm.map { |value| length_mm(value) }
+        end
+
+        def partition_thickness
+          @partition_thickness ||= length_mm(@partition_thickness_mm)
         end
 
         private
@@ -411,14 +438,13 @@ module AICabinets
           nil
         end
 
-        def compute_partition_bay_ranges(raw)
-          layout = PartitionLayout.new(
+        def compute_partition_layout(raw)
+          PartitionLayout.new(
             raw: raw,
             panel_thickness_mm: @panel_thickness_mm,
             width_mm: @width_mm,
             min_bay_width_mm: Shelves::MIN_BAY_WIDTH_MM
           )
-          layout.bay_ranges_mm
         end
 
         def interior_left_face_mm
@@ -430,51 +456,105 @@ module AICabinets
         end
 
         class PartitionLayout
+          EPSILON_MM = 1.0e-3
+
           def initialize(raw:, panel_thickness_mm:, width_mm:, min_bay_width_mm:)
             @raw = raw
             @panel_thickness_mm = panel_thickness_mm
             @width_mm = width_mm
             @min_bay_width_mm = min_bay_width_mm
+            @warnings = []
+            @computed = false
           end
 
           def bay_ranges_mm
-            @bay_ranges_mm ||= compute_bay_ranges
+            ensure_computed
+            @bay_ranges_mm
+          end
+
+          def partition_left_faces_mm
+            ensure_computed
+            @partition_left_faces_mm
+          end
+
+          def partition_thickness_mm
+            return @partition_thickness_mm if defined?(@partition_thickness_mm)
+
+            candidate = safe_float(fetch(raw, :panel_thickness_mm))
+            candidate = nil unless candidate && candidate.positive?
+
+            interior_width = interior_width_mm
+            if candidate && candidate >= interior_width - EPSILON_MM
+              add_warning('Partition thickness exceeded interior width; using carcass panel thickness instead.')
+              candidate = nil
+            end
+
+            @partition_thickness_mm = if candidate && candidate > EPSILON_MM
+                                        candidate
+                                      else
+                                        panel_thickness_mm
+                                      end
+          end
+
+          def warnings
+            ensure_computed
+            @warnings.dup
           end
 
           private
 
           attr_reader :raw, :panel_thickness_mm, :width_mm, :min_bay_width_mm
 
-          def compute_bay_ranges
-            left = panel_thickness_mm
-            right = width_mm - panel_thickness_mm
+          def ensure_computed
+            return if @computed
+
+            @partition_left_faces_mm = compute_partition_left_faces
+            @bay_ranges_mm = compute_bay_ranges_from_faces(@partition_left_faces_mm)
+            @computed = true
+          end
+
+          def interior_left_face_mm
+            panel_thickness_mm
+          end
+
+          def interior_right_face_mm
+            width_mm - panel_thickness_mm
+          end
+
+          def interior_width_mm
+            interior_right_face_mm - interior_left_face_mm
+          end
+
+          def compute_bay_ranges_from_faces(faces)
+            left = interior_left_face_mm
+            right = interior_right_face_mm
             interior_width = right - left
             return [] if interior_width < min_bay_width_mm
 
-            current_left = left
             ranges = []
+            current_left = left
 
-            partition_left_faces(interior_width).each do |left_face|
-              break if left_face - current_left < min_bay_width_mm
+            faces.each do |face|
+              break if face - current_left < min_bay_width_mm - EPSILON_MM
 
-              ranges << [current_left, left_face]
-              current_left = left_face + panel_thickness_mm
-              break if right - current_left < min_bay_width_mm
+              ranges << [current_left, face]
+              current_left = face + partition_thickness_mm
+              break if right - current_left < min_bay_width_mm - EPSILON_MM
             end
 
-            if right - current_left >= min_bay_width_mm
+            if right - current_left >= min_bay_width_mm - EPSILON_MM
               ranges << [current_left, right]
             end
 
             ranges
           end
 
-          def partition_left_faces(interior_width)
+          def compute_partition_left_faces
             case partition_mode
             when :even
-              even_partition_faces(interior_width)
+              even_partition_faces
             when :positions
-              explicit_partition_faces(interior_width)
+              explicit_partition_faces
             else
               []
             end
@@ -508,38 +588,71 @@ module AICabinets
             @partition_positions ||= Array(fetch(raw, :positions_mm))
           end
 
-          def even_partition_faces(interior_width)
+          def even_partition_faces
             count = [partition_count, 0].max
             return [] if count <= 0
 
-            available_width = interior_width - count * panel_thickness_mm
+            thickness = partition_thickness_mm
+            interior_width = interior_width_mm
+            available_width = interior_width - count * thickness
             minimum_required = min_bay_width_mm * (count + 1)
-            return [] if available_width <= minimum_required
+            if available_width < minimum_required
+              add_warning("Requested #{count} partitions but interior width only allows bays of at least #{format_mm(min_bay_width_mm)}; skipping even partitions.")
+              return []
+            end
 
             bay_width = available_width / (count + 1)
-            return [] if bay_width < min_bay_width_mm
+            if bay_width < min_bay_width_mm
+              add_warning("Requested #{count} partitions but resulting bay width #{format_mm(bay_width)} is below minimum #{format_mm(min_bay_width_mm)}; skipping even partitions.")
+              return []
+            end
 
+            left = interior_left_face_mm
             Array.new(count) do |index|
-              index * (bay_width + panel_thickness_mm) + bay_width
+              left + (index + 1) * bay_width + index * thickness
             end
           end
 
-          def explicit_partition_faces(interior_width)
+          def explicit_partition_faces
             sorted = partition_positions.map { |value| safe_float(value) }.compact.sort
             return [] if sorted.empty?
 
+            left_boundary = interior_left_face_mm
+            right_boundary = interior_right_face_mm
+            thickness = partition_thickness_mm
+
             offsets = []
-            current_left = 0.0
-            sorted.each do |offset|
-              offset = clamp(offset, 0.0, interior_width - panel_thickness_mm)
+            previous_original = nil
+            sorted.each do |raw_offset|
+              if previous_original && (raw_offset - previous_original).abs <= EPSILON_MM
+                add_warning("Ignored duplicate partition at #{format_mm(raw_offset)} (positions mode).")
+                next
+              end
 
-              next if offset - current_left < min_bay_width_mm
+              clamped = clamp(raw_offset, left_boundary, right_boundary - thickness)
+              if (clamped - raw_offset).abs > EPSILON_MM
+                add_warning("Clamped partition from #{format_mm(raw_offset)} to #{format_mm(clamped)} to stay within cabinet interior.")
+              end
 
-              remaining_after = interior_width - offset - panel_thickness_mm
-              break if remaining_after < min_bay_width_mm
+              if offsets.any? && (clamped - offsets.last).abs <= EPSILON_MM
+                add_warning("Ignored partition at #{format_mm(raw_offset)} because it overlaps another after clamping.")
+                next
+              end
 
-              offsets << offset
-              current_left = offset + panel_thickness_mm
+              left_gap = clamped - (offsets.empty? ? left_boundary : offsets.last + thickness)
+              if left_gap < min_bay_width_mm - EPSILON_MM
+                add_warning("Ignored partition at #{format_mm(raw_offset)} because the bay to its left would be #{format_mm([left_gap, 0.0].max)} wide (minimum #{format_mm(min_bay_width_mm)}).")
+                next
+              end
+
+              right_gap = right_boundary - (clamped + thickness)
+              if right_gap < min_bay_width_mm - EPSILON_MM
+                add_warning("Ignored partition at #{format_mm(raw_offset)} because the bay to its right would be #{format_mm([right_gap, 0.0].max)} wide (minimum #{format_mm(min_bay_width_mm)}).")
+                next
+              end
+
+              offsets << clamped
+              previous_original = raw_offset
             end
 
             offsets
@@ -561,6 +674,14 @@ module AICabinets
 
           def clamp(value, min_value, max_value)
             [[value, max_value].min, min_value].max
+          end
+
+          def add_warning(message)
+            @warnings << message
+          end
+
+          def format_mm(value)
+            format('%.3f mm', value.to_f)
           end
         end
       end
