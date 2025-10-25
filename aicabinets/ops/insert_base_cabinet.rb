@@ -42,72 +42,85 @@ module AICabinets
       IDENTITY_TRANSFORMATION = Geom::Transformation.new
 
       def place_at_point!(model:, point3d:, params_mm:)
-        unless model.is_a?(Sketchup::Model)
-          warn('AI Cabinets: place_at_point! requires a SketchUp model.')
-          return nil
-        end
+        validate_model!(model)
+        validate_point!(point3d)
 
-        unless point3d.is_a?(Geom::Point3d)
-          warn('AI Cabinets: place_at_point! requires a Geom::Point3d pick point.')
-          return nil
-        end
-
-        params = validate_params(params_mm)
-        return nil unless params
-
+        params = validate_params!(params_mm)
         fingerprint, params_json = build_fingerprint(params)
 
+        operation_open = false
         model.start_operation(OPERATION_NAME, true)
+        operation_open = true
 
         definition = ensure_definition(model, params, fingerprint, params_json)
         transform = placement_transform(model, point3d)
         instance = add_instance(model, definition, transform)
         select_instance(model, instance)
         model.commit_operation
+        operation_open = false
         instance
-      rescue StandardError => e
-        warn("AI Cabinets: Failed to insert base cabinet: #{e.message}")
-        model.abort_operation if model.respond_to?(:abort_operation)
-        nil
+      ensure
+        model.abort_operation if operation_open
       end
 
-      def validate_params(params_mm)
+      def validate_model!(model)
+        return if model.is_a?(Sketchup::Model)
+
+        raise ArgumentError, 'model must be a SketchUp::Model'
+      end
+      private_class_method :validate_model!
+
+      def validate_point!(point3d)
+        return if point3d.is_a?(Geom::Point3d)
+
+        raise ArgumentError, 'point3d must be a Geom::Point3d'
+      end
+      private_class_method :validate_point!
+
+      def validate_params!(params_mm)
         unless params_mm.is_a?(Hash)
-          warn('AI Cabinets: Cabinet parameters must be a Hash.')
-          return nil
+          raise ArgumentError, 'params_mm must be a Hash of millimeter values'
         end
 
         missing = REQUIRED_LENGTH_KEYS.reject { |key| params_mm.key?(key) }
-        unless missing.empty?
-          warn("AI Cabinets: Missing cabinet parameters: #{missing.join(', ')}")
-          return nil
+        if missing.any?
+          raise ArgumentError, "Missing cabinet parameters: #{missing.join(', ')}"
         end
 
         REQUIRED_LENGTH_KEYS.each do |key|
           value = params_mm[key]
           unless value.is_a?(Numeric) && value.finite?
-            warn("AI Cabinets: Parameter #{key} must be a finite number.")
-            return nil
+            raise ArgumentError, "Parameter #{key} must be a finite number in millimeters"
           end
         end
 
         POSITIVE_KEYS.each do |key|
           if params_mm[key] <= 0
-            warn("AI Cabinets: Parameter #{key} must be greater than 0 mm.")
-            return nil
+            raise ArgumentError, "Parameter #{key} must be greater than 0 mm"
           end
         end
 
         NON_NEGATIVE_KEYS.each do |key|
           if params_mm[key] < 0
-            warn("AI Cabinets: Parameter #{key} must be at least 0 mm.")
-            return nil
+            raise ArgumentError, "Parameter #{key} must be at least 0 mm"
           end
+        end
+
+        if params_mm[:panel_thickness_mm] >= params_mm[:width_mm]
+          raise ArgumentError, 'panel_thickness_mm must be less than width_mm'
+        end
+
+        if params_mm[:toe_kick_height_mm] >= params_mm[:height_mm]
+          raise ArgumentError, 'toe_kick_height_mm must be less than height_mm'
+        end
+
+        if params_mm[:toe_kick_depth_mm] >= params_mm[:depth_mm]
+          raise ArgumentError, 'toe_kick_depth_mm must be less than depth_mm'
         end
 
         deep_copy(params_mm)
       end
-      private_class_method :validate_params
+      private_class_method :validate_params!
 
       def build_fingerprint(params)
         canonical = canonicalize(params)
@@ -174,8 +187,7 @@ module AICabinets
 
         Sketchup::InstancePath.new(path).transformation
       rescue StandardError => e
-        warn("AI Cabinets: Unable to resolve active path transform: #{e.message}")
-        IDENTITY_TRANSFORMATION
+        raise RuntimeError, "Unable to resolve active path transform: #{e.message}"
       end
       private_class_method :active_path_transform
 
