@@ -1,0 +1,106 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  background-color: transparent;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+  background-color: transparent;
+  color: inherit;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialog__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dialog__title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.dialog__subtitle {
+  margin: 0;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.dialog__content {
+  flex: 1 1 auto;
+  padding: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.dialog__footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.button {
+  padding: 8px 16px;
+  font-size: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: inherit;
+  cursor: pointer;
+}
+
+.button:hover,
+.button:focus {
+  border-color: rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+.button--primary {
+  background-color: #1e88e5;
+  color: #ffffff;
+  border-color: #1e88e5;
+}
+
+.button--primary:hover,
+.button--primary:focus {
+  background-color: #1565c0;
+  border-color: #1565c0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dialog__content {
+    border-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .dialog__subtitle {
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .button {
+    background-color: rgba(30, 30, 30, 0.9);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .button:hover,
+  .button:focus {
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+}
