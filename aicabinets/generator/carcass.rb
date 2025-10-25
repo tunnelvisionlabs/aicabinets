@@ -6,6 +6,7 @@ Sketchup.require('aicabinets/generator/parts/side_panel')
 Sketchup.require('aicabinets/generator/parts/bottom_panel')
 Sketchup.require('aicabinets/generator/parts/top_panel')
 Sketchup.require('aicabinets/generator/parts/back_panel')
+Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/ops/materials')
 
@@ -323,7 +324,7 @@ module AICabinets
         private
 
         def length_mm(value)
-          value.to_f.mm
+          Ops::Units.to_length_mm(value)
         end
       end
     end
