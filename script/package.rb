@@ -161,13 +161,7 @@ module AICabinets
         FileUtils.rm_f(output_path)
         Zip.sort_entries = true if Zip.respond_to?(:sort_entries=)
 
-        open_args = if Zip::File.const_defined?(:CREATE)
-                       [Zip::File::CREATE]
-                     else
-                       [{ create: true }]
-                     end
-
-        Zip::File.open(output_path, *open_args) do |zipfile|
+        writer = proc do |zipfile|
           manifest[:directories].each do |dir|
             next if dir.empty?
             zipfile.mkdir(dir) unless zipfile.find_entry(dir)
@@ -190,6 +184,11 @@ module AICabinets
             entry.extra = ''.b
             entry.comment = nil
           end
+        end
+        if Zip::File.const_defined?(:CREATE)
+          Zip::File.open(output_path, Zip::File::CREATE, &writer)
+        else
+          Zip::File.open(output_path, create: true, &writer)
         end
         true
       rescue LoadError
