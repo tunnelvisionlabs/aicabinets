@@ -5,9 +5,11 @@ module AICabinets
     Sketchup.require('aicabinets/version')
     Sketchup.require('aicabinets/ops/units')
     Sketchup.require('aicabinets/generator/carcass')
+    Sketchup.require('aicabinets/ops/insert_base_cabinet')
     Sketchup.require('aicabinets/ui/icons')
     Sketchup.require('aicabinets/ops/defaults')
     Sketchup.require('aicabinets/ui/dialogs/insert_base_cabinet_dialog')
+    Sketchup.require('aicabinets/ui/tools/insert_base_cabinet_tool')
     Sketchup.require('aicabinets/ui/commands')
     Sketchup.require('aicabinets/ui/menu_and_toolbar')
   end

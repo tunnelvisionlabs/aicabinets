@@ -12,6 +12,13 @@ module AICabinets
     module Units
       module_function
 
+      LENGTH_CLASS =
+        if defined?(Sketchup::Length)
+          Sketchup::Length
+        elsif defined?(Length)
+          Length
+        end
+
       # Converts a numeric millimeter value to a SketchUp Length. Length inputs
       # are returned unchanged so double conversions remain cheap.
       #
@@ -19,7 +26,7 @@ module AICabinets
       # @return [Sketchup::Length]
       # @raise [ArgumentError] if value_mm cannot be interpreted as millimeters.
       def to_length_mm(value_mm)
-        return value_mm if value_mm.is_a?(Sketchup::Length)
+        return value_mm if LENGTH_CLASS && value_mm.is_a?(LENGTH_CLASS)
         raise ArgumentError, 'value must be numeric millimeters' unless value_mm.is_a?(Numeric)
 
         result = value_mm.to_f.mm
