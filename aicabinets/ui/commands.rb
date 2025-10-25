@@ -40,12 +40,17 @@ module AICabinets
       end
 
       def handle_insert_base_cabinet
-        message = 'AI Cabinets placeholder: Insert Base Cabinet command invoked.'
-        if defined?(::UI) && ::UI.respond_to?(:messagebox)
-          ::UI.messagebox(message)
+        dialog = if defined?(AICabinets::UI::Dialogs::InsertBaseCabinet) &&
+                    AICabinets::UI::Dialogs::InsertBaseCabinet.respond_to?(:show)
+                   AICabinets::UI::Dialogs::InsertBaseCabinet
+                 end
+
+        if dialog
+          dialog.show
         else
-          puts(message)
+          warn('AI Cabinets: Insert Base Cabinet dialog is unavailable.')
         end
+
         nil
       end
     end
