@@ -6,6 +6,8 @@ Sketchup.require('aicabinets/generator/parts/side_panel')
 Sketchup.require('aicabinets/generator/parts/bottom_panel')
 Sketchup.require('aicabinets/generator/parts/top_panel')
 Sketchup.require('aicabinets/generator/parts/back_panel')
+Sketchup.require('aicabinets/ops/tags')
+Sketchup.require('aicabinets/ops/materials')
 
 module AICabinets
   module Generator
@@ -58,6 +60,8 @@ module AICabinets
 
         def build
           entities = resolve_entities(@parent)
+          model = entities.respond_to?(:model) ? entities.model : nil
+          default_material = model.is_a?(Sketchup::Model) ? Ops::Materials.default_carcass(model) : nil
           instances = {}
           created = []
 
@@ -71,7 +75,8 @@ module AICabinets
             toe_kick_depth: params.toe_kick_depth,
             x_offset: 0
           )
-          created << instances[:left_side]
+          register_created(created, instances[:left_side])
+          apply_category(instances[:left_side], 'AICabinets/Sides', default_material)
 
           instances[:right_side] = Parts::SidePanel.build(
             parent_entities: entities,
@@ -83,7 +88,8 @@ module AICabinets
             toe_kick_depth: params.toe_kick_depth,
             x_offset: params.width - params.panel_thickness
           )
-          created << instances[:right_side]
+          register_created(created, instances[:right_side])
+          apply_category(instances[:right_side], 'AICabinets/Sides', default_material)
 
           bottom_width = params.width - params.panel_thickness * 2
           bottom_depth = params.depth - params.toe_kick_depth
@@ -97,7 +103,8 @@ module AICabinets
             y_offset: params.toe_kick_depth,
             z_offset: params.toe_kick_height
           )
-          created << instances[:bottom]
+          register_created(created, instances[:bottom])
+          apply_category(instances[:bottom], 'AICabinets/Bottom', default_material)
 
           top_width = params.width - params.panel_thickness * 2
           instances[:top_or_stretchers] = Parts::TopPanel.build(
@@ -110,7 +117,12 @@ module AICabinets
             y_offset: 0,
             z_offset: params.height - params.top_thickness
           )
-          created << instances[:top_or_stretchers]
+          register_created(created, instances[:top_or_stretchers])
+          apply_category(
+            instances[:top_or_stretchers],
+            determine_top_tag(instances[:top_or_stretchers]),
+            default_material
+          )
 
           instances[:back] = Parts::BackPanel.build(
             parent_entities: entities,
@@ -122,7 +134,8 @@ module AICabinets
             y_offset: params.depth - params.back_thickness,
             z_offset: params.toe_kick_height
           )
-          created << instances[:back]
+          register_created(created, instances[:back])
+          apply_category(instances[:back], 'AICabinets/Back', default_material)
 
           bounds = Geom::BoundingBox.new
           instances.each_value do |container|
@@ -246,6 +259,37 @@ module AICabinets
           hash.each_with_object({}) do |(key, value), acc|
             acc[key.to_sym] = value
           end
+        end
+
+        def register_created(created, container)
+          Array(container).each do |entity|
+            next unless entity&.valid?
+
+            created << entity
+          end
+        end
+
+        def apply_category(container, tag_name, material)
+          Array(container).each do |entity|
+            next unless entity&.valid?
+
+            Ops::Tags.assign!(entity, tag_name)
+            next unless material && entity.respond_to?(:material=)
+
+            entity.material = material
+          end
+        end
+
+        def determine_top_tag(container)
+          entities = Array(container).compact
+          return 'AICabinets/Top' if entities.empty?
+
+          return 'AICabinets/Stretchers' if entities.length > 1
+
+          name = entities.first.respond_to?(:name) ? entities.first.name.to_s : ''
+          return 'AICabinets/Stretchers' if name.downcase.include?('stretcher')
+
+          'AICabinets/Top'
         end
       end
 
