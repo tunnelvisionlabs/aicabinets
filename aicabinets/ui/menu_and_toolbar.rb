@@ -20,12 +20,16 @@ module AICabinets
       private
 
       def attach_menu
-        command = commands[:insert_base_cabinet]
-        return unless command
-
         extensions_menu = ::UI.menu('Extensions')
         @menu ||= extensions_menu.add_submenu(MENU_TITLE)
-        @menu.add_item(command)
+        menu_commands = [
+          commands[:insert_base_cabinet],
+          commands[:edit_base_cabinet]
+        ].compact
+
+        menu_commands.each do |command|
+          @menu.add_item(command)
+        end
       end
 
       def attach_toolbar

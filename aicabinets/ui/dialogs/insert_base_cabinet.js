@@ -19,6 +19,7 @@
   var controller = null;
   var pendingUnitSettings = null;
   var pendingDefaults = null;
+  var pendingConfiguration = null;
 
   var UNIT_TO_MM = {
     inch: 25.4,
@@ -49,6 +50,21 @@
   var INTEGER_FIELDS = ['shelves', 'partitions_count'];
 
   var UI_PAYLOAD_VERSION = '1.0.0';
+
+  var MODE_COPY = {
+    insert: {
+      title: 'Insert Base Cabinet',
+      subtitle:
+        "Configure cabinet parameters, then choose \u003cstrong\u003eInsert\u003c/strong\u003e when ready.",
+      primaryLabel: 'Insert'
+    },
+    edit: {
+      title: 'Edit Base Cabinet',
+      subtitle:
+        "Update the selected cabinet, then choose \u003cstrong\u003eSave Changes\u003c/strong\u003e when ready.",
+      primaryLabel: 'Save Changes'
+    }
+  };
 
   var ACK_FIELD_TO_INPUT = {
     width_mm: 'width',
@@ -442,12 +458,22 @@
     };
 
     this.unitsNote = form.querySelector('[data-role="units-note"]');
-    this.insertButton = document.querySelector('button[data-action="insert"]');
+    this.insertButton =
+      document.querySelector('[data-role="primary-action"]') ||
+      document.querySelector('button[data-action="insert"]');
+    this.dialogTitle = document.querySelector('[data-role="dialog-title"]');
+    this.dialogSubtitle = document.querySelector('[data-role="dialog-subtitle"]');
+    this.scopeSection = form.querySelector('[data-role="scope-section"]');
+    this.scopeInputs = Array.prototype.slice.call(
+      form.querySelectorAll('input[name="scope"]')
+    );
     this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
     this.partitionsPositionsField = form.querySelector('[data-partitions-control="positions"]');
     this.bannerTimer = null;
     this.isSubmitting = false;
+    this.mode = 'insert';
+    this.scope = 'instance';
 
     this.initializeElements();
     this.bindEvents();
@@ -549,6 +575,16 @@
 
       this.inputs.partitions_positions.addEventListener('blur', function () {
         self.handlePartitionsPositionsBlur();
+      });
+    }
+
+    if (this.scopeInputs.length) {
+      this.scopeInputs.forEach(function (input) {
+        input.addEventListener('change', function (event) {
+          if (event.target.checked) {
+            self.setScope(event.target.value);
+          }
+        });
       });
     }
 
@@ -679,6 +715,58 @@
     }
 
     this.updateInsertButtonState();
+  };
+
+  FormController.prototype.configureMode = function configureMode(options) {
+    if (options === void 0) {
+      options = {};
+    }
+
+    var mode = options.mode === 'edit' ? 'edit' : 'insert';
+    this.mode = mode;
+
+    var copy = MODE_COPY[mode] || MODE_COPY.insert;
+    if (this.dialogTitle) {
+      this.dialogTitle.textContent = copy.title;
+    }
+
+    if (this.dialogSubtitle) {
+      this.dialogSubtitle.innerHTML = copy.subtitle;
+    }
+
+    if (this.insertButton) {
+      this.insertButton.textContent = copy.primaryLabel;
+    }
+
+    if (this.scopeSection) {
+      if (mode === 'edit') {
+        this.scopeSection.classList.remove('is-hidden');
+      } else {
+        this.scopeSection.classList.add('is-hidden');
+      }
+    }
+
+    var scopeValue = options.scope === 'all' ? 'all' : 'instance';
+    if (mode === 'edit') {
+      this.setScope(scopeValue);
+    } else {
+      this.setScope('instance');
+    }
+
+    this.updateInsertButtonState();
+  };
+
+  FormController.prototype.setScope = function setScope(value) {
+    var normalized = value === 'all' ? 'all' : 'instance';
+    this.scope = normalized;
+
+    if (!this.scopeInputs.length) {
+      return;
+    }
+
+    this.scopeInputs.forEach(function (input) {
+      input.checked = input.value === normalized;
+    });
   };
 
   FormController.prototype.updateUnitsNotice = function updateUnitsNotice() {
@@ -1067,6 +1155,10 @@
       payload.partitions.positions_mm = [];
     }
 
+    if (this.mode === 'edit') {
+      payload.scope = this.scope === 'all' ? 'all' : 'instance';
+    }
+
     return payload;
   };
 
@@ -1076,7 +1168,7 @@
     }
 
     if (!this.isFormValid()) {
-      this.setBanner('error', 'Resolve validation errors before inserting.');
+      this.setBanner('error', 'Resolve validation errors before continuing.');
       return;
     }
 
@@ -1171,6 +1263,15 @@
     }
   };
 
+  namespace.configure = function configure(options) {
+    var normalized = normalizeConfiguration(options);
+    if (controller) {
+      controller.configureMode(normalized);
+    } else {
+      pendingConfiguration = normalized;
+    }
+  };
+
   namespace.applyDefaults = function applyDefaults(defaults) {
     if (controller) {
       controller.applyDefaults(defaults);
@@ -1210,6 +1311,23 @@
     invokeSketchUp(action);
   }
 
+  function normalizeConfiguration(options) {
+    var normalized = { mode: 'insert', scope: 'instance' };
+    if (!options || typeof options !== 'object') {
+      return normalized;
+    }
+
+    if (options.mode === 'edit') {
+      normalized.mode = 'edit';
+    }
+
+    if (options.scope === 'all') {
+      normalized.scope = 'all';
+    }
+
+    return normalized;
+  }
+
   function initialize() {
     var form = document.querySelector('[data-role="insert-form"]');
     if (!form) {
@@ -1217,6 +1335,12 @@
     }
 
     controller = new FormController(form);
+    if (pendingConfiguration) {
+      controller.configureMode(pendingConfiguration);
+      pendingConfiguration = null;
+    } else {
+      controller.configureMode({ mode: 'insert', scope: 'instance' });
+    }
     if (pendingUnitSettings) {
       controller.setUnits(pendingUnitSettings);
       pendingUnitSettings = null;

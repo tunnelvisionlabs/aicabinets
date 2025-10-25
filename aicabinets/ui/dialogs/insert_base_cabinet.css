@@ -113,6 +113,32 @@ body {
   gap: 6px;
 }
 
+.form-field--radio-group {
+  gap: 12px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.radio-option input[type='radio'] {
+  margin-top: 4px;
+}
+
+.radio-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 600;
+}
+
+.radio-option span small {
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.6);
+}
+
 .form-field label {
   font-weight: 600;
 }

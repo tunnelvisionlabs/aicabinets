@@ -10,8 +10,8 @@
   <body>
     <div class="dialog">
       <header class="dialog__header">
-        <h1 class="dialog__title">Insert Base Cabinet</h1>
-        <p class="dialog__subtitle">
+        <h1 class="dialog__title" data-role="dialog-title">Insert Base Cabinet</h1>
+        <p class="dialog__subtitle" data-role="dialog-subtitle">
           Configure cabinet parameters, then choose <strong>Insert</strong> when ready.
         </p>
       </header>
@@ -182,11 +182,42 @@
               <p class="field-error" data-error-for="partitions_positions" aria-live="polite"></p>
             </div>
           </section>
+
+          <section class="form__section is-hidden" data-role="scope-section">
+            <h2 class="form__section-title">Scope</h2>
+            <div class="form-field form-field--radio-group" data-field="scope">
+              <label class="radio-option">
+                <input
+                  type="radio"
+                  name="scope"
+                  value="instance"
+                  checked
+                />
+                <span>
+                  This instance only
+                  <small>Updates just the selected cabinet.</small>
+                </span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="scope" value="all" />
+                <span>
+                  All instances (shared definition)
+                  <small>Apply changes to every instance of this cabinet.</small>
+                </span>
+              </label>
+            </div>
+          </section>
         </form>
       </main>
 
       <footer class="dialog__footer">
-        <button type="button" class="button button--primary" data-action="insert" disabled>
+        <button
+          type="button"
+          class="button button--primary"
+          data-action="insert"
+          data-role="primary-action"
+          disabled
+        >
           Insert
         </button>
         <button type="button" class="button" data-action="cancel">
