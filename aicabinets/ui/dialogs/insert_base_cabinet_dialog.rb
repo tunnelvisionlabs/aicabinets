@@ -438,6 +438,19 @@ module AICabinets
             typed[:positions_mm] = typed_positions
           end
 
+          if raw.key?(:panel_thickness_mm) && !raw[:panel_thickness_mm].nil?
+            thickness = coerce_non_negative_length(
+              raw[:panel_thickness_mm],
+              'partitions.panel_thickness_mm',
+              'Partition thickness'
+            )
+            if thickness <= 0
+              raise PayloadError.new('out_of_range', 'Partition thickness must be greater than 0 mm.', 'partitions.panel_thickness_mm')
+            end
+
+            typed[:panel_thickness_mm] = thickness
+          end
+
           typed
         end
         private_class_method :validate_partitions_value

@@ -41,3 +41,14 @@ zip -r aicabinets-$(ruby -e "load 'aicabinets/version.rb'; puts AICabinets::VERS
 ## Extension UI
 
 After installing the extension, launch its placeholder action from **Extensions → AI Cabinets → Insert Base Cabinet…** or by showing the **AI Cabinets** toolbar. Both entry points share the same command, which currently opens a simple placeholder message while the full cabinet insertion dialog is under development.
+
+## Partition Options
+
+Generated base cabinets accept a `partitions` payload to divide the interior into bays.
+
+- `mode` determines how partitions are created:
+  - `none` omits partitions.
+  - `even` spaces `count` partitions so the resulting `count + 1` bays have nearly equal clear widths.
+  - `positions` places partitions at explicit offsets measured in millimeters from the cabinet’s left outside face to each partition’s left face.
+- Partitions use the carcass panel thickness (or an explicit `panel_thickness_mm` value when provided) and span the interior height (top of the bottom panel to the underside of the top or stringers) and depth (front face to the back panel).
+- Invalid or overlapping requests are ignored, and the generator logs warnings when positions are clamped to the cabinet interior or discarded because they violate minimum bay widths.
