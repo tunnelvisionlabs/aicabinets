@@ -46,7 +46,7 @@ module AICabinets
       end
 
       def plan_layout(params)
-        left_faces = Array(params.partition_left_faces_mm)
+        left_faces = Array(params.partition_left_faces_mm).map { |value| value.to_f }.sort
         return [] if left_faces.empty?
 
         thickness_mm = params.partition_thickness_mm.to_f
