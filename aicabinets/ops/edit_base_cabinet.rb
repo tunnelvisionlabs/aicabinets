@@ -24,6 +24,8 @@ module AICabinets
       DEF_KEY = InsertBaseCabinet::DEF_KEY
       LEGACY_FINGERPRINT_KEY = InsertBaseCabinet::LEGACY_FINGERPRINT_KEY
       PARAMS_JSON_KEY = InsertBaseCabinet::PARAMS_JSON_KEY
+      WRAPPER_TAG_NAME = InsertBaseCabinet::WRAPPER_TAG_NAME
+      OWNED_TAG_PREFIX = 'AICabinets/'.freeze
 
       Result = Struct.new(:instance, :error_code, keyword_init: true)
       private_constant :Result
@@ -172,17 +174,32 @@ module AICabinets
       private_class_method :ensure_definition_for_scope
 
       def rebuild_definition!(definition, params)
-        entities = definition.entities
-        if entities.respond_to?(:clear!)
-          entities.clear!
-        else
-          entities.to_a.each do |entity|
-            entity.erase! if entity.valid?
-          end
-        end
+        remove_owned_entities(definition.entities)
         AICabinets::Generator.build_base_carcass!(parent: definition, params_mm: params)
       end
       private_class_method :rebuild_definition!
+
+      def remove_owned_entities(entities)
+        entities.to_a.each do |entity|
+          next unless cabinet_owned_entity?(entity)
+
+          entity.erase! if entity.valid?
+        end
+      end
+      private_class_method :remove_owned_entities
+
+      def cabinet_owned_entity?(entity)
+        return false unless entity&.valid?
+        return false unless entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
+
+        layer = entity.respond_to?(:layer) ? entity.layer : nil
+        layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
+        return false unless layer_name.start_with?(OWNED_TAG_PREFIX)
+        return false if layer_name == WRAPPER_TAG_NAME
+
+        true
+      end
+      private_class_method :cabinet_owned_entity?
 
       def assign_definition_attributes(definition, def_key, params_json)
         definition.set_attribute(DICTIONARY_NAME, SCHEMA_VERSION_KEY, SCHEMA_VERSION)
