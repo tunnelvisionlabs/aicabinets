@@ -11,6 +11,7 @@ This repository contains Ruby scripts for SketchUp that generate simple cabinetr
 - `examples/shaker_door_cabinet.rb` – demonstrates a rail-and-stile door with an 18° bevel.
 - `examples/drawer_cabinet.rb` – shows how to add drawers to a cabinet, mix drawers with doors, and adjust drawer clearances.
 - `examples/partitioned_cabinet.rb` – demonstrates dividing a cabinet interior with fixed partitions.
+- `examples/slab_door_fronts.rb` – inserts three base cabinets showcasing the `:doors_left`, `:doors_right`, and `:doors_double` slab door modes.
 
 Copy the library and sample code into SketchUp's Ruby console or load them as scripts to build cabinet geometry automatically.
 
