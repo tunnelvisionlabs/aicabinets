@@ -215,9 +215,14 @@ module AICabinets
 
           begin
             typed_params = parse_submit_params(json)
-            store_last_valid_params(typed_params)
-            params_for_tool = deep_copy_params(typed_params)
-            ack = { ok: true }
+            store_last_valid_params(deep_copy_params(typed_params))
+
+            if dialog_mode == :edit
+              ack = apply_edit_operation(typed_params)
+            else
+              params_for_tool = deep_copy_params(typed_params)
+              ack = { ok: true }
+            end
           rescue PayloadError => e
             ack = build_error_ack(e.code, e.message, e.field)
           rescue StandardError => e
@@ -233,9 +238,41 @@ module AICabinets
             params_for_tool.delete(:scope)
             close_dialog_if_visible(dialog)
             activate_insert_tool(params_for_tool)
+          elsif dialog_mode == :edit
+            close_dialog_if_visible(dialog)
           end
         end
         private_class_method :handle_submit_params
+
+        def apply_edit_operation(raw_params)
+          unless defined?(Sketchup) && defined?(Sketchup::Model)
+            return build_error_ack('internal_error', 'SketchUp environment is unavailable.')
+          end
+
+          model = Sketchup.active_model
+          unless model.is_a?(Sketchup::Model)
+            return build_error_ack('internal_error', 'No active model is available for editing.')
+          end
+
+          params = deep_copy_params(raw_params)
+          scope = params.delete(:scope) || 'instance'
+
+          result = AICabinets::Ops::EditBaseCabinet.apply_to_selection!(
+            model: model,
+            params_mm: params,
+            scope: scope
+          )
+
+          return result if result.is_a?(Hash) && result.key?(:ok)
+
+          { ok: true }
+        rescue ArgumentError => e
+          build_error_ack('invalid_params', e.message)
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to apply edit operation: #{e.message}")
+          build_error_ack('internal_error', 'Unable to edit the selected cabinet.')
+        end
+        private_class_method :apply_edit_operation
 
         def parse_submit_params(json)
           if json.nil?
