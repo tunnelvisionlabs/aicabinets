@@ -11,6 +11,29 @@ module AICabinets
         DIALOG_TITLE = 'AI Cabinets — Insert Base Cabinet'
         PREFERENCES_KEY = 'AICabinets.InsertBaseCabinet'
         HTML_FILENAME = 'insert_base_cabinet.html'
+        MAX_LENGTH_MM = 100_000.0
+        VALID_FRONT_VALUES = %w[empty doors_left doors_right doors_double].freeze
+        VALID_PARTITION_MODES = %w[none even positions].freeze
+        LENGTH_FIELD_NAMES = {
+          width_mm: 'Width',
+          depth_mm: 'Depth',
+          height_mm: 'Height',
+          panel_thickness_mm: 'Panel thickness',
+          toe_kick_height_mm: 'Toe kick height',
+          toe_kick_depth_mm: 'Toe kick depth'
+        }.freeze
+
+        class PayloadError < StandardError
+          attr_reader :code, :field
+
+          def initialize(code, message, field = nil)
+            super(message)
+            @code = code
+            @field = field
+          end
+        end
+        private_constant :PayloadError
+        private_constant :MAX_LENGTH_MM, :VALID_FRONT_VALUES, :VALID_PARTITION_MODES, :LENGTH_FIELD_NAMES
 
         # Shows the Insert Base Cabinet dialog, creating it if necessary.
         # Subsequent invocations focus the existing dialog to avoid duplicates.
@@ -59,8 +82,8 @@ module AICabinets
             deliver_insert_defaults(dialog)
           end
 
-          dialog.add_action_callback('insert') do |_action_context, _payload|
-            # Reserved for future geometry generation wiring.
+          dialog.add_action_callback('aicb_submit_params') do |_action_context, json|
+            handle_submit_params(dialog, json)
           end
 
           dialog.add_action_callback('cancel') do |_action_context, _payload|
@@ -99,6 +122,209 @@ module AICabinets
           dialog.execute_script(script)
         end
         private_class_method :deliver_insert_defaults
+
+        def handle_submit_params(dialog, json)
+          ack = nil
+
+          begin
+            typed_params = parse_submit_params(json)
+            store_last_valid_params(typed_params)
+            ack = { ok: true }
+          rescue PayloadError => e
+            ack = build_error_ack(e.code, e.message, e.field)
+          rescue StandardError => e
+            warn("AI Cabinets: Unexpected error while processing insert parameters: #{e.message}")
+            ack = build_error_ack('internal_error', 'Unable to process the request. Try again later.')
+          ensure
+            deliver_submit_ack(dialog, ack) if ack
+          end
+        end
+        private_class_method :handle_submit_params
+
+        def parse_submit_params(json)
+          if json.nil?
+            raise PayloadError.new('bad_json', 'Parameter payload was empty.')
+          end
+
+          raw = JSON.parse(json, symbolize_names: true)
+          unless raw.is_a?(Hash)
+            raise PayloadError.new('bad_json', 'Parameter payload must be a JSON object.')
+          end
+
+          build_typed_params(raw)
+        rescue JSON::ParserError, TypeError
+          raise PayloadError.new('bad_json', 'Parameter payload was not valid JSON.')
+        end
+        private_class_method :parse_submit_params
+
+        def build_typed_params(raw)
+          params = {
+            width_mm: coerce_length_field(raw, :width_mm),
+            depth_mm: coerce_length_field(raw, :depth_mm),
+            height_mm: coerce_length_field(raw, :height_mm),
+            panel_thickness_mm: coerce_length_field(raw, :panel_thickness_mm),
+            toe_kick_height_mm: coerce_length_field(raw, :toe_kick_height_mm),
+            toe_kick_depth_mm: coerce_length_field(raw, :toe_kick_depth_mm),
+            front: validate_front_value(raw),
+            shelves: validate_shelves_value(raw),
+            partitions: validate_partitions_value(raw[:partitions])
+          }
+
+          if raw[:ui_version].is_a?(String)
+            version = raw[:ui_version].strip
+            params[:ui_version] = version unless version.empty?
+          end
+
+          params
+        end
+        private_class_method :build_typed_params
+
+        def coerce_length_field(raw, key)
+          unless raw.key?(key)
+            raise PayloadError.new('invalid_type', "#{LENGTH_FIELD_NAMES[key]} is required.", key.to_s)
+          end
+
+          coerce_non_negative_length(raw[key], key.to_s, LENGTH_FIELD_NAMES[key])
+        end
+        private_class_method :coerce_length_field
+
+        def validate_front_value(raw)
+          value = raw[:front]
+          unless value.is_a?(String) && VALID_FRONT_VALUES.include?(value)
+            raise PayloadError.new('invalid_type', 'Front layout is invalid.', 'front')
+          end
+
+          value
+        end
+        private_class_method :validate_front_value
+
+        def validate_shelves_value(raw)
+          unless raw.key?(:shelves)
+            raise PayloadError.new('invalid_type', 'Shelves value is required.', 'shelves')
+          end
+
+          value = raw[:shelves]
+          unless value.is_a?(Integer)
+            raise PayloadError.new('invalid_type', 'Shelves must be a whole number.', 'shelves')
+          end
+
+          if value.negative?
+            raise PayloadError.new('out_of_range', 'Shelves must be zero or greater.', 'shelves')
+          end
+
+          value
+        end
+        private_class_method :validate_shelves_value
+
+        def validate_partitions_value(raw)
+          unless raw.is_a?(Hash)
+            raise PayloadError.new('invalid_type', 'Partitions payload must be an object.', 'partitions')
+          end
+
+          mode = raw[:mode]
+          unless mode.is_a?(String) && VALID_PARTITION_MODES.include?(mode)
+            raise PayloadError.new('invalid_type', 'Partition mode is invalid.', 'partitions.mode')
+          end
+
+          typed = { mode: mode, count: 0, positions_mm: [] }
+
+          case mode
+          when 'even'
+            unless raw.key?(:count)
+              raise PayloadError.new('invalid_type', 'Partition count is required.', 'partitions.count')
+            end
+
+            count = raw[:count]
+            unless count.is_a?(Integer)
+              raise PayloadError.new('invalid_type', 'Partition count must be a whole number.', 'partitions.count')
+            end
+
+            if count.negative?
+              raise PayloadError.new('out_of_range', 'Partition count must be zero or greater.', 'partitions.count')
+            end
+
+            typed[:count] = count
+          when 'positions'
+            positions = raw[:positions_mm]
+            unless positions.is_a?(Array)
+              raise PayloadError.new('invalid_type', 'Partition positions must be an array.', 'partitions.positions_mm')
+            end
+
+            if positions.empty?
+              raise PayloadError.new('invalid_type', 'Provide at least one partition position.', 'partitions.positions_mm')
+            end
+
+            typed_positions = []
+            previous = nil
+            positions.each_with_index do |value, index|
+              position = coerce_non_negative_length(value, 'partitions.positions_mm', "Partition position #{index + 1}")
+              if previous && position <= previous
+                raise PayloadError.new('non_increasing', 'Partition positions must increase from left to right.', 'partitions.positions_mm')
+              end
+
+              typed_positions << position
+              previous = position
+            end
+
+            typed[:positions_mm] = typed_positions
+          end
+
+          typed
+        end
+        private_class_method :validate_partitions_value
+
+        def coerce_non_negative_length(value, field, label)
+          unless value.is_a?(Numeric)
+            raise PayloadError.new('invalid_type', "#{label} must be a number.", field)
+          end
+
+          numeric = Float(value)
+          unless numeric.finite?
+            raise PayloadError.new('invalid_type', "#{label} must be a finite number.", field)
+          end
+
+          if numeric.negative?
+            raise PayloadError.new('out_of_range', "#{label} must be at least 0 mm.", field)
+          end
+
+          if numeric > MAX_LENGTH_MM
+            raise PayloadError.new('out_of_range', "#{label} must be #{MAX_LENGTH_MM.to_i} mm or less.", field)
+          end
+
+          numeric
+        end
+        private_class_method :coerce_non_negative_length
+
+        def build_error_ack(code, message, field = nil)
+          error = { code: code, message: message }
+          error[:field] = field if field
+          { ok: false, error: error }
+        end
+        private_class_method :build_error_ack
+
+        def deliver_submit_ack(dialog, ack)
+          return unless dialog && dialog.visible?
+
+          payload = JSON.generate(ack)
+          script = <<~JS
+            (function () {
+              var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertForm;
+              if (root && typeof root.onSubmitAck === 'function') {
+                root.onSubmitAck(#{payload});
+              }
+            })();
+          JS
+
+          dialog.execute_script(script)
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to deliver insert parameters acknowledgement: #{e.message}")
+        end
+        private_class_method :deliver_submit_ack
+
+        def store_last_valid_params(params)
+          @last_valid_params = params
+        end
+        private_class_method :store_last_valid_params
 
         def current_unit_settings
           model = ::Sketchup.active_model

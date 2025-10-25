@@ -21,6 +21,7 @@
           <p class="form__notice" data-role="units-note">
             Values without a suffix use the model’s display unit. Examples: 600, 450mm, 2' 3-1/2", 24 in.
           </p>
+          <div class="form__banner" data-role="form-banner" hidden aria-live="polite"></div>
 
           <section class="form__section">
             <h2 class="form__section-title">Dimensions</h2>
@@ -117,6 +118,7 @@
                   <option value="doors_double">Doors — double</option>
                 </select>
                 <p class="field-help">Choose the door configuration for the cabinet front.</p>
+                <p class="field-error" data-error-for="front" aria-live="polite"></p>
               </div>
 
               <div class="form-field" data-field="shelves">
@@ -147,6 +149,7 @@
               <p class="field-help">
                 Add vertical partitions to divide the interior. Choose even spacing or provide explicit positions.
               </p>
+              <p class="field-error" data-error-for="partitions_mode" aria-live="polite"></p>
             </div>
 
             <div class="form-field is-hidden" data-field="partitions_count" data-partitions-control="even">

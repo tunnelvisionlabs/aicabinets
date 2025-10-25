@@ -14,6 +14,7 @@
   var root = (window.AICabinets = window.AICabinets || {});
   var uiRoot = (root.UI = root.UI || {});
   var namespace = (uiRoot.InsertBaseCabinet = uiRoot.InsertBaseCabinet || {});
+  var insertFormNamespace = (uiRoot.InsertForm = uiRoot.InsertForm || {});
 
   var controller = null;
   var pendingUnitSettings = null;
@@ -46,6 +47,22 @@
   };
 
   var INTEGER_FIELDS = ['shelves', 'partitions_count'];
+
+  var UI_PAYLOAD_VERSION = '1.0.0';
+
+  var ACK_FIELD_TO_INPUT = {
+    width_mm: 'width',
+    depth_mm: 'depth',
+    height_mm: 'height',
+    panel_thickness_mm: 'panel_thickness',
+    toe_kick_height_mm: 'toe_kick_height',
+    toe_kick_depth_mm: 'toe_kick_depth',
+    shelves: 'shelves',
+    front: 'front',
+    'partitions.count': 'partitions_count',
+    'partitions.positions_mm': 'partitions_positions',
+    'partitions.mode': 'partitions_mode'
+  };
 
   function defaultLengthSettings() {
     return {
@@ -426,8 +443,11 @@
 
     this.unitsNote = form.querySelector('[data-role="units-note"]');
     this.insertButton = document.querySelector('button[data-action="insert"]');
+    this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
     this.partitionsPositionsField = form.querySelector('[data-partitions-control="positions"]');
+    this.bannerTimer = null;
+    this.isSubmitting = false;
 
     this.initializeElements();
     this.bindEvents();
@@ -455,7 +475,11 @@
     this.inputs.partitions_mode = this.form.querySelector('[name="partitions_mode"]');
     this.inputs.partitions_positions = this.form.querySelector('[name="partitions_positions"]');
     this.errorElements.partitions_positions = this.form.querySelector('[data-error-for="partitions_positions"]');
+    this.errorElements.front = this.form.querySelector('[data-error-for="front"]');
+    this.errorElements.partitions_mode = this.form.querySelector('[data-error-for="partitions_mode"]');
     this.touched.partitions_positions = false;
+    this.touched.front = false;
+    this.touched.partitions_mode = false;
 
     if (this.inputs.shelves) {
       this.inputs.shelves.value = '0';
@@ -503,12 +527,18 @@
     if (this.inputs.front) {
       this.inputs.front.addEventListener('change', function (event) {
         self.values.front = event.target.value;
+        self.touched.front = true;
+        self.setFieldError('front', null, true);
+        event.target.removeAttribute('data-invalid');
       });
     }
 
     if (this.inputs.partitions_mode) {
       this.inputs.partitions_mode.addEventListener('change', function (event) {
         self.handlePartitionModeChange(event.target.value);
+        self.touched.partitions_mode = true;
+        self.setFieldError('partitions_mode', null, true);
+        event.target.removeAttribute('data-invalid');
       });
     }
 
@@ -930,6 +960,46 @@
     }
   };
 
+  FormController.prototype.setBanner = function setBanner(type, message, options) {
+    if (options === void 0) {
+      options = {};
+    }
+
+    if (!this.bannerElement) {
+      return;
+    }
+
+    window.clearTimeout(this.bannerTimer);
+    this.bannerTimer = null;
+
+    var element = this.bannerElement;
+    element.classList.remove('form__banner--error', 'form__banner--success', 'form__banner--info');
+
+    if (!message) {
+      element.textContent = '';
+      element.hidden = true;
+      return;
+    }
+
+    element.textContent = message;
+    element.hidden = false;
+
+    if (type) {
+      element.classList.add('form__banner--' + type);
+    }
+
+    if (options.autoHide) {
+      var self = this;
+      this.bannerTimer = window.setTimeout(function () {
+        self.setBanner(null, null);
+      }, options.duration || 2500);
+    }
+  };
+
+  FormController.prototype.clearBanner = function clearBanner() {
+    this.setBanner(null, null);
+  };
+
   FormController.prototype.isFormValid = function isFormValid() {
     var allLengthsValid = LENGTH_FIELDS.every(
       function (name) {
@@ -965,7 +1035,114 @@
       return;
     }
 
-    this.insertButton.disabled = !this.isFormValid();
+    this.insertButton.disabled = this.isSubmitting || !this.isFormValid();
+  };
+
+  FormController.prototype.buildPayload = function buildPayload() {
+    var lengths = this.values.lengths;
+    var partitions = this.values.partitions;
+
+    var payload = {
+      ui_version: UI_PAYLOAD_VERSION,
+      width_mm: lengths.width,
+      depth_mm: lengths.depth,
+      height_mm: lengths.height,
+      panel_thickness_mm: lengths.panel_thickness,
+      toe_kick_height_mm: lengths.toe_kick_height,
+      toe_kick_depth_mm: lengths.toe_kick_depth,
+      front: this.values.front,
+      shelves: this.values.shelves,
+      partitions: {
+        mode: partitions.mode
+      }
+    };
+
+    if (partitions.mode === 'even') {
+      payload.partitions.count = partitions.count != null ? partitions.count : 0;
+      payload.partitions.positions_mm = [];
+    } else if (partitions.mode === 'positions') {
+      payload.partitions.positions_mm = partitions.positions_mm.slice();
+    } else {
+      payload.partitions.count = 0;
+      payload.partitions.positions_mm = [];
+    }
+
+    return payload;
+  };
+
+  FormController.prototype.handleSubmit = function handleSubmit() {
+    if (this.isSubmitting) {
+      return;
+    }
+
+    if (!this.isFormValid()) {
+      this.setBanner('error', 'Resolve validation errors before inserting.');
+      return;
+    }
+
+    var sketchupBridgeAvailable =
+      window.sketchup && typeof window.sketchup.aicb_submit_params === 'function';
+
+    if (!sketchupBridgeAvailable) {
+      this.setBanner('error', 'SketchUp bridge is unavailable.');
+      return;
+    }
+
+    var payload;
+    try {
+      payload = JSON.stringify(this.buildPayload());
+    } catch (error) {
+      this.setBanner('error', 'Unable to serialize the parameter payload.');
+      return;
+    }
+
+    this.clearBanner();
+    this.isSubmitting = true;
+    this.updateInsertButtonState();
+    invokeSketchUp('aicb_submit_params', payload);
+  };
+
+  FormController.prototype.handleSubmitAck = function handleSubmitAck(ack) {
+    this.isSubmitting = false;
+    this.updateInsertButtonState();
+
+    if (!ack || typeof ack !== 'object') {
+      this.setBanner('error', 'SketchUp returned an unexpected response.');
+      return;
+    }
+
+    if (ack.ok) {
+      this.setBanner('success', 'Parameters sent to SketchUp.', { autoHide: true });
+      return;
+    }
+
+    var error = ack.error || {};
+    if (error.field) {
+      this.applyAckFieldError(error.field, error.message);
+    }
+
+    var message = error.message || 'SketchUp reported an error.';
+    this.setBanner('error', message);
+  };
+
+  FormController.prototype.applyAckFieldError = function applyAckFieldError(fieldKey, message) {
+    var mapped = ACK_FIELD_TO_INPUT[fieldKey];
+    if (!mapped) {
+      return;
+    }
+
+    var input = this.inputs[mapped];
+    if (!input) {
+      return;
+    }
+
+    this.touched[mapped] = true;
+    var text = message || 'Please update this value.';
+    this.setFieldError(mapped, text, true);
+    input.setAttribute('data-invalid', 'true');
+    if (typeof input.focus === 'function') {
+      input.focus();
+    }
   };
 
   function parseNonNegativeInteger(value) {
@@ -1002,6 +1179,12 @@
     }
   };
 
+  insertFormNamespace.onSubmitAck = function onSubmitAck(ack) {
+    if (controller) {
+      controller.handleSubmitAck(ack);
+    }
+  };
+
   function handleButtonClick(event) {
     var target = event.target;
     if (!(target instanceof HTMLButtonElement)) {
@@ -1014,6 +1197,13 @@
 
     var action = target.getAttribute('data-action');
     if (!action) {
+      return;
+    }
+
+    if (action === 'insert') {
+      if (controller) {
+        controller.handleSubmit();
+      }
       return;
     }
 
@@ -1042,4 +1232,7 @@
 
   document.addEventListener('DOMContentLoaded', initialize);
   document.addEventListener('click', handleButtonClick);
+  window.addEventListener('unload', function () {
+    controller = null;
+  });
 })();
