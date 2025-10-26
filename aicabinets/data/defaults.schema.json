@@ -2,45 +2,56 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "AI Cabinets defaults (millimeters)",
   "type": "object",
-  "required": [
-    "width_mm",
-    "depth_mm",
-    "height_mm",
-    "panel_thickness_mm",
-    "toe_kick_height_mm",
-    "toe_kick_depth_mm",
-    "front",
-    "shelves",
-    "partitions"
-  ],
+  "required": ["version", "cabinet_base"],
   "properties": {
-    "width_mm": { "type": "number", "minimum": 0 },
-    "depth_mm": { "type": "number", "minimum": 0 },
-    "height_mm": { "type": "number", "minimum": 0 },
-    "panel_thickness_mm": { "type": "number", "minimum": 0 },
-    "toe_kick_height_mm": { "type": "number", "minimum": 0 },
-    "toe_kick_depth_mm": { "type": "number", "minimum": 0 },
-    "front": {
-      "type": "string",
-      "enum": ["empty", "doors_left", "doors_right", "doors_double"]
+    "version": {
+      "type": "integer",
+      "minimum": 1
     },
-    "shelves": { "type": "integer", "minimum": 0, "maximum": 20 },
-    "partitions": {
+    "cabinet_base": {
       "type": "object",
-      "required": ["mode", "count", "positions_mm", "panel_thickness_mm"],
+      "required": [
+        "width_mm",
+        "depth_mm",
+        "height_mm",
+        "panel_thickness_mm",
+        "toe_kick_height_mm",
+        "toe_kick_depth_mm",
+        "front",
+        "shelves",
+        "partitions"
+      ],
       "properties": {
-        "mode": {
+        "width_mm": { "type": "number", "minimum": 0 },
+        "depth_mm": { "type": "number", "minimum": 0 },
+        "height_mm": { "type": "number", "minimum": 0 },
+        "panel_thickness_mm": { "type": "number", "minimum": 0 },
+        "toe_kick_height_mm": { "type": "number", "minimum": 0 },
+        "toe_kick_depth_mm": { "type": "number", "minimum": 0 },
+        "front": {
           "type": "string",
-          "enum": ["none", "even", "positions"]
+          "enum": ["empty", "doors_left", "doors_right", "doors_double"]
         },
-        "count": { "type": "integer", "minimum": 0, "maximum": 20 },
-        "positions_mm": {
-          "type": "array",
-          "items": { "type": "number", "minimum": 0 }
-        },
-        "panel_thickness_mm": {
-          "type": ["number", "null"],
-          "minimum": 0
+        "shelves": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "partitions": {
+          "type": "object",
+          "required": ["mode", "count", "positions_mm", "panel_thickness_mm"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["none", "even", "positions"]
+            },
+            "count": { "type": "integer", "minimum": 0, "maximum": 20 },
+            "positions_mm": {
+              "type": "array",
+              "items": { "type": "number", "minimum": 0 }
+            },
+            "panel_thickness_mm": {
+              "type": ["number", "null"],
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

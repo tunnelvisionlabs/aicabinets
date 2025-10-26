@@ -57,22 +57,26 @@ class DefaultsLoaderTest < Minitest::Test
       File.write(
         path,
         JSON.generate(
-          'width_mm' => 'abc',
-          'depth_mm' => 575,
-          'height_mm' => -10,
-          'panel_thickness_mm' => '18.0',
-          'toe_kick_height_mm' => nil,
-          'toe_kick_depth_mm' => 'fifty',
-          'front' => 'invalid',
-          'shelves' => -1,
-          'unknown_key' => true,
-          'partitions' => {
-            'mode' => 'unsupported',
-            'count' => 'not a number',
-            'positions_mm' => ['a', -5],
-            'panel_thickness_mm' => '-2',
-            'extra' => 123
-          }
+          'version' => 'abc',
+          'cabinet_base' => {
+            'width_mm' => 'abc',
+            'depth_mm' => 575,
+            'height_mm' => -10,
+            'panel_thickness_mm' => '18.0',
+            'toe_kick_height_mm' => nil,
+            'toe_kick_depth_mm' => 'fifty',
+            'front' => 'invalid',
+            'shelves' => -1,
+            'unknown_key' => true,
+            'partitions' => {
+              'mode' => 'unsupported',
+              'count' => 'not a number',
+              'positions_mm' => ['a', -5],
+              'panel_thickness_mm' => '-2',
+              'extra' => 123
+            }
+          },
+          'unexpected_root' => true
         )
       )
 
@@ -97,12 +101,14 @@ class DefaultsLoaderTest < Minitest::Test
         assert_nil(partitions[:panel_thickness_mm])
       end
 
-      assert_includes(err, 'defaults width_mm must be a non-negative number')
-      assert_includes(err, 'defaults height_mm cannot be negative')
-      assert_includes(err, 'defaults front must be one of')
-      assert_includes(err, 'ignoring unknown defaults key')
-      assert_includes(err, 'ignoring unknown defaults.partitions key')
-      assert_includes(err, 'defaults partitions.mode must be one of')
+      assert_includes(err, 'defaults version must be a non-negative integer')
+      assert_includes(err, 'defaults cabinet_base.width_mm must be a non-negative number')
+      assert_includes(err, 'defaults cabinet_base.height_mm cannot be negative')
+      assert_includes(err, 'defaults cabinet_base.front must be one of')
+      assert_includes(err, 'ignoring unknown defaults root key')
+      assert_includes(err, 'ignoring unknown defaults.cabinet_base key')
+      assert_includes(err, 'ignoring unknown defaults.cabinet_base.partitions key')
+      assert_includes(err, 'defaults cabinet_base.partitions.mode must be one of')
     end
   end
 

@@ -1,16 +1,19 @@
 {
-  "width_mm": 600.0,
-  "depth_mm": 600.0,
-  "height_mm": 720.0,
-  "panel_thickness_mm": 18.0,
-  "toe_kick_height_mm": 100.0,
-  "toe_kick_depth_mm": 50.0,
-  "front": "doors_double",
-  "shelves": 2,
-  "partitions": {
-    "mode": "none",
-    "count": 0,
-    "positions_mm": [],
-    "panel_thickness_mm": null
+  "version": 1,
+  "cabinet_base": {
+    "width_mm": 600.0,
+    "depth_mm": 600.0,
+    "height_mm": 720.0,
+    "panel_thickness_mm": 18.0,
+    "toe_kick_height_mm": 100.0,
+    "toe_kick_depth_mm": 50.0,
+    "front": "doors_double",
+    "shelves": 2,
+    "partitions": {
+      "mode": "none",
+      "count": 0,
+      "positions_mm": [],
+      "panel_thickness_mm": null
+    }
   }
 }

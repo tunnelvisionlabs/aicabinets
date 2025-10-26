@@ -8,6 +8,7 @@ module AICabinets
 
     DATA_DIR = File.expand_path('data', __dir__)
     DEFAULTS_PATH = File.join(DATA_DIR, 'defaults.json')
+    DEFAULT_VERSION = 1
 
     FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
     PARTITION_MODES = %w[none even positions].freeze
@@ -32,6 +33,7 @@ module AICabinets
       partitions: PARTITIONS_FALLBACK
     }.freeze
 
+    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base].freeze
     RECOGNIZED_KEYS = FALLBACK_MM.keys.map(&:to_s).freeze
     RECOGNIZED_PARTITION_KEYS = PARTITIONS_FALLBACK.keys.map(&:to_s).freeze
 
@@ -71,39 +73,65 @@ module AICabinets
         return deep_dup(FALLBACK_MM)
       end
 
-      warn_unknown_keys(raw, RECOGNIZED_KEYS, 'defaults')
+      warn_unknown_keys(raw, RECOGNIZED_ROOT_KEYS, 'defaults root')
 
-      FALLBACK_MM.each_with_object({}) do |(key, fallback), result|
-        result[key] =
-          case key
-          when :front
-            sanitize_enum_field('front', raw['front'], FRONT_OPTIONS, fallback)
-          when :shelves
-            sanitize_integer_field('shelves', raw['shelves'], fallback, min: 0, max: 20)
-          when :partitions
-            sanitize_partitions(raw['partitions'])
-          else
-            sanitize_numeric_field(key.to_s, raw[key.to_s], fallback)
-          end
+      version = sanitize_version(raw['version'])
+      if version != DEFAULT_VERSION
+        warn("AI Cabinets: defaults version #{version} is not supported; using built-in fallbacks.")
+        return deep_dup(FALLBACK_MM)
       end
+
+      base_raw = raw['cabinet_base']
+      unless base_raw.is_a?(Hash)
+        warn('AI Cabinets: defaults cabinet_base must be an object; using built-in fallbacks.')
+        return deep_dup(FALLBACK_MM)
+      end
+
+      sanitize_cabinet_base(base_raw)
     end
     private_class_method :sanitize_defaults
 
+    def sanitize_cabinet_base(raw)
+      warn_unknown_keys(raw, RECOGNIZED_KEYS, 'defaults.cabinet_base')
+
+      FALLBACK_MM.each_with_object({}) do |(key, fallback), result|
+        label = "cabinet_base.#{key}"
+
+        result[key] =
+          case key
+          when :front
+            sanitize_enum_field(label, raw[key.to_s], FRONT_OPTIONS, fallback)
+          when :shelves
+            sanitize_integer_field(label, raw[key.to_s], fallback, min: 0, max: 20)
+          when :partitions
+            sanitize_partitions(raw[key.to_s])
+          else
+            sanitize_numeric_field(label, raw[key.to_s], fallback)
+          end
+      end
+    end
+    private_class_method :sanitize_cabinet_base
+
     def sanitize_partitions(raw)
       unless raw.is_a?(Hash)
-        warn('AI Cabinets: defaults partitions must be an object; using built-in fallbacks.')
+        warn('AI Cabinets: defaults cabinet_base.partitions must be an object; using built-in fallbacks.')
         return deep_dup(PARTITIONS_FALLBACK)
       end
 
-      warn_unknown_keys(raw, RECOGNIZED_PARTITION_KEYS, 'defaults.partitions')
+      warn_unknown_keys(raw, RECOGNIZED_PARTITION_KEYS, 'defaults.cabinet_base.partitions')
 
       sanitized = {}
 
-      mode = sanitize_enum_field('partitions.mode', raw['mode'], PARTITION_MODES, PARTITIONS_FALLBACK[:mode])
+      mode = sanitize_enum_field(
+        'cabinet_base.partitions.mode',
+        raw['mode'],
+        PARTITION_MODES,
+        PARTITIONS_FALLBACK[:mode]
+      )
       sanitized[:mode] = mode
 
       sanitized[:count] = sanitize_integer_field(
-        'partitions.count',
+        'cabinet_base.partitions.count',
         raw['count'],
         PARTITIONS_FALLBACK[:count],
         min: 0,
@@ -111,7 +139,7 @@ module AICabinets
       )
 
       sanitized[:panel_thickness_mm] = sanitize_optional_numeric_field(
-        'partitions.panel_thickness_mm',
+        'cabinet_base.partitions.panel_thickness_mm',
         raw['panel_thickness_mm'],
         PARTITIONS_FALLBACK[:panel_thickness_mm]
       )
@@ -129,7 +157,7 @@ module AICabinets
 
     def sanitize_positions(raw)
       unless raw.is_a?(Array)
-        warn('AI Cabinets: defaults partitions.positions_mm must be an array; using built-in fallbacks.')
+        warn('AI Cabinets: defaults cabinet_base.partitions.positions_mm must be an array; using built-in fallbacks.')
         return PARTITIONS_FALLBACK[:positions_mm].dup
       end
 
@@ -137,12 +165,12 @@ module AICabinets
       raw.each_with_index do |value, index|
         numeric = parse_numeric(value)
         unless numeric
-          warn("AI Cabinets: defaults partitions.positions_mm[#{index}] must be a non-negative number; discarding positions.")
+          warn("AI Cabinets: defaults cabinet_base.partitions.positions_mm[#{index}] must be a non-negative number; discarding positions.")
           return PARTITIONS_FALLBACK[:positions_mm].dup
         end
 
         if numeric.negative?
-          warn("AI Cabinets: defaults partitions.positions_mm[#{index}] cannot be negative; discarding positions.")
+          warn("AI Cabinets: defaults cabinet_base.partitions.positions_mm[#{index}] cannot be negative; discarding positions.")
           return PARTITIONS_FALLBACK[:positions_mm].dup
         end
 
@@ -150,13 +178,24 @@ module AICabinets
       end
 
       if values.empty?
-        warn('AI Cabinets: defaults partitions.positions_mm is empty; using built-in fallbacks.')
+        warn('AI Cabinets: defaults cabinet_base.partitions.positions_mm is empty; using built-in fallbacks.')
         return PARTITIONS_FALLBACK[:positions_mm].dup
       end
 
       values
     end
     private_class_method :sanitize_positions
+
+    def sanitize_version(value)
+      numeric = parse_numeric(value)
+      if numeric && numeric >= 0 && numeric.round == numeric
+        numeric.round
+      else
+        warn("AI Cabinets: defaults version must be a non-negative integer; using #{DEFAULT_VERSION}.")
+        DEFAULT_VERSION
+      end
+    end
+    private_class_method :sanitize_version
 
     def sanitize_numeric_field(label, value, fallback)
       numeric = parse_numeric(value)
