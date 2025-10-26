@@ -39,7 +39,8 @@ module AICabinetsTestHelper
       model.definitions.purge_unused
 
       tags_or_layers = if model.respond_to?(:tags)
-                         model.tags
+                         candidate = model.tags
+                         candidate.respond_to?(:purge_unused) ? candidate : model.layers
                        else
                          model.layers
                        end
