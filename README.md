@@ -25,6 +25,18 @@ To verify Ruby syntax locally, run:
 ruby -c aicabinets.rb && find aicabinets -type f -name '*.rb' -print0 | xargs -0 -n1 ruby -c
 ```
 
+To print the effective defaults (shipped JSON merged with user overrides), run:
+
+```sh
+ruby -I. script/print_effective_defaults.rb
+```
+
+Reset persisted overrides during manual testing with:
+
+```sh
+ruby -I. script/reset_overrides.rb
+```
+
 To package the extension for manual installation, run:
 
 ```sh
