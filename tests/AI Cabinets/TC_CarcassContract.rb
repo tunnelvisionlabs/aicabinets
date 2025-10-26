@@ -37,30 +37,35 @@ class TC_CarcassContract < TestUp::TestCase
     bbox = AICabinetsTestHelper.bbox_local_of(definition)
     tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
 
+    min_point = bbox.min
+    max_point = bbox.max
+
+    width_mm = AICabinetsTestHelper.mm(max_point.x - min_point.x)
+    depth_mm = AICabinetsTestHelper.mm(max_point.y - min_point.y)
+    height_mm = AICabinetsTestHelper.mm(max_point.z - min_point.z)
+
     assert_in_delta(
       BASE_PARAMS_MM[:width_mm],
-      AICabinetsTestHelper.mm(bbox.width),
+      width_mm,
       tolerance_mm,
       'Bounding box width should match requested width'
     )
     assert_in_delta(
       BASE_PARAMS_MM[:depth_mm],
-      AICabinetsTestHelper.mm(bbox.depth),
+      depth_mm,
       tolerance_mm,
       'Bounding box depth should match requested depth'
     )
     assert_in_delta(
       BASE_PARAMS_MM[:height_mm],
-      AICabinetsTestHelper.mm(bbox.height),
+      height_mm,
       tolerance_mm,
       'Bounding box height should match requested height'
     )
 
-    min_point = bbox.min
     assert(min_point.distance(ORIGIN) <= AICabinetsTestHelper::TOL,
            'Carcass should anchor at FLB origin')
 
-    max_point = bbox.max
     assert(AICabinetsTestHelper.mm(max_point.x) > 0,
            'Positive X axis should represent cabinet width')
     assert(AICabinetsTestHelper.mm(max_point.y) > 0,
