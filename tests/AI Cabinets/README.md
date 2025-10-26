@@ -7,8 +7,13 @@ suite will appear in the TestUp panel as **AI Cabinets**.
 ## Running
 1. Install the AI Cabinets extension and the TestUp 2 extension in SketchUp.
 2. In TestUp Preferences, add the absolute path to this folder.
-3. Open the TestUp window and run the suite or the individual `TC_Smoke` test case.
+3. Open the TestUp window and run the suite or the individual test cases such as
+   `TC_Smoke` or `TC_CarcassContract`.
 
-The suite currently provides a smoke test that verifies the extension namespace,
-ensures the active model can be reset to a blank state, and confirms the shared
-helpers behave as expected.
+## Test Cases
+
+* `TC_Smoke` exercises the extension namespace, confirms the helper utilities, and
+  verifies the test harness can reset the active model.
+* `TC_CarcassContract` builds a base carcass with canonical millimeter parameters
+  and enforces the geometry contract (local bounding box dimensions, FLB anchor,
+  part containers, tagging hygiene, and toe-kick origin invariance).
