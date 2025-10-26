@@ -12,6 +12,7 @@ This repository contains Ruby scripts for SketchUp that generate simple cabinetr
 - `examples/drawer_cabinet.rb` – shows how to add drawers to a cabinet, mix drawers with doors, and adjust drawer clearances.
 - `examples/partitioned_cabinet.rb` – demonstrates dividing a cabinet interior with fixed partitions.
 - `examples/slab_door_fronts.rb` – inserts three base cabinets showcasing the `:doors_left`, `:doors_right`, and `:doors_double` slab door modes.
+- [Settings & Defaults (mm)](#settings--defaults-mm) – locate shipped defaults, user overrides, and reset steps.
 
 Copy the library and sample code into SketchUp's Ruby console or load them as scripts to build cabinet geometry automatically.
 
@@ -42,6 +43,16 @@ To package the extension for manual installation, run:
 ```sh
 zip -r aicabinets-$(ruby -e "load 'aicabinets/version.rb'; puts AICabinets::VERSION").rbz aicabinets.rb aicabinets/
 ```
+
+## Settings & Defaults (mm)
+
+AI Cabinets ships read-only defaults at `aicabinets/data/defaults.json` within the installed extension folder. The extension creates `aicabinets/user/overrides.json` after your first successful Insert or Edit action to persist user-chosen values. Both files live alongside `aicabinets.rb` in the extension’s support directory.
+
+Effective settings are produced by merging the shipped defaults with the user overrides, applying override values last so they take precedence when keys overlap.
+
+All serialized length values are stored in millimeters and use the `_mm` suffix in JSON. No other unit system is written to disk.
+
+To reset the extension to the shipped defaults, delete `aicabinets/user/overrides.json`. The extension recreates the overrides file the next time it needs to save user changes.
 
 ## Install (SketchUp 2026, unsigned RBZ)
 
