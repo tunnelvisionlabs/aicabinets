@@ -40,9 +40,9 @@ class TC_CarcassContract < TestUp::TestCase
     min_point = bbox.min
     max_point = bbox.max
 
-    width_mm = AICabinetsTestHelper.mm(max_point.x - min_point.x)
-    depth_mm = AICabinetsTestHelper.mm(max_point.y - min_point.y)
-    height_mm = AICabinetsTestHelper.mm(max_point.z - min_point.z)
+    width_mm = AICabinetsTestHelper.mm_from_length(max_point.x - min_point.x)
+    depth_mm = AICabinetsTestHelper.mm_from_length(max_point.y - min_point.y)
+    height_mm = AICabinetsTestHelper.mm_from_length(max_point.z - min_point.z)
 
     assert_in_delta(
       BASE_PARAMS_MM[:width_mm],
@@ -66,11 +66,11 @@ class TC_CarcassContract < TestUp::TestCase
     assert(min_point.distance(ORIGIN) <= AICabinetsTestHelper::TOL,
            'Carcass should anchor at FLB origin')
 
-    assert(AICabinetsTestHelper.mm(max_point.x) > 0,
+    assert(AICabinetsTestHelper.mm_from_length(max_point.x) > 0,
            'Positive X axis should represent cabinet width')
-    assert(AICabinetsTestHelper.mm(max_point.y) > 0,
+    assert(AICabinetsTestHelper.mm_from_length(max_point.y) > 0,
            'Positive Y axis should represent cabinet depth')
-    assert(AICabinetsTestHelper.mm(max_point.z) > 0,
+    assert(AICabinetsTestHelper.mm_from_length(max_point.z) > 0,
            'Positive Z axis should represent cabinet height')
   end
 

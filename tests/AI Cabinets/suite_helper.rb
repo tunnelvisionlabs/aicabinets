@@ -93,6 +93,7 @@ module AICabinetsTestHelper
   end
 
   # Normalizes a numeric value or SketchUp Length to millimeters.
+  # Numeric inputs are treated as already expressed in millimeters.
   #
   # @param value_or_length [Numeric, Length]
   # @return [Float]
@@ -110,6 +111,29 @@ module AICabinetsTestHelper
       value_or_length.to_f
     else
       raise ArgumentError, 'mm expects a Numeric or Length value'
+    end
+  end
+
+  # Converts a numeric value expressed in SketchUp's model units (inches) or a
+  # Length object to millimeters. This is used when geometry APIs return
+  # distances rather than parameterized millimeter values.
+  #
+  # @param value_or_length [Numeric, Length]
+  # @return [Float]
+  def mm_from_length(value_or_length)
+    length_class =
+      if defined?(Sketchup::Length)
+        Sketchup::Length
+      elsif defined?(Length)
+        Length
+      end
+
+    if length_class && value_or_length.is_a?(length_class)
+      value_or_length.to_mm
+    elsif length_class
+      length_class.new(value_or_length).to_mm
+    else
+      value_or_length.to_f * 25.4
     end
   end
 
@@ -208,5 +232,6 @@ module AICabinetsTestHelper
   end
 
   module_function :with_undo, :clean_model!, :assert_within_tolerance,
-                  :bbox_local_of, :mm, :collect_raw_geometry, :default_tag?
+                  :bbox_local_of, :mm, :mm_from_length, :collect_raw_geometry,
+                  :default_tag?
 end
