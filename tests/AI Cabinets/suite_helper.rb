@@ -97,10 +97,16 @@ module AICabinetsTestHelper
   # @param value_or_length [Numeric, Length]
   # @return [Float]
   def mm(value_or_length)
-    case value_or_length
-    when Sketchup::Length
+    length_class =
+      if defined?(Sketchup::Length)
+        Sketchup::Length
+      elsif defined?(Length)
+        Length
+      end
+
+    if length_class && value_or_length.is_a?(length_class)
       value_or_length.to_mm
-    when Numeric
+    elsif value_or_length.is_a?(Numeric)
       value_or_length.to_f
     else
       raise ArgumentError, 'mm expects a Numeric or Length value'
@@ -152,14 +158,53 @@ module AICabinetsTestHelper
         model.layers
       end
 
-    default_tag =
-      if default_collection.respond_to?(:default)
-        default_collection.default
-      else
-        default_collection[0]
+    default_candidates = []
+
+    if default_collection.respond_to?(:default)
+      default = default_collection.default
+      default_candidates << default if default
+    end
+
+    collection_length =
+      if default_collection.respond_to?(:length)
+        default_collection.length
+      elsif default_collection.respond_to?(:size)
+        default_collection.size
       end
 
-    entity.layer == default_tag
+    if default_collection.respond_to?(:[]) && collection_length.to_i.positive?
+      default_candidates << default_collection[0]
+    end
+
+    layers_collection =
+      if model.respond_to?(:layers)
+        model.layers
+      end
+
+    if layers_collection
+      if layers_collection.respond_to?(:default)
+        default_layer = layers_collection.default
+        default_candidates << default_layer if default_layer
+      end
+
+      layers_length =
+        if layers_collection.respond_to?(:length)
+          layers_collection.length
+        elsif layers_collection.respond_to?(:size)
+          layers_collection.size
+        end
+
+      if layers_collection.respond_to?(:[]) && layers_length.to_i.positive?
+        default_candidates << layers_collection[0]
+      end
+    end
+
+    default_candidates.compact!
+    default_candidates.uniq!
+
+    return true if default_candidates.empty?
+
+    default_candidates.any? { |candidate| candidate && entity.layer == candidate }
   end
 
   module_function :with_undo, :clean_model!, :assert_within_tolerance,
