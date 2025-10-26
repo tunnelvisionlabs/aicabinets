@@ -94,15 +94,13 @@ module AICabinets
           bay_width_mm = bay_end_mm - bay_start_mm
           next if bay_width_mm <= MIN_BAY_WIDTH_MM
 
-          shelf_name_prefix = bay_ranges.length > 1 ? "Bay #{bay_index + 1}" : nil
+          name = if bay_ranges.length > 1
+                   "Shelf (Bay #{bay_index + 1})"
+                 else
+                   'Shelf'
+                 end
 
-          top_positions_mm.each_with_index do |top_mm, shelf_index|
-            name = if shelf_name_prefix
-                     "Shelf #{shelf_index + 1} (#{shelf_name_prefix})"
-                   else
-                     "Shelf #{shelf_index + 1}"
-                   end
-
+          top_positions_mm.each do |top_mm|
             placements << Placement.new(
               name: name,
               width_mm: bay_width_mm,

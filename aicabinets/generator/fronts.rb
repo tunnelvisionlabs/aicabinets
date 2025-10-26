@@ -92,7 +92,7 @@ module AICabinets
         case mode
         when :doors_left
           [DoorPlacement.new(
-            name: 'Left Door',
+            name: 'Door (Hinge Left)',
             x_start_mm: left_reveal_mm,
             width_mm: clear_width_mm,
             height_mm: clear_height_mm,
@@ -100,7 +100,7 @@ module AICabinets
           )]
         when :doors_right
           [DoorPlacement.new(
-            name: 'Right Door',
+            name: 'Door (Hinge Right)',
             x_start_mm: left_reveal_mm,
             width_mm: clear_width_mm,
             height_mm: clear_height_mm,
@@ -121,14 +121,14 @@ module AICabinets
 
           [
             DoorPlacement.new(
-              name: 'Left Door',
+              name: 'Door (Left)',
               x_start_mm: left_reveal_mm,
               width_mm: leaf_width_mm,
               height_mm: clear_height_mm,
               bottom_z_mm: bottom_z_mm
             ),
             DoorPlacement.new(
-              name: 'Right Door',
+              name: 'Door (Right)',
               x_start_mm: left_reveal_mm + leaf_width_mm + center_gap_mm,
               width_mm: leaf_width_mm,
               height_mm: clear_height_mm,

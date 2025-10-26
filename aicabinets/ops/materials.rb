@@ -12,6 +12,7 @@ module AICabinets
                                        else
                                          'Birch Plywood'
                                        end
+      DEFAULT_CARCASS_MATERIAL_COLOR = [222, 206, 170].freeze
       DEFAULT_DOOR_MATERIAL_NAME = if defined?(AICabinets::DEFAULT_DOOR_MATERIAL)
                                       AICabinets::DEFAULT_DOOR_MATERIAL
                                     else
@@ -19,8 +20,8 @@ module AICabinets
                                     end
       DEFAULT_DOOR_MATERIAL_COLOR = [164, 143, 122].freeze
 
-      # Resolves the default carcass material for the given model. Returns nil
-      # when the configured material is not present, allowing callers to fall
+      # Resolves (and creates if necessary) the default carcass material for
+      # the given model. When the configured name is blank, callers can fall
       # back to SketchUp's default appearance without raising errors.
       #
       # @param model [Sketchup::Model]
@@ -31,7 +32,7 @@ module AICabinets
         name = DEFAULT_CARCASS_MATERIAL_NAME
         return nil if name.to_s.empty?
 
-        model.materials[name]
+        ensure_material(model, name, DEFAULT_CARCASS_MATERIAL_COLOR)
       end
 
       # Resolves (and creates if necessary) the default door material. Doors use
@@ -46,17 +47,22 @@ module AICabinets
         name = DEFAULT_DOOR_MATERIAL_NAME
         return nil if name.to_s.empty?
 
+        ensure_material(model, name, DEFAULT_DOOR_MATERIAL_COLOR)
+      end
+
+      def ensure_material(model, name, rgb)
         materials = model.materials
         existing = materials[name]
         return existing if existing
 
         material = materials.add(name)
-        if material.respond_to?(:color=)
-          rgb = DEFAULT_DOOR_MATERIAL_COLOR
-          material.color = Sketchup::Color.new(rgb[0], rgb[1], rgb[2])
+        if material.respond_to?(:color=) && rgb
+          color = Sketchup::Color.new(rgb[0], rgb[1], rgb[2])
+          material.color = color
         end
         material
       end
+      private_class_method :ensure_material
     end
   end
 end
