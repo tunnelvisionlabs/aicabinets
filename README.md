@@ -26,6 +26,16 @@ To verify Ruby syntax locally, run:
 ruby -c aicabinets.rb && find aicabinets -type f -name '*.rb' -print0 | xargs -0 -n1 ruby -c
 ```
 
+## Running tests (TestUp)
+
+TestUp is SketchUp's Minitest runner. To execute the AI Cabinets smoke tests:
+
+1. Install the TestUp 2 extension alongside AI Cabinets.
+2. In **Extensions → TestUp → Preferences → Test Suites**, add the absolute path to `tests/AI Cabinets/`.
+3. Open the TestUp window and run the **AI Cabinets** suite or the `TC_Smoke` case.
+
+The suite currently verifies the extension namespace loads, the helper utilities reset the active model cleanly, and shared tolerances work for geometry assertions.
+
 To print the effective defaults (shipped JSON merged with user overrides), run:
 
 ```sh
