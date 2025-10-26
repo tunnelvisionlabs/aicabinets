@@ -7,10 +7,7 @@
   "additionalProperties": false,
   "required": [
     "version",
-    "cabinet_base",
-    "front",
-    "shelves",
-    "partitions"
+    "cabinet_base"
   ],
   "properties": {
     "version": {
@@ -20,8 +17,8 @@
       "minimum": 1
     },
     "cabinet_base": {
-      "title": "Cabinet base dimensions",
-      "description": "Core carcass dimensions stored in millimeters (mm).",
+      "title": "Cabinet base defaults",
+      "description": "Core carcass defaults stored in millimeters (mm).",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -30,7 +27,10 @@
         "height_mm",
         "panel_thickness_mm",
         "toe_kick_height_mm",
-        "toe_kick_depth_mm"
+        "toe_kick_depth_mm",
+        "front",
+        "shelves",
+        "partitions"
       ],
       "properties": {
         "width_mm": {
@@ -62,56 +62,56 @@
           "type": "number",
           "minimum": 0,
           "description": "Toe kick depth in millimeters."
-        }
-      }
-    },
-    "front": {
-      "title": "Front configuration",
-      "type": "string",
-      "description": "Cabinet front style.",
-      "enum": [
-        "empty",
-        "doors_left",
-        "doors_right",
-        "doors_double"
-      ]
-    },
-    "shelves": {
-      "title": "Shelf count",
-      "description": "Number of shelves inside the cabinet.",
-      "type": "integer",
-      "minimum": 0
-    },
-    "partitions": {
-      "title": "Partition settings",
-      "description": "Partition layout expressed in millimeters (mm).",
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "mode",
-        "count",
-        "positions_mm"
-      ],
-      "properties": {
-        "mode": {
+        },
+        "front": {
+          "title": "Front configuration",
           "type": "string",
-          "description": "Partition placement strategy.",
+          "description": "Cabinet front style.",
           "enum": [
-            "none",
-            "even",
-            "positions"
+            "empty",
+            "doors_left",
+            "doors_right",
+            "doors_double"
           ]
         },
-        "count": {
+        "shelves": {
+          "title": "Shelf count",
+          "description": "Number of shelves inside the cabinet.",
           "type": "integer",
-          "minimum": 0,
-          "description": "Number of partitions."
+          "minimum": 0
         },
-        "positions_mm": {
-          "type": "array",
-          "description": "Offsets for each partition measured from the inside left panel in millimeters.",
-          "items": {
-            "type": "number"
+        "partitions": {
+          "title": "Partition settings",
+          "description": "Partition layout expressed in millimeters (mm).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "count",
+            "positions_mm"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "description": "Partition placement strategy.",
+              "enum": [
+                "none",
+                "even",
+                "positions"
+              ]
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of partitions."
+            },
+            "positions_mm": {
+              "type": "array",
+              "description": "Offsets for each partition measured from the inside left panel in millimeters.",
+              "items": {
+                "type": "number"
+              }
+            }
           }
         }
       }
