@@ -1,120 +1,50 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/tunnelvisionlabs/aicabinets/blob/main/aicabinets/data/defaults.schema.json",
-  "title": "AI Cabinets shipped defaults",
-  "description": "Defines the serialized defaults for AI Cabinets. All lengths are millimeters and end in `_mm`.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Cabinets defaults (millimeters)",
   "type": "object",
-  "additionalProperties": false,
   "required": [
-    "version",
-    "cabinet_base"
+    "width_mm",
+    "depth_mm",
+    "height_mm",
+    "panel_thickness_mm",
+    "toe_kick_height_mm",
+    "toe_kick_depth_mm",
+    "front",
+    "shelves",
+    "partitions"
   ],
   "properties": {
-    "version": {
-      "title": "Schema version",
-      "description": "Monotonic integer schema version for interpreting the defaults payload.",
-      "type": "integer",
-      "minimum": 1
+    "width_mm": { "type": "number", "minimum": 0 },
+    "depth_mm": { "type": "number", "minimum": 0 },
+    "height_mm": { "type": "number", "minimum": 0 },
+    "panel_thickness_mm": { "type": "number", "minimum": 0 },
+    "toe_kick_height_mm": { "type": "number", "minimum": 0 },
+    "toe_kick_depth_mm": { "type": "number", "minimum": 0 },
+    "front": {
+      "type": "string",
+      "enum": ["empty", "doors_left", "doors_right", "doors_double"]
     },
-    "cabinet_base": {
-      "title": "Cabinet base defaults",
-      "description": "Core carcass defaults stored in millimeters (mm).",
+    "shelves": { "type": "integer", "minimum": 0, "maximum": 20 },
+    "partitions": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "width_mm",
-        "depth_mm",
-        "height_mm",
-        "panel_thickness_mm",
-        "toe_kick_height_mm",
-        "toe_kick_depth_mm",
-        "front",
-        "shelves",
-        "partitions"
-      ],
+      "required": ["mode", "count", "positions_mm", "panel_thickness_mm"],
       "properties": {
-        "width_mm": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Overall cabinet width in millimeters."
+        "mode": {
+          "type": "string",
+          "enum": ["none", "even", "positions"]
         },
-        "depth_mm": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Overall cabinet depth in millimeters."
-        },
-        "height_mm": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Overall cabinet height in millimeters."
+        "count": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "positions_mm": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0 }
         },
         "panel_thickness_mm": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Panel material thickness in millimeters."
-        },
-        "toe_kick_height_mm": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Toe kick height in millimeters."
-        },
-        "toe_kick_depth_mm": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Toe kick depth in millimeters."
-        },
-        "front": {
-          "title": "Front configuration",
-          "type": "string",
-          "description": "Cabinet front style.",
-          "enum": [
-            "empty",
-            "doors_left",
-            "doors_right",
-            "doors_double"
-          ]
-        },
-        "shelves": {
-          "title": "Shelf count",
-          "description": "Number of shelves inside the cabinet.",
-          "type": "integer",
+          "type": ["number", "null"],
           "minimum": 0
-        },
-        "partitions": {
-          "title": "Partition settings",
-          "description": "Partition layout expressed in millimeters (mm).",
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "mode",
-            "count",
-            "positions_mm"
-          ],
-          "properties": {
-            "mode": {
-              "type": "string",
-              "description": "Partition placement strategy.",
-              "enum": [
-                "none",
-                "even",
-                "positions"
-              ]
-            },
-            "count": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Number of partitions."
-            },
-            "positions_mm": {
-              "type": "array",
-              "description": "Offsets for each partition measured from the inside left panel in millimeters.",
-              "items": {
-                "type": "number"
-              }
-            }
-          }
         }
-      }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "additionalProperties": false
 }
