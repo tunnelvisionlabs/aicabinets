@@ -46,7 +46,14 @@ module AICabinetsTestHelper
       tags_or_layers.purge_unused
 
       model.materials.purge_unused
-      model.styles.purge_unused
+
+      styles = model.styles
+      if styles.respond_to?(:purge_unused)
+        styles.purge_unused
+      elsif styles.respond_to?(:remove_unused)
+        # Older SketchUp releases exposed remove_unused instead of purge_unused.
+        styles.remove_unused
+      end
       nil
     end
   end
