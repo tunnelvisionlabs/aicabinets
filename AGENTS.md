@@ -126,34 +126,53 @@ type:story, area:<ui|geometry|…>, component:<dialog|generator|…>, priority:P
 ## Task Issue Template
 
 ```markdown
-# [Task|Bug|Feature|Chore] <Crisp action, e.g., "Add edit-scope option to dialog">
+# [Task|Bug|Feature] <Crisp action, e.g., "Add edit-scope option to dialog">
 
-## Context
-### Summary (general audience)
-A one-paragraph overview of what changes and why it matters.
+## Summary
 
-### Technical Description (optional; include only if it adds material detail)
-Details for contributors (APIs touched, modules, data shape).
+<Overview for general audience of what changes and why it matters.>
 
-### Actual vs Expected Behavior (only for bugs or behavior changes)
-- **Actual:** What happens today. If derived from code analysis, cite the commit SHA.
-- **Expected:** What should happen, described concretely.
-- **If tested in app:** include SketchUp version, app code version/tag or commit SHA, and operating system.
+### Current Behavior <!-- Only for bugs or behavior changes -->
 
-### Best Practice Reference (optional)
-If available and unambiguous, cross-reference a guideline so the expected behavior isn’t just preference (e.g., BP‑1 HtmlDialog, BP‑3 FLB anchor, BP‑4 mm defaults).
+<What happens today. If derived from code analysis, cite the commit SHA.>
+
+### Expected Behavior <!-- Only for bugs or behavior changes -->
+
+<What should happen, described concretely.>
+
+### Steps to Reproduce <!-- Only for bugs or behavior changes -->
+
+<A sequence of steps to reproduce the problem.>
+
+## Technical Description <!-- optional; include only if it adds material detail -->
+
+<Details for contributors (APIs touched, modules, data shape, algorithms).>
+
+### Root cause (likely) <!-- Only for bugs or behavior changes -->
+
+<Explanation of suspected root cause.>
+
+### Best Practice Reference <!-- Optional -->
+
+<If available and unambiguous, cross-reference a guideline so the expected behavior isn’t just preference (e.g., BP‑1 HtmlDialog, BP‑3 FLB anchor, BP‑4 mm defaults). References to external practices are also acceptable.>
+
+### Implementation Notes <!-- Constraints & Practices -->
+- List **constraints** required to maintain best practices (e.g., BP‑1, BP‑3, BP‑4, BP‑5, BP‑6).
+- Do **not** prescribe specific classes/methods if not necessary to meet the acceptance criteria.
+- Aim for a single undoable operation; keep the FLB *carcass* anchor invariant; keep JSON fields in **mm**.
+
+### Proposed solutions <!-- Optional sequence of proposed solutions -->
+
+#### Option A - <First option title>
+
+#### Option B - <Second option title>
 
 ## Acceptance Criteria
 - [ ] Checklist items that must be true for this task to be complete.
 - [ ] Keep them observable and testable from a user or API perspective.
 
-## Implementation Notes (Constraints & Practices)
-- List **constraints** required to maintain best practices (e.g., BP‑1, BP‑3, BP‑4, BP‑5, BP‑6).
-- Do **not** prescribe specific classes/methods if not necessary to meet the acceptance criteria.
-- Aim for a single undoable operation; keep the FLB *carcass* anchor invariant; keep JSON fields in **mm**.
-
-## Labels
-type:<task|bug|enhancement|chore>, area:<ui|geometry|…>, component:<dialog|generator|…>, priority:P?
+### Labels
+type:<bug|feature|task>, area:<ui|geometry|…>, component:<dialog|generator|…>, priority:P?
 ```
 
 > **Omit by default for tasks:** Test Plan, Docs, and Dependencies. Include them **only** when they were explicitly requested for that issue.
