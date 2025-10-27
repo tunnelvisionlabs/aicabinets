@@ -687,8 +687,6 @@ module AICabinets
             'inch'
           when 1
             'foot'
-          when 2
-            'millimeter'
           when 3
             'centimeter'
           when 4

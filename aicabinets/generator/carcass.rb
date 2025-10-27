@@ -690,7 +690,7 @@ module AICabinets
 
             left = interior_left_face_mm
             Array.new(count) do |index|
-              left + (index + 1) * bay_width + (index * thickness)
+              left + ((index + 1) * bay_width) + (index * thickness)
             end
           end
 
