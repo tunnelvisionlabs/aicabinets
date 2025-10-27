@@ -500,7 +500,7 @@ module AICabinets
     # Shelves
     if shelf_count > 0
       shelf_thickness = panel_thickness
-      interior_height = height - top_inset - bottom_inset - panel_thickness * 2
+      interior_height = height - top_inset - bottom_inset - (panel_thickness * 2)
       shelf_depth = depth - back_inset - back_thickness
 
       positions = if shelf_count > 0 && hole_columns.any?
@@ -509,18 +509,18 @@ module AICabinets
                     first = col[:first_hole] || 0
                     skip = col[:skip].to_i
                     diameter = col[:diameter] || hole_diameter
-                    base = bottom_inset + panel_thickness + first + spacing_holes * skip + diameter / 2
+                    base = bottom_inset + panel_thickness + first + (spacing_holes * skip) + (diameter / 2)
                     spacing_even = interior_height / (shelf_count + 1)
 
                     Array.new(shelf_count) do |i|
-                      desired_top = bottom_inset + panel_thickness + spacing_even * (i + 1)
+                      desired_top = bottom_inset + panel_thickness + (spacing_even * (i + 1))
                       desired_bottom = desired_top - shelf_thickness
                       hole_top = align_to_hole_top(desired_bottom, base, spacing_holes)
                       hole_top + shelf_thickness
                     end
                   else
                     spacing_even = interior_height / (shelf_count + 1)
-                    Array.new(shelf_count) { |i| bottom_inset + panel_thickness + spacing_even * (i + 1) }
+                    Array.new(shelf_count) { |i| bottom_inset + panel_thickness + (spacing_even * (i + 1)) }
                   end
 
       positions.each do |z|
@@ -620,7 +620,7 @@ module AICabinets
       2.times do |i|
         create_door_panel(
           entities,
-          x_start + i * (door_width + door_gap),
+          x_start + (i * (door_width + door_gap)),
           door_width,
           door_height,
           z,
@@ -737,7 +737,7 @@ module AICabinets
     bottom = left.copy
     rotate_bottom = Geom::Transformation.rotation([x, 0, z], Geom::Vector3d.new(0, 1, 0), -90.degrees)
     bottom.transform!(rotate_bottom)
-    rail_length = width - 2 * stile + 2 * groove_depth
+    rail_length = width - (2 * stile) + (2 * groove_depth)
     length_scale = rail_length / height.to_f
     bottom.transform!(Geom::Transformation.scaling([x, 0, z], length_scale, 1, 1))
     if rail != stile
@@ -752,12 +752,12 @@ module AICabinets
 
     # Right stile by mirroring the left stile across the door width
     right = left.copy
-    mirror_right = Geom::Transformation.scaling([x + width / 2, 0, 0], -1, 1, 1)
+    mirror_right = Geom::Transformation.scaling([x + (width / 2), 0, 0], -1, 1, 1)
     right.transform!(mirror_right)
 
     # Top rail by mirroring the bottom rail around the door's center
     top = bottom.copy
-    mirror_top = Geom::Transformation.scaling([0, 0, z + height / 2], 1, 1, -1)
+    mirror_top = Geom::Transformation.scaling([0, 0, z + (height / 2)], 1, 1, -1)
     top.transform!(mirror_top)
 
     # Trim rails where they intersect stiles
@@ -799,6 +799,10 @@ module AICabinets
     joinery: DEFAULT_DRAWER_JOINERY
   )
     group = entities.add_group
+
+    unless joinery == :butt
+      warn("AI Cabinets: Drawer joinery #{joinery.inspect} is not implemented; using default box geometry.")
+    end
 
     # Left side
     left = group.entities.add_group
@@ -903,10 +907,10 @@ module AICabinets
     if partitions.any?
       partition_depth = depth - back_inset - back_thickness
       if start == :left
-        interior_width = width - 2 * panel_thickness
+        interior_width = width - (2 * panel_thickness)
         specified = partitions.sum { |p| p[:width] || 0 }
         unspecified = partitions.count { |p| p[:width].nil? }
-        remaining = interior_width - specified - (partitions.length - 1) * panel_thickness
+        remaining = interior_width - specified - ((partitions.length - 1) * panel_thickness)
         default_width = unspecified.zero? ? 0 : remaining / unspecified.to_f
         x_current = x_offset + panel_thickness
         parts = partitions.map.with_index do |part, idx|
@@ -937,7 +941,7 @@ module AICabinets
           opts[:start] = part.key?(:start) ? part[:start] : :top
           w = opts[:width] || default_width
           outer_x = x_current - panel_thickness
-          outer_width = w + 2 * panel_thickness
+          outer_width = w + (2 * panel_thickness)
           opts[:width] = outer_width
           opts[:x] = outer_x
           opts[:z] = z_offset
@@ -963,14 +967,14 @@ module AICabinets
 
         parts.each_cons(2) do |left_part, right_part|
           next unless has_front?(left_part) && has_front?(right_part)
-          left_part[:right_reveal] = panel_thickness / 2 + left_part[:door_gap] / 2
-          right_part[:left_reveal] = panel_thickness / 2 + right_part[:door_gap] / 2
+          left_part[:right_reveal] = (panel_thickness / 2) + (left_part[:door_gap] / 2)
+          right_part[:left_reveal] = (panel_thickness / 2) + (right_part[:door_gap] / 2)
         end
       else
-        interior_height = height - top_inset - bottom_inset - 2 * panel_thickness
+        interior_height = height - top_inset - bottom_inset - (2 * panel_thickness)
         specified = partitions.sum { |p| p[:height] || 0 }
         unspecified = partitions.count { |p| p[:height].nil? }
-        remaining = interior_height - specified - (partitions.length - 1) * panel_thickness
+        remaining = interior_height - specified - ((partitions.length - 1) * panel_thickness)
         default_height = unspecified.zero? ? 0 : remaining / unspecified.to_f
         z_current = start == :top ? height - top_inset - panel_thickness : bottom_inset + panel_thickness
         parts = partitions.map.with_index do |part, idx|
@@ -1033,7 +1037,7 @@ module AICabinets
               z_current += panel_thickness
             end
           end
-          opts[:height] = h + 2 * panel_thickness
+          opts[:height] = h + (2 * panel_thickness)
           opts[:left_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : left_door_reveal
           opts[:right_reveal] ||= part.key?(:door_reveal) ? opts[:door_reveal] : right_door_reveal
           if start == :top
@@ -1048,8 +1052,8 @@ module AICabinets
 
         parts.each_cons(2) do |upper, lower|
           next unless has_front?(upper) && has_front?(lower)
-          upper[:bottom_reveal] = panel_thickness / 2 + upper[:door_gap] / 2
-          lower[:top_reveal] = panel_thickness / 2 + lower[:door_gap] / 2
+          upper[:bottom_reveal] = (panel_thickness / 2) + (upper[:door_gap] / 2)
+          lower[:top_reveal] = (panel_thickness / 2) + (lower[:door_gap] / 2)
         end
       end
 
@@ -1107,11 +1111,11 @@ module AICabinets
     door_height_param = height
     door_z_offset = 0
     door_orientation = doors
-    interior_height = height - top_inset - bottom_inset - panel_thickness * 2
+    interior_height = height - top_inset - bottom_inset - (panel_thickness * 2)
     if drawers.any?
       drawer_count = drawers.length
       drawers.each do |d|
-        d[:height] ||= d[:pitch] && d[:pitch] * hole_spacing
+        d[:height] ||= d[:pitch] && (d[:pitch] * hole_spacing)
       end
       reveal_between_drawers = [drawer_count - 1, 0].max * door_gap
       gap_between_doors = doors ? door_gap : 0
@@ -1146,7 +1150,7 @@ module AICabinets
                                 else
                                   UNITS.to_length_mm(0)
                                 end
-      interior_width = width - 2 * panel_thickness - 2 * drawer_side_clearance
+      interior_width = width - (2 * panel_thickness) - (2 * drawer_side_clearance)
       x_start = x_offset + panel_thickness + drawer_side_clearance
       y_start = 0
       if drawer_origin == :top
@@ -1281,7 +1285,7 @@ module AICabinets
 
   def self.align_to_hole_top(z, base, spacing)
     return z if spacing.to_f.zero?
-    base + ((z - base) / spacing).round * spacing
+    base + (((z - base) / spacing).round * spacing)
   end
 
   def self.drill_hole_columns(
@@ -1312,11 +1316,11 @@ module AICabinets
       radius_col = diameter / 2
       skip = col[:skip].to_i
       first = col[:first_hole] || 0
-      z_start = panel_thickness + first + spacing * skip
+      z_start = panel_thickness + first + (spacing * skip)
       count = col[:count].to_i
 
       count.times do |i|
-        z = z_start + spacing * i
+        z = z_start + (spacing * i)
         center = Geom::Point3d.new(x, y, z)
         edges = entities.add_circle(center, normal, radius_col)
         face = entities.add_face(edges)

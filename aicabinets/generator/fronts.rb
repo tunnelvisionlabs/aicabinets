@@ -29,7 +29,7 @@ module AICabinets
 
       def build(parent_entities:, params:)
         validate_parent!(parent_entities)
-        return [] unless params&.respond_to?(:front_mode)
+        return [] unless params.respond_to?(:front_mode)
 
         placements = plan_layout(params)
         return [] if placements.empty?
@@ -167,7 +167,7 @@ module AICabinets
 
         component = group.to_component
         definition = component.definition
-        definition.name = placement.name if definition&.respond_to?(:name=)
+        definition.name = placement.name if definition.respond_to?(:name=)
         component.name = placement.name if component.respond_to?(:name=)
         component
       end

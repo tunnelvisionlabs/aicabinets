@@ -77,13 +77,13 @@ module AICabinets
         file.fsync if file.respond_to?(:fsync)
       end
 
-      File.delete(OVERRIDES_PATH) if File.exist?(OVERRIDES_PATH)
+      FileUtils.rm_f(OVERRIDES_PATH)
       File.rename(OVERRIDES_TEMP_PATH, OVERRIDES_PATH)
 
       true
     rescue StandardError => error
       warn("AI Cabinets: overrides save failed (#{error.message}).")
-      File.delete(OVERRIDES_TEMP_PATH) if File.exist?(OVERRIDES_TEMP_PATH)
+      FileUtils.rm_f(OVERRIDES_TEMP_PATH)
       false
     end
 
