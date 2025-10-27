@@ -27,7 +27,7 @@ module AICabinets
 
           component = group.to_component
           definition = component.definition
-          if definition&.respond_to?(:name=)
+          if definition.respond_to?(:name=)
             definition.name = name
           end
           component.name = name if component.respond_to?(:name=)

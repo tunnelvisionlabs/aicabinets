@@ -96,7 +96,7 @@ module AICabinets
           register_created(created, instances[:right_side])
           apply_category(instances[:right_side], 'AICabinets/Sides', default_material)
 
-          bottom_width = params.width - params.panel_thickness * 2
+          bottom_width = params.width - (params.panel_thickness * 2)
           bottom_depth = params.depth - params.toe_kick_depth
           instances[:bottom] = Parts::BottomPanel.build(
             parent_entities: entities,
@@ -111,7 +111,7 @@ module AICabinets
           register_created(created, instances[:bottom])
           apply_category(instances[:bottom], 'AICabinets/Bottom', default_material)
 
-          top_width = params.width - params.panel_thickness * 2
+          top_width = params.width - (params.panel_thickness * 2)
           instances[:top_or_stretchers] = Parts::TopPanel.build(
             parent_entities: entities,
             name: 'Top',
@@ -675,7 +675,7 @@ module AICabinets
 
             thickness = partition_thickness_mm
             interior_width = interior_width_mm
-            available_width = interior_width - count * thickness
+            available_width = interior_width - (count * thickness)
             minimum_required = min_bay_width_mm * (count + 1)
             if available_width < minimum_required
               add_warning("Requested #{count} partitions but interior width only allows bays of at least #{format_mm(min_bay_width_mm)}; skipping even partitions.")
@@ -690,7 +690,7 @@ module AICabinets
 
             left = interior_left_face_mm
             Array.new(count) do |index|
-              left + (index + 1) * bay_width + index * thickness
+              left + ((index + 1) * bay_width) + (index * thickness)
             end
           end
 

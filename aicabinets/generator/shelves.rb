@@ -58,7 +58,7 @@ module AICabinets
         gap_mm = nil
 
         while shelves_to_place.positive?
-          remaining_clear_mm = clear_height_mm - shelf_thickness_mm * shelves_to_place
+          remaining_clear_mm = clear_height_mm - (shelf_thickness_mm * shelves_to_place)
           if remaining_clear_mm <= EPSILON_MM
             shelves_to_place -= 1
             next
@@ -85,7 +85,7 @@ module AICabinets
         current_bottom_mm = params.interior_bottom_z_mm + gap_mm
 
         shelves_to_place.times do
-          top_positions_mm << current_bottom_mm + shelf_thickness_mm
+          top_positions_mm << (current_bottom_mm + shelf_thickness_mm)
           current_bottom_mm += shelf_thickness_mm + gap_mm
         end
 
@@ -145,7 +145,7 @@ module AICabinets
 
         component = group.to_component
         definition = component.definition
-        definition.name = placement.name if definition&.respond_to?(:name=)
+        definition.name = placement.name if definition.respond_to?(:name=)
         component.name = placement.name if component.respond_to?(:name=)
         component
       end

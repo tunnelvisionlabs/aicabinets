@@ -1,0 +1,35 @@
+inherit_mode:
+  merge:
+    - Exclude
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  Exclude:
+    - 'dist/**/*'
+    - 'aicabinets/user/**/*'
+    - 'tests/**/*'
+    - 'test/**/*'
+    - 'examples/**/*'
+
+# Layout and Style cops frequently disagree with SketchUp Ruby idioms
+# (e.g., UI command definitions and module nesting). Keep the initial
+# adoption focused on lint and safety checks, then tighten style over
+# time as offenses are paid down.
+Layout:
+  Enabled: false
+
+Metrics:
+  Enabled: false
+
+Naming:
+  Enabled: false
+
+Style:
+  Enabled: false
+
+Security:
+  Enabled: true
+
+Lint:
+  Enabled: true

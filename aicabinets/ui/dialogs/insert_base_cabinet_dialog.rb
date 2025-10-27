@@ -56,7 +56,7 @@ module AICabinets
         def show_for_edit(instance)
           return unless ensure_html_dialog_support
           return unless defined?(Sketchup::ComponentInstance)
-          return unless instance&.is_a?(Sketchup::ComponentInstance)
+          return unless instance.is_a?(Sketchup::ComponentInstance)
 
           params = extract_definition_params(instance)
           unless params
@@ -504,7 +504,7 @@ module AICabinets
         private_class_method :fetch_definition_for_all_scope
 
         def count_definition_instances(definition)
-          return 0 unless definition&.respond_to?(:instances)
+          return 0 unless definition && definition.respond_to?(:instances)
 
           instances = definition.instances
           instances.respond_to?(:size) ? instances.size : Array(instances).size
@@ -687,8 +687,6 @@ module AICabinets
             'inch'
           when 1
             'foot'
-          when 2
-            'millimeter'
           when 3
             'centimeter'
           when 4

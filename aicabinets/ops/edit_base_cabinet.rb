@@ -237,7 +237,7 @@ module AICabinets
         when :not_cabinet
           { ok: false, error: { code: 'not_cabinet', message: 'The selected object is not an AI Cabinets base cabinet.' } }
         else
-          { ok: false, error: { code: 'no_selection', message: 'Select one AI Cabinets base cabinet to edit.' } }
+          { ok: false, error: { code: 'unknown_error', message: 'Unable to edit the selected cabinet due to an unexpected error.' } }
         end
       end
       private_class_method :build_selection_error
