@@ -17,3 +17,7 @@ suite will appear in the TestUp panel as **AI Cabinets**.
 * `TC_CarcassContract` builds a base carcass with canonical millimeter parameters
   and enforces the geometry contract (local bounding box dimensions, FLB anchor,
   part containers, tagging hygiene, and toe-kick origin invariance).
+* `TC_EditScope` creates two cabinet instances that share a definition, exercises
+  the edit workflow for **Only this instance** and **All instances**, and verifies
+  definition keys, stored parameters, transforms, FLB origin invariance, and
+  single-step undo behavior.
