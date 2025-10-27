@@ -1,8 +1,14 @@
 # frozen_string_literal: true
 
 # TestUp helpers shared across the AI Cabinets suite.
+require 'json'
 module AICabinetsTestHelper
   TOL = 1e-3.inch
+
+  DICTIONARY_NAME = 'AICabinets'
+  DEF_KEY_NAME = 'def_key'
+  LEGACY_DEF_KEY_NAME = 'fingerprint'
+  PARAMS_JSON_KEY = 'params_json_mm'
 
   # Wraps the given block in a single undoable SketchUp operation.
   #
@@ -90,6 +96,90 @@ module AICabinetsTestHelper
         raise ArgumentError, 'bbox_local_of expects a definition or instance'
       end
     end
+  end
+
+  # Returns the persistent definition key for comparisons.
+  #
+  # @param definition_or_instance [Sketchup::ComponentDefinition,
+  #   Sketchup::ComponentInstance]
+  # @return [String, Integer]
+  def def_key_of(definition_or_instance)
+    definition =
+      case definition_or_instance
+      when Sketchup::ComponentDefinition
+        definition_or_instance
+      when Sketchup::ComponentInstance
+        definition_or_instance.definition
+      else
+        raise ArgumentError, 'def_key_of expects a definition or instance'
+      end
+
+    raise ArgumentError, 'Definition is no longer valid' unless definition&.valid?
+
+    dictionary = definition.attribute_dictionary(DICTIONARY_NAME)
+    if dictionary
+      key = dictionary[DEF_KEY_NAME]
+      key = dictionary[LEGACY_DEF_KEY_NAME] if key.to_s.empty?
+      return key unless key.to_s.empty?
+    end
+
+    if definition.respond_to?(:persistent_id)
+      persistent_id = definition.persistent_id
+      return "pid:#{persistent_id}" if persistent_id.to_i.positive?
+    end
+
+    if definition.respond_to?(:entityID)
+      entity_id = definition.entityID
+      return "entity:#{entity_id}" if entity_id.to_i.positive?
+    end
+
+    "object:#{definition.object_id}"
+  end
+
+  # Extracts params JSON stored on the definition dictionary.
+  #
+  # @param definition_or_instance [Sketchup::ComponentDefinition,
+  #   Sketchup::ComponentInstance]
+  # @return [Hash]
+  def params_mm_from_definition(definition_or_instance)
+    definition =
+      case definition_or_instance
+      when Sketchup::ComponentDefinition
+        definition_or_instance
+      when Sketchup::ComponentInstance
+        definition_or_instance.definition
+      else
+        raise ArgumentError, 'params_mm_from_definition expects a definition or instance'
+      end
+
+    raise ArgumentError, 'Definition is no longer valid' unless definition&.valid?
+
+    dictionary = definition.attribute_dictionary(DICTIONARY_NAME)
+    return {} unless dictionary
+
+    json = dictionary[PARAMS_JSON_KEY]
+    return {} unless json.is_a?(String) && !json.empty?
+
+    JSON.parse(json, symbolize_names: true)
+  rescue JSON::ParserError
+    {}
+  end
+
+  # Compares two transformations with tolerance.
+  #
+  # @param a [Geom::Transformation]
+  # @param b [Geom::Transformation]
+  # @param tolerance [Numeric]
+  # @return [Boolean]
+  def transforms_approx_equal?(a, b, tolerance = TOL)
+    return false unless a.is_a?(Geom::Transformation) && b.is_a?(Geom::Transformation)
+
+    tol = tolerance.respond_to?(:to_f) ? tolerance.to_f : Float(tolerance)
+
+    values_a = a.to_a
+    values_b = b.to_a
+    values_a.length == values_b.length &&
+      values_a.zip(values_b).all? { |expected, actual| (expected - actual).abs <= tol }
   end
 
   # Normalizes a numeric value or SketchUp Length to millimeters.
@@ -232,6 +322,7 @@ module AICabinetsTestHelper
   end
 
   module_function :with_undo, :clean_model!, :assert_within_tolerance,
-                  :bbox_local_of, :mm, :mm_from_length, :collect_raw_geometry,
-                  :default_tag?
+                  :bbox_local_of, :def_key_of, :params_mm_from_definition,
+                  :transforms_approx_equal?, :mm, :mm_from_length,
+                  :collect_raw_geometry, :default_tag?
 end
