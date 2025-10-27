@@ -25,26 +25,16 @@ module AICabinets
         def profile_points(depth, height, toe_kick_height, toe_kick_depth)
           points = []
           points << Geom::Point3d.new(0, 0, 0)
-
-          if toe_kick_depth.positive?
-            points << Geom::Point3d.new(0, toe_kick_depth, 0)
-            if toe_kick_height.positive?
-              points << Geom::Point3d.new(0, toe_kick_depth, toe_kick_height)
-              points << Geom::Point3d.new(0, depth, toe_kick_height)
-            else
-              points << Geom::Point3d.new(0, depth, 0)
-            end
-          else
-            if toe_kick_height.positive?
-              points << Geom::Point3d.new(0, 0, toe_kick_height)
-              points << Geom::Point3d.new(0, depth, toe_kick_height)
-            else
-              points << Geom::Point3d.new(0, depth, 0)
-            end
-          end
-
+          points << Geom::Point3d.new(0, depth, 0)
           points << Geom::Point3d.new(0, depth, height)
           points << Geom::Point3d.new(0, 0, height)
+
+          if toe_kick_depth.positive? && toe_kick_height.positive?
+            points << Geom::Point3d.new(0, 0, toe_kick_height)
+            points << Geom::Point3d.new(0, toe_kick_depth, toe_kick_height)
+            points << Geom::Point3d.new(0, toe_kick_depth, 0)
+          end
+
           points
         end
         private_class_method :profile_points

@@ -6,7 +6,6 @@ Sketchup.require('aicabinets/generator/parts/side_panel')
 Sketchup.require('aicabinets/generator/parts/bottom_panel')
 Sketchup.require('aicabinets/generator/parts/top_panel')
 Sketchup.require('aicabinets/generator/parts/back_panel')
-Sketchup.require('aicabinets/generator/parts/toe_kick_side')
 Sketchup.require('aicabinets/generator/shelves')
 Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/generator/partitions')
@@ -96,13 +95,6 @@ module AICabinets
           )
           register_created(created, instances[:right_side])
           apply_category(instances[:right_side], 'AICabinets/Sides', default_material)
-
-          toe_kick_sides = build_toe_kick_sides(entities)
-          unless toe_kick_sides.empty?
-            instances[:toe_kick_sides] = toe_kick_sides
-            register_created(created, toe_kick_sides)
-            apply_category(toe_kick_sides, 'AICabinets/ToeKick', default_material)
-          end
 
           bottom_width = params.width - (params.panel_thickness * 2)
           bottom_depth = params.depth - params.toe_kick_depth
@@ -210,36 +202,6 @@ module AICabinets
         end
 
         private
-
-        def build_toe_kick_sides(parent_entities)
-          return [] unless params.toe_kick_height.positive? && params.toe_kick_depth.positive?
-
-          thickness = params.panel_thickness
-          depth = params.toe_kick_depth
-          height = params.toe_kick_height
-          width = params.width
-
-          [
-            Parts::ToeKickSide.build(
-              parent_entities: parent_entities,
-              name: 'Toe Kick Side - Left',
-              panel_thickness: thickness,
-              toe_kick_depth: depth,
-              toe_kick_height: height,
-              x_offset: 0,
-              side: :left
-            ),
-            Parts::ToeKickSide.build(
-              parent_entities: parent_entities,
-              name: 'Toe Kick Side - Right',
-              panel_thickness: thickness,
-              toe_kick_depth: depth,
-              toe_kick_height: height,
-              x_offset: width - thickness,
-              side: :right
-            )
-          ].compact
-        end
 
         attr_reader :params
 
