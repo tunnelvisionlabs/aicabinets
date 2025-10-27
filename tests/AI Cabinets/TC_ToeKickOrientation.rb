@@ -92,7 +92,7 @@ class TC_ToeKickOrientation < TestUp::TestCase
                       'Toe-kick side height should match toe-kick height')
 
       dictionary = side.attribute_dictionary(AICabinetsTestHelper::DICTIONARY_NAME)
-      assert_equal('toe_kick_side', dictionary&.fetch('part', nil),
+      assert_equal('toe_kick_side', dictionary&.[]('part'),
                    'Toe-kick side should label its part attribute')
     end
   end
