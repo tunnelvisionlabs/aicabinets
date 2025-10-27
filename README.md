@@ -26,6 +26,17 @@ To verify Ruby syntax locally, run:
 ruby -c aicabinets.rb && find aicabinets -type f -name '*.rb' -print0 | xargs -0 -n1 ruby -c
 ```
 
+## Linting
+
+Install RuboCop and run the same command that CI executes:
+
+```sh
+gem install rubocop
+rubocop --parallel --display-cop-names
+```
+
+The **Lint** GitHub Actions workflow provisions Ruby 3.2 with `ruby/setup-ruby@v1` and fails the build when RuboCop reports offenses.
+
 ## Running tests (TestUp)
 
 TestUp is SketchUp's Minitest runner. To execute the AI Cabinets smoke tests:
