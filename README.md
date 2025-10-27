@@ -65,6 +65,8 @@ To package the extension for manual installation, run:
 zip -r aicabinets-$(ruby -e "load 'aicabinets/version.rb'; puts AICabinets::VERSION").rbz aicabinets.rb aicabinets/
 ```
 
+When a tag matching `v*` is pushed, the **Package RBZ** workflow zips `aicabinets.rb` and `aicabinets/` into `dist/aicabinets-<VERSION>.rbz`, uploads it as a workflow artifact, and can optionally publish the file on the tag’s GitHub Release.
+
 ## Settings & Defaults (mm)
 
 AI Cabinets ships read-only defaults at `aicabinets/data/defaults.json` within the installed extension folder. The extension creates `aicabinets/user/overrides.json` after your first successful Insert or Edit action to persist user-chosen values. Both files live alongside `aicabinets.rb` in the extension’s support directory.
