@@ -13,6 +13,7 @@ class TC_ToeKickOrientation < TestUp::TestCase
     panel_thickness_mm: 19.0,
     toe_kick_height_mm: 0.0,
     toe_kick_depth_mm: 0.0,
+    toe_kick_thickness_mm: 19.0,
     back_thickness_mm: 6.0,
     top_thickness_mm: 19.0,
     bottom_thickness_mm: 19.0
@@ -20,7 +21,8 @@ class TC_ToeKickOrientation < TestUp::TestCase
 
   TOE_KICK_PARAMS_MM = BASE_PARAMS_MM.merge(
     toe_kick_height_mm: 100.0,
-    toe_kick_depth_mm: 75.0
+    toe_kick_depth_mm: 75.0,
+    toe_kick_thickness_mm: 19.0
   ).freeze
 
   def setup
@@ -42,8 +44,9 @@ class TC_ToeKickOrientation < TestUp::TestCase
     toe_depth_mm = TOE_KICK_PARAMS_MM[:toe_kick_depth_mm]
     toe_height_mm = TOE_KICK_PARAMS_MM[:toe_kick_height_mm]
     depth_mm = TOE_KICK_PARAMS_MM[:depth_mm]
+    toe_thickness_mm = [TOE_KICK_PARAMS_MM[:toe_kick_thickness_mm], toe_depth_mm].min
 
-    expected_bottom = [toe_depth_mm, depth_mm]
+    expected_bottom = [toe_depth_mm + toe_thickness_mm, depth_mm]
 
     sides.each do |side|
       bottom_values = y_values_at_z(side, 0.0, tolerance_mm)
@@ -55,8 +58,9 @@ class TC_ToeKickOrientation < TestUp::TestCase
                       'Toe-kick step should expose the front corner and notch depth')
       assert_in_delta(0.0, step_values[0], tolerance_mm,
                       'Toe-kick step should start at the front (Y=0)')
-      assert_in_delta(toe_depth_mm, step_values[1], tolerance_mm,
-                      'Toe-kick step should extend to the configured depth from the front')
+      expected_step_depth = toe_depth_mm + toe_thickness_mm
+      assert_in_delta(expected_step_depth, step_values[1], tolerance_mm,
+                      'Toe-kick step should extend to the configured depth plus front board thickness from the front')
     end
   end
 
@@ -96,6 +100,8 @@ class TC_ToeKickOrientation < TestUp::TestCase
     tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
     toe_depth_mm = TOE_KICK_PARAMS_MM[:toe_kick_depth_mm]
     toe_height_mm = TOE_KICK_PARAMS_MM[:toe_kick_height_mm]
+    toe_thickness_mm = [TOE_KICK_PARAMS_MM[:toe_kick_thickness_mm], toe_depth_mm].min
+    expected_step_depth = toe_depth_mm + toe_thickness_mm
 
     sides.each do |side|
       step_values = y_values_at_z(side, toe_height_mm, tolerance_mm)
@@ -107,12 +113,12 @@ class TC_ToeKickOrientation < TestUp::TestCase
 
       assert_in_delta(0.0, front_position, tolerance_mm,
                       'Toe-kick front edge should align with the cabinet front (Y=0)')
-      assert_in_delta(toe_depth_mm, notch_position, tolerance_mm,
-                      'Toe-kick step should align with the configured depth from the front')
+      assert_in_delta(expected_step_depth, notch_position, tolerance_mm,
+                      'Toe-kick step should align with the configured depth plus front board thickness from the front')
 
       notch_depth = notch_position - front_position
-      assert_in_delta(toe_depth_mm, notch_depth, tolerance_mm,
-                      'Toe-kick notch depth should match the configured depth')
+      assert_in_delta(expected_step_depth, notch_depth, tolerance_mm,
+                      'Toe-kick notch depth should include the front board thickness')
     end
   end
 
@@ -166,6 +172,55 @@ class TC_ToeKickOrientation < TestUp::TestCase
       assert_values_close([0.0, depth_mm], bottom_values, tolerance_mm,
                           'No toe-kick notch should be present when height is zero')
     end
+  end
+
+  def test_toe_kick_front_board_dimensions_and_tagging
+    params_mm = TOE_KICK_PARAMS_MM.merge(toe_kick_thickness_mm: 16.0)
+    _, result = build_carcass_definition(params_mm)
+
+    front = result.instances[:toe_kick_front]
+    refute_nil(front, 'Expected toe-kick front board to be created')
+    assert_kind_of(Sketchup::ComponentInstance, front)
+
+    tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
+    bbox = front.bounds
+
+    min_x = AICabinetsTestHelper.mm_from_length(bbox.min.x)
+    max_x = AICabinetsTestHelper.mm_from_length(bbox.max.x)
+    assert_in_delta(0.0, min_x, tolerance_mm,
+                    'Front board should start at the exterior left edge of the cabinet')
+    assert_in_delta(params_mm[:width_mm], max_x, tolerance_mm,
+                    'Front board should end at the exterior right edge of the cabinet')
+
+    min_y = AICabinetsTestHelper.mm_from_length(bbox.min.y)
+    max_y = AICabinetsTestHelper.mm_from_length(bbox.max.y)
+    toe_depth_mm = params_mm[:toe_kick_depth_mm]
+    effective_thickness_mm = [params_mm[:toe_kick_thickness_mm], toe_depth_mm].min
+    expected_front_face_mm = toe_depth_mm
+    expected_rear_face_mm = toe_depth_mm + effective_thickness_mm
+    assert_in_delta(expected_front_face_mm, min_y, tolerance_mm,
+                    'Front board visible face should align with the toe-kick plane behind the carcass front')
+    assert_in_delta(expected_rear_face_mm, max_y, tolerance_mm,
+                    'Front board interior face should return into the cabinet by the board thickness')
+
+    min_z = AICabinetsTestHelper.mm_from_length(bbox.min.z)
+    max_z = AICabinetsTestHelper.mm_from_length(bbox.max.z)
+    assert_in_delta(0.0, min_z, tolerance_mm,
+                    'Front board bottom should align with cabinet bottom reference plane')
+    assert_in_delta(params_mm[:toe_kick_height_mm], max_z, tolerance_mm,
+                    'Front board height should match the toe kick height')
+
+    assert_equal('ToeKick/Front', front.name)
+    assert_equal('ToeKick/Front', front.definition.name)
+    assert_equal('AICabinets/ToeKick', front.layer&.name)
+  end
+
+  def test_toe_kick_front_board_skipped_when_thickness_non_positive
+    params_mm = TOE_KICK_PARAMS_MM.merge(toe_kick_thickness_mm: 0.0)
+    _, result = build_carcass_definition(params_mm)
+
+    assert_nil(result.instances[:toe_kick_front],
+               'Front board should not be created when thickness is zero')
   end
 
   private

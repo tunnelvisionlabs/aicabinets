@@ -13,6 +13,7 @@ class TC_CarcassContract < TestUp::TestCase
     panel_thickness_mm: 19.0,
     toe_kick_height_mm: 0.0,
     toe_kick_depth_mm: 0.0,
+    toe_kick_thickness_mm: 19.0,
     back_thickness_mm: 6.0,
     top_thickness_mm: 19.0,
     bottom_thickness_mm: 19.0
@@ -20,7 +21,8 @@ class TC_CarcassContract < TestUp::TestCase
 
   TOE_KICK_PARAMS_MM = BASE_PARAMS_MM.merge(
     toe_kick_height_mm: 100.0,
-    toe_kick_depth_mm: 75.0
+    toe_kick_depth_mm: 75.0,
+    toe_kick_thickness_mm: 19.0
   ).freeze
 
   def setup

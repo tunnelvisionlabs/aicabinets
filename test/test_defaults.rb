@@ -27,6 +27,7 @@ class DefaultsLoaderTest < Minitest::Test
       panel_thickness_mm
       toe_kick_height_mm
       toe_kick_depth_mm
+      toe_kick_thickness_mm
       front
       shelves
       partitions
@@ -65,6 +66,7 @@ class DefaultsLoaderTest < Minitest::Test
             'panel_thickness_mm' => '18.0',
             'toe_kick_height_mm' => nil,
             'toe_kick_depth_mm' => 'fifty',
+            'toe_kick_thickness_mm' => 'paper',
             'front' => 'invalid',
             'shelves' => -1,
             'unknown_key' => true,
@@ -91,6 +93,7 @@ class DefaultsLoaderTest < Minitest::Test
         assert_equal(18.0, result[:panel_thickness_mm])
         assert_equal(100.0, result[:toe_kick_height_mm])
         assert_equal(50.0, result[:toe_kick_depth_mm])
+        assert_equal(18.0, result[:toe_kick_thickness_mm])
         assert_equal('doors_double', result[:front])
         assert_equal(2, result[:shelves])
 

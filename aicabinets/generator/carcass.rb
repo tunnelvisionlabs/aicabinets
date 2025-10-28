@@ -6,6 +6,7 @@ Sketchup.require('aicabinets/generator/parts/side_panel')
 Sketchup.require('aicabinets/generator/parts/bottom_panel')
 Sketchup.require('aicabinets/generator/parts/top_panel')
 Sketchup.require('aicabinets/generator/parts/back_panel')
+Sketchup.require('aicabinets/generator/parts/toe_kick_front')
 Sketchup.require('aicabinets/generator/shelves')
 Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/generator/partitions')
@@ -69,6 +70,13 @@ module AICabinets
           front_material = model.is_a?(Sketchup::Model) ? Ops::Materials.default_door(model) : nil
           instances = {}
           created = []
+          effective_toe_kick_thickness_mm =
+            if params.toe_kick_thickness_mm && params.toe_kick_depth_mm
+              [params.toe_kick_thickness_mm, params.toe_kick_depth_mm].min
+            else
+              0.0
+            end
+          effective_toe_kick_thickness = Ops::Units.to_length_mm(effective_toe_kick_thickness_mm)
 
           instances[:left_side] = Parts::SidePanel.build(
             parent_entities: entities,
@@ -78,6 +86,7 @@ module AICabinets
             depth: params.depth,
             toe_kick_height: params.toe_kick_height,
             toe_kick_depth: params.toe_kick_depth,
+            toe_kick_thickness: effective_toe_kick_thickness,
             x_offset: 0
           )
           register_created(created, instances[:left_side])
@@ -91,6 +100,7 @@ module AICabinets
             depth: params.depth,
             toe_kick_height: params.toe_kick_height,
             toe_kick_depth: params.toe_kick_depth,
+            toe_kick_thickness: effective_toe_kick_thickness,
             x_offset: params.width - params.panel_thickness
           )
           register_created(created, instances[:right_side])
@@ -141,6 +151,13 @@ module AICabinets
           )
           register_created(created, instances[:back])
           apply_category(instances[:back], 'AICabinets/Back', default_material)
+
+          toe_kick_front = build_toe_kick_front(entities, effective_toe_kick_thickness_mm)
+          if toe_kick_front
+            instances[:toe_kick_front] = toe_kick_front
+            register_created(created, toe_kick_front)
+            apply_category(toe_kick_front, 'AICabinets/ToeKick', default_material)
+          end
 
           partitions = Partitions.build(
             parent_entities: entities,
@@ -245,6 +262,10 @@ module AICabinets
             ensure_positive!(key, @raw_params[key])
           end
 
+          if @raw_params.key?(:toe_kick_thickness_mm)
+            ensure_numeric!(:toe_kick_thickness_mm, @raw_params[:toe_kick_thickness_mm])
+          end
+
           width = @raw_params[:width_mm].to_f
           depth = @raw_params[:depth_mm].to_f
           height = @raw_params[:height_mm].to_f
@@ -319,6 +340,32 @@ module AICabinets
           end
         end
 
+        def build_toe_kick_front(entities, effective_thickness_mm)
+          return unless params.toe_kick_height_mm.positive?
+          return unless params.toe_kick_depth_mm.positive?
+          return unless params.toe_kick_thickness_mm.positive?
+          return unless effective_thickness_mm.positive?
+
+          width_mm = params.width_mm
+          return unless width_mm.positive?
+
+          thickness_length = Ops::Units.to_length_mm(effective_thickness_mm)
+
+          front_plane_mm = params.toe_kick_depth_mm
+          rear_plane_mm = front_plane_mm + effective_thickness_mm
+
+          Parts::ToeKickFront.build(
+            parent_entities: entities,
+            name: 'ToeKick/Front',
+            width: Ops::Units.to_length_mm(width_mm),
+            height: params.toe_kick_height,
+            thickness: thickness_length,
+            x_offset: Ops::Units.to_length_mm(0.0),
+            y_offset: Ops::Units.to_length_mm(rear_plane_mm),
+            z_offset: Ops::Units.to_length_mm(0.0)
+          )
+        end
+
         def determine_top_tag(container)
           entities = Array(container).compact
           return 'AICabinets/Top' if entities.empty?
@@ -334,10 +381,11 @@ module AICabinets
 
       class ParameterSet
         attr_reader :width, :depth, :height, :panel_thickness, :toe_kick_height,
-                    :toe_kick_depth, :back_thickness, :top_thickness,
+                    :toe_kick_depth, :toe_kick_thickness, :back_thickness, :top_thickness,
                     :bottom_thickness, :width_mm, :depth_mm, :height_mm,
                     :panel_thickness_mm, :toe_kick_height_mm,
-                    :toe_kick_depth_mm, :back_thickness_mm, :top_thickness_mm,
+                    :toe_kick_depth_mm, :toe_kick_thickness_mm,
+                    :back_thickness_mm, :top_thickness_mm,
                     :bottom_thickness_mm, :shelf_count, :shelf_thickness,
                     :shelf_thickness_mm, :interior_depth, :interior_depth_mm,
                     :interior_bottom_z_mm, :interior_top_z_mm,
@@ -360,6 +408,26 @@ module AICabinets
           @top_thickness_mm = (params_mm[:top_thickness_mm] || @panel_thickness_mm).to_f
           @bottom_thickness_mm = (params_mm[:bottom_thickness_mm] || @panel_thickness_mm).to_f
 
+          thickness_provided = params_mm.key?(:toe_kick_thickness_mm)
+          raw_thickness = params_mm[:toe_kick_thickness_mm]
+          numeric_thickness = coerce_non_negative_numeric(raw_thickness)
+
+          @toe_kick_thickness_mm =
+            if thickness_provided
+              if raw_thickness.nil?
+                self.class.__send__(:warn_missing_toe_kick_thickness_once)
+                @panel_thickness_mm
+              elsif numeric_thickness.nil?
+                self.class.__send__(:warn_invalid_toe_kick_thickness_once)
+                0.0
+              else
+                numeric_thickness
+              end
+            else
+              self.class.__send__(:warn_missing_toe_kick_thickness_once)
+              @panel_thickness_mm
+            end
+
           @shelf_count = coerce_shelf_count(params_mm[:shelves])
           thickness_override = coerce_positive_numeric(params_mm[:shelf_thickness_mm])
           @shelf_thickness_mm = (thickness_override || @panel_thickness_mm).to_f
@@ -370,6 +438,7 @@ module AICabinets
           @panel_thickness = length_mm(@panel_thickness_mm)
           @toe_kick_height = length_mm(@toe_kick_height_mm)
           @toe_kick_depth = length_mm(@toe_kick_depth_mm)
+          @toe_kick_thickness = length_mm(@toe_kick_thickness_mm)
           @back_thickness = length_mm(@back_thickness_mm)
           @top_thickness = length_mm(@top_thickness_mm)
           @bottom_thickness = length_mm(@bottom_thickness_mm)
@@ -427,6 +496,23 @@ module AICabinets
             end
           end
         end
+
+        class << self
+          def warn_missing_toe_kick_thickness_once
+            return if @warned_missing_toe_kick_thickness
+
+            warn('AI Cabinets: toe_kick_thickness_mm missing; defaulting to panel thickness.')
+            @warned_missing_toe_kick_thickness = true
+          end
+
+          def warn_invalid_toe_kick_thickness_once
+            return if @warned_invalid_toe_kick_thickness
+
+            warn('AI Cabinets: toe_kick_thickness_mm invalid; treating as 0 mm.')
+            @warned_invalid_toe_kick_thickness = true
+          end
+        end
+        private_class_method :warn_missing_toe_kick_thickness_once, :warn_invalid_toe_kick_thickness_once
 
         def partition_bay_ranges_mm
           @partition_bay_ranges_mm.dup

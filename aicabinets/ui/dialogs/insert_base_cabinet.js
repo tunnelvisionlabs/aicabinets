@@ -464,6 +464,7 @@
         positions_mm: []
       }
     };
+    this.values.lengths.toe_kick_thickness = null;
 
     this.unitsNote = form.querySelector('[data-role="units-note"]');
     this.insertButton =
@@ -646,6 +647,17 @@
         this.setFieldError(name, null, true);
       }.bind(this)
     );
+
+    var toeKickThickness = defaults.toe_kick_thickness_mm;
+    if (typeof toeKickThickness !== 'number') {
+      toeKickThickness = Number(toeKickThickness);
+    }
+    if (!isFinite(toeKickThickness)) {
+      toeKickThickness = this.values.lengths.panel_thickness;
+    }
+    if (isFinite(toeKickThickness)) {
+      this.values.lengths.toe_kick_thickness = toeKickThickness;
+    }
 
     if (typeof defaults.front === 'string' && this.inputs.front) {
       this.inputs.front.value = defaults.front;
@@ -1237,6 +1249,10 @@
       panel_thickness_mm: lengths.panel_thickness,
       toe_kick_height_mm: lengths.toe_kick_height,
       toe_kick_depth_mm: lengths.toe_kick_depth,
+      toe_kick_thickness_mm:
+        lengths.toe_kick_thickness != null
+          ? lengths.toe_kick_thickness
+          : lengths.panel_thickness,
       front: this.values.front,
       shelves: this.values.shelves,
       partitions: {

@@ -21,7 +21,8 @@ module AICabinets
           height_mm: 'Height',
           panel_thickness_mm: 'Panel thickness',
           toe_kick_height_mm: 'Toe kick height',
-          toe_kick_depth_mm: 'Toe kick depth'
+          toe_kick_depth_mm: 'Toe kick depth',
+          toe_kick_thickness_mm: 'Toe kick thickness'
         }.freeze
         CONFIRM_EDIT_ALL_COPY = {
           title: 'AI Cabinets — Edit All Instances',
@@ -103,10 +104,22 @@ module AICabinets
 
         def set_dialog_context(mode:, prefill: nil, selection: nil)
           dialog_context[:mode] = mode
-          dialog_context[:prefill] = prefill
+          dialog_context[:prefill] = normalize_prefill(prefill)
           dialog_context[:selection] = selection.is_a?(Hash) ? selection.dup : nil
         end
         private_class_method :set_dialog_context
+
+        def normalize_prefill(prefill)
+          return nil unless prefill.is_a?(Hash)
+
+          copy = deep_copy_params(prefill)
+          unless copy.key?(:toe_kick_thickness_mm)
+            panel_value = copy[:panel_thickness_mm] || copy['panel_thickness_mm']
+            copy[:toe_kick_thickness_mm] = panel_value if panel_value
+          end
+          copy
+        end
+        private_class_method :normalize_prefill
 
         def dialog_mode
           dialog_context[:mode] || :insert
@@ -329,6 +342,17 @@ module AICabinets
             shelves: validate_shelves_value(raw),
             partitions: validate_partitions_value(raw[:partitions])
           }
+
+          params[:toe_kick_thickness_mm] =
+            if raw.key?(:toe_kick_thickness_mm)
+              coerce_non_negative_length(
+                raw[:toe_kick_thickness_mm],
+                'toe_kick_thickness_mm',
+                LENGTH_FIELD_NAMES[:toe_kick_thickness_mm]
+              )
+            else
+              params[:panel_thickness_mm]
+            end
 
           if raw[:ui_version].is_a?(String)
             version = raw[:ui_version].strip

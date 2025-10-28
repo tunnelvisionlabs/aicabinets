@@ -8,7 +8,7 @@ module AICabinets
       module SidePanel
         module_function
 
-        def build(parent_entities:, name:, panel_thickness:, height:, depth:, toe_kick_height:, toe_kick_depth:, x_offset:)
+        def build(parent_entities:, name:, panel_thickness:, height:, depth:, toe_kick_height:, toe_kick_depth:, toe_kick_thickness:, x_offset:)
           group = parent_entities.add_group
           group.name = name
 
@@ -26,7 +26,8 @@ module AICabinets
             group.entities,
             panel_thickness,
             toe_kick_height,
-            toe_kick_depth
+            toe_kick_depth,
+            toe_kick_thickness
           )
 
           translation = Geom::Transformation.translation([x_offset, 0, 0])
@@ -34,8 +35,11 @@ module AICabinets
           group
         end
 
-        def cut_toe_kick_notch(entities, panel_thickness, toe_kick_height, toe_kick_depth)
+        def cut_toe_kick_notch(entities, panel_thickness, toe_kick_height, toe_kick_depth, toe_kick_thickness)
           return unless toe_kick_depth.positive? && toe_kick_height.positive?
+
+          effective_thickness = [toe_kick_thickness, toe_kick_depth].min
+          total_depth = toe_kick_depth + effective_thickness
 
           notch = entities.add_face(
             Geom::Point3d.new(0, 0, 0),
@@ -47,7 +51,7 @@ module AICabinets
           return unless notch
 
           notch.reverse! if notch.normal.y.positive?
-          notch.pushpull(-toe_kick_depth)
+          notch.pushpull(-total_depth)
         end
         private_class_method :cut_toe_kick_notch
       end

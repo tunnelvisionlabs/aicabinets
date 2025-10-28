@@ -28,6 +28,7 @@
         "panel_thickness_mm",
         "toe_kick_height_mm",
         "toe_kick_depth_mm",
+        "toe_kick_thickness_mm",
         "front",
         "shelves",
         "partitions"
@@ -62,6 +63,11 @@
           "type": "number",
           "minimum": 0,
           "description": "Toe kick depth in millimeters."
+        },
+        "toe_kick_thickness_mm": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Toe kick front board thickness in millimeters."
         },
         "front": {
           "title": "Front configuration",

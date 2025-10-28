@@ -33,6 +33,7 @@ module AICabinets
       panel_thickness_mm: 18.0,
       toe_kick_height_mm: 100.0,
       toe_kick_depth_mm: 50.0,
+      toe_kick_thickness_mm: 18.0,
       front: 'doors_double',
       shelves: 2,
       partitions: PARTITIONS_FALLBACK
