@@ -212,7 +212,7 @@ class TC_ToeKickOrientation < TestUp::TestCase
 
     assert_equal('ToeKick/Front', front.name)
     assert_equal('ToeKick/Front', front.definition.name)
-    assert_equal('AICabinets/ToeKick', front.layer&.name)
+    assert_equal('ToeKick', front.layer&.name)
   end
 
   def test_toe_kick_front_board_skipped_when_thickness_non_positive

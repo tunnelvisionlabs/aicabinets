@@ -2,6 +2,8 @@
 
 require 'sketchup.rb'
 
+Sketchup.require('aicabinets/tags')
+
 module AICabinets
   module Ops
     module Tags
@@ -18,7 +20,12 @@ module AICabinets
         raise ArgumentError, 'name must be provided' if name.to_s.empty?
 
         layers = model.layers
-        layers[name] || layers.add(name)
+
+        if name.start_with?(AICabinets::Tags::OWNED_TAG_PREFIX)
+          AICabinets::Tags.ensure_owned_tag(model, name)
+        else
+          layers[name] || layers.add(name)
+        end
       end
 
       # Assigns a tag to an entity, creating the tag if necessary.
