@@ -13,6 +13,7 @@ module AICabinets
         register_commands!
         attach_menu
         attach_toolbar
+        attach_context_menu
 
         @ui_registered = true
       end
@@ -76,6 +77,44 @@ module AICabinets
           nil
         end
       end
+
+      def attach_context_menu
+        return unless defined?(::UI)
+        return unless ::UI.respond_to?(:add_context_menu_handler)
+        return if @context_menu_handler_attached
+
+        ::UI.add_context_menu_handler do |menu|
+          next unless context_menu_allows_edit_cabinet?
+
+          command = commands[:edit_base_cabinet]
+          next unless command
+
+          submenu = menu.add_submenu(MENU_TITLE)
+          submenu.add_item(command)
+        end
+
+        @context_menu_handler_attached = true
+      end
+
+      def context_menu_allows_edit_cabinet?
+        return unless defined?(Sketchup)
+
+        model = Sketchup.active_model
+        return false unless model.is_a?(Sketchup::Model)
+
+        selection = model.selection
+        return false unless selection&.count == 1
+
+        entity = selection.first
+        return false unless entity.is_a?(Sketchup::ComponentInstance)
+        return false if entity.respond_to?(:locked?) && entity.locked?
+
+        definition = entity.definition
+        return false unless definition.is_a?(Sketchup::ComponentDefinition)
+
+        !!cabinet_metadata_dictionary(definition)
+      end
+
     end
   end
 end

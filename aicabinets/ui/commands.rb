@@ -101,13 +101,10 @@ module AICabinets
         return unless entity.is_a?(Sketchup::ComponentInstance)
 
         definition = entity.definition
-        return unless definition.is_a?(Sketchup::ComponentDefinition)
-
-        dictionary_name = AICabinets::Ops::InsertBaseCabinet::DICTIONARY_NAME
-        params_key = AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY
-        dict = definition.attribute_dictionary(dictionary_name)
+        dict = cabinet_metadata_dictionary(definition)
         return unless dict
 
+        params_key = AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY
         params_json = dict[params_key]
         return unless params_json.is_a?(String) && !params_json.empty?
 
@@ -120,6 +117,14 @@ module AICabinets
         else
           warn("AI Cabinets: #{message}")
         end
+      end
+
+      def cabinet_metadata_dictionary(definition)
+        return unless defined?(AICabinets::Ops::InsertBaseCabinet)
+        return unless definition.is_a?(Sketchup::ComponentDefinition)
+
+        dictionary_name = AICabinets::Ops::InsertBaseCabinet::DICTIONARY_NAME
+        definition.attribute_dictionary(dictionary_name)
       end
     end
   end
