@@ -196,10 +196,12 @@ class TC_ToeKickOrientation < TestUp::TestCase
     max_y = AICabinetsTestHelper.mm_from_length(bbox.max.y)
     toe_depth_mm = params_mm[:toe_kick_depth_mm]
     effective_thickness_mm = [params_mm[:toe_kick_thickness_mm], toe_depth_mm].min
-    assert_in_delta(0.0, min_y, tolerance_mm,
-                    'Front board front face should align with the cabinet front (Y=0)')
-    assert_in_delta(effective_thickness_mm, max_y, tolerance_mm,
-                    'Front board back face should align with the board thickness behind the front plane')
+    expected_visible_face_mm = toe_depth_mm
+    expected_return_face_mm = toe_depth_mm - effective_thickness_mm
+    assert_in_delta(expected_return_face_mm, min_y, tolerance_mm,
+                    'Front board interior face should return toward the cabinet front by the board thickness')
+    assert_in_delta(expected_visible_face_mm, max_y, tolerance_mm,
+                    'Front board visible face should align with the toe-kick plane behind the carcass front')
 
     min_z = AICabinetsTestHelper.mm_from_length(bbox.min.z)
     max_z = AICabinetsTestHelper.mm_from_length(bbox.max.z)

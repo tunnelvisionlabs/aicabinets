@@ -358,7 +358,7 @@ module AICabinets
             height: params.toe_kick_height,
             thickness: thickness_length,
             x_offset: Ops::Units.to_length_mm(0.0),
-            y_offset: thickness_length,
+            y_offset: Ops::Units.to_length_mm(params.toe_kick_depth_mm),
             z_offset: Ops::Units.to_length_mm(0.0)
           )
         end
