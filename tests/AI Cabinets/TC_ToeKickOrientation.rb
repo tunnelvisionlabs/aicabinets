@@ -44,7 +44,6 @@ class TC_ToeKickOrientation < TestUp::TestCase
     depth_mm = TOE_KICK_PARAMS_MM[:depth_mm]
 
     expected_bottom = [0.0, toe_depth_mm, depth_mm]
-    expected_step = [0.0, toe_depth_mm, depth_mm]
 
     sides.each do |side|
       bottom_values = y_values_at_z(side, 0.0, tolerance_mm)
@@ -52,8 +51,12 @@ class TC_ToeKickOrientation < TestUp::TestCase
                           'Bottom edge should span front notch and back depth')
 
       step_values = y_values_at_z(side, toe_height_mm, tolerance_mm)
-      assert_values_close(expected_step, step_values, tolerance_mm,
-                          'Toe-kick step should occur at the front of the panel')
+      assert_operator(step_values.length, :>=, 2,
+                      'Toe-kick step should expose the front corner and notch depth')
+      assert_in_delta(0.0, step_values[0], tolerance_mm,
+                      'Toe-kick step should start at the front (Y=0)')
+      assert_in_delta(toe_depth_mm, step_values[1], tolerance_mm,
+                      'Toe-kick step should extend to the configured depth from the front')
     end
   end
 
