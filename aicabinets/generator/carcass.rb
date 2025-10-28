@@ -70,6 +70,13 @@ module AICabinets
           front_material = model.is_a?(Sketchup::Model) ? Ops::Materials.default_door(model) : nil
           instances = {}
           created = []
+          effective_toe_kick_thickness_mm =
+            if params.toe_kick_thickness_mm && params.toe_kick_depth_mm
+              [params.toe_kick_thickness_mm, params.toe_kick_depth_mm].min
+            else
+              0.0
+            end
+          effective_toe_kick_thickness = Ops::Units.to_length_mm(effective_toe_kick_thickness_mm)
 
           instances[:left_side] = Parts::SidePanel.build(
             parent_entities: entities,
@@ -79,6 +86,7 @@ module AICabinets
             depth: params.depth,
             toe_kick_height: params.toe_kick_height,
             toe_kick_depth: params.toe_kick_depth,
+            toe_kick_thickness: effective_toe_kick_thickness,
             x_offset: 0
           )
           register_created(created, instances[:left_side])
@@ -92,6 +100,7 @@ module AICabinets
             depth: params.depth,
             toe_kick_height: params.toe_kick_height,
             toe_kick_depth: params.toe_kick_depth,
+            toe_kick_thickness: effective_toe_kick_thickness,
             x_offset: params.width - params.panel_thickness
           )
           register_created(created, instances[:right_side])
@@ -143,7 +152,7 @@ module AICabinets
           register_created(created, instances[:back])
           apply_category(instances[:back], 'AICabinets/Back', default_material)
 
-          toe_kick_front = build_toe_kick_front(entities)
+          toe_kick_front = build_toe_kick_front(entities, effective_toe_kick_thickness_mm)
           if toe_kick_front
             instances[:toe_kick_front] = toe_kick_front
             register_created(created, toe_kick_front)
@@ -331,25 +340,25 @@ module AICabinets
           end
         end
 
-        def build_toe_kick_front(entities)
+        def build_toe_kick_front(entities, effective_thickness_mm)
           return unless params.toe_kick_height_mm.positive?
           return unless params.toe_kick_depth_mm.positive?
           return unless params.toe_kick_thickness_mm.positive?
+          return unless effective_thickness_mm.positive?
 
-          width_mm = params.width_mm - (params.panel_thickness_mm * 2)
+          width_mm = params.width_mm
           return unless width_mm.positive?
 
-          effective_thickness_mm = [params.toe_kick_thickness_mm, params.toe_kick_depth_mm].min
-          return unless effective_thickness_mm.positive?
+          thickness_length = Ops::Units.to_length_mm(effective_thickness_mm)
 
           Parts::ToeKickFront.build(
             parent_entities: entities,
             name: 'ToeKick/Front',
             width: Ops::Units.to_length_mm(width_mm),
             height: params.toe_kick_height,
-            thickness: Ops::Units.to_length_mm(effective_thickness_mm),
-            x_offset: params.panel_thickness,
-            y_offset: params.toe_kick_depth,
+            thickness: thickness_length,
+            x_offset: Ops::Units.to_length_mm(0.0),
+            y_offset: thickness_length,
             z_offset: Ops::Units.to_length_mm(0.0)
           )
         end
