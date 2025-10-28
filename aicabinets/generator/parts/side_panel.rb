@@ -12,32 +12,44 @@ module AICabinets
           group = parent_entities.add_group
           group.name = name
 
-          face = group.entities.add_face(*profile_points(depth, height, toe_kick_height, toe_kick_depth))
+          face = group.entities.add_face(
+            Geom::Point3d.new(0, 0, 0),
+            Geom::Point3d.new(0, depth, 0),
+            Geom::Point3d.new(0, depth, height),
+            Geom::Point3d.new(0, 0, height)
+          )
           face.reverse! if face.normal.x < 0
           distance = face.normal.x.positive? ? panel_thickness : -panel_thickness
           face.pushpull(distance)
+
+          cut_toe_kick_notch(
+            group.entities,
+            panel_thickness,
+            toe_kick_height,
+            toe_kick_depth
+          )
 
           translation = Geom::Transformation.translation([x_offset, 0, 0])
           group.transform!(translation)
           group
         end
 
-        def profile_points(depth, height, toe_kick_height, toe_kick_depth)
-          points = []
-          points << Geom::Point3d.new(0, 0, 0)
-          points << Geom::Point3d.new(0, depth, 0)
-          points << Geom::Point3d.new(0, depth, height)
-          points << Geom::Point3d.new(0, 0, height)
+        def cut_toe_kick_notch(entities, panel_thickness, toe_kick_height, toe_kick_depth)
+          return unless toe_kick_depth.positive? && toe_kick_height.positive?
 
-          if toe_kick_depth.positive? && toe_kick_height.positive?
-            points << Geom::Point3d.new(0, 0, toe_kick_height)
-            points << Geom::Point3d.new(0, toe_kick_depth, toe_kick_height)
-            points << Geom::Point3d.new(0, toe_kick_depth, 0)
-          end
+          notch = entities.add_face(
+            Geom::Point3d.new(0, 0, 0),
+            Geom::Point3d.new(panel_thickness, 0, 0),
+            Geom::Point3d.new(panel_thickness, 0, toe_kick_height),
+            Geom::Point3d.new(0, 0, toe_kick_height)
+          )
 
-          points
+          return unless notch
+
+          notch.reverse! if notch.normal.y.positive?
+          notch.pushpull(-toe_kick_depth)
         end
-        private_class_method :profile_points
+        private_class_method :cut_toe_kick_notch
       end
     end
   end
