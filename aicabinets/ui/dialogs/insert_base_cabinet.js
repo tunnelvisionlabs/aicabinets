@@ -440,6 +440,14 @@
     return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
   }
 
+  function defaultSelectionInfo() {
+    return {
+      instancesCount: 0,
+      definitionName: null,
+      sharesDefinition: false
+    };
+  }
+
   function FormController(form) {
     this.form = form;
     this.lengthService = new LengthService();
@@ -467,6 +475,9 @@
     this.scopeInputs = Array.prototype.slice.call(
       form.querySelectorAll('input[name="scope"]')
     );
+    this.scopeHint = this.scopeSection
+      ? this.scopeSection.querySelector('[data-role="scope-hint"]')
+      : null;
     this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
     this.partitionsPositionsField = form.querySelector('[data-partitions-control="positions"]');
@@ -474,6 +485,9 @@
     this.isSubmitting = false;
     this.mode = 'insert';
     this.scope = 'instance';
+    this.scopeDefault = 'instance';
+    this.selectionInfo = defaultSelectionInfo();
+    this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
 
     this.initializeElements();
     this.bindEvents();
@@ -734,24 +748,38 @@
       this.dialogSubtitle.innerHTML = copy.subtitle;
     }
 
-    if (this.insertButton) {
-      this.insertButton.textContent = copy.primaryLabel;
-    }
+    this.primaryActionLabel = copy.primaryLabel;
 
     if (this.scopeSection) {
-      if (mode === 'edit') {
-        this.scopeSection.classList.remove('is-hidden');
-      } else {
-        this.scopeSection.classList.add('is-hidden');
-      }
+      var showScope = mode === 'edit';
+      this.scopeSection.classList.toggle('is-hidden', !showScope);
     }
 
-    var scopeValue = options.scope === 'all' ? 'all' : 'instance';
     if (mode === 'edit') {
+      this.scopeDefault = options.scopeDefault === 'all' ? 'all' : 'instance';
+      var selection = options.selection && typeof options.selection === 'object'
+        ? {
+            instancesCount: options.selection.instancesCount,
+            definitionName: options.selection.definitionName,
+            sharesDefinition: options.selection.sharesDefinition
+          }
+        : defaultSelectionInfo();
+      this.selectionInfo = selection;
+
+      var scopeValue =
+        options.scope === 'all'
+          ? 'all'
+          : options.scope === 'instance'
+          ? 'instance'
+          : this.scopeDefault;
       this.setScope(scopeValue);
     } else {
+      this.scopeDefault = 'instance';
+      this.selectionInfo = defaultSelectionInfo();
       this.setScope('instance');
     }
+
+    this.updatePrimaryActionLabel();
 
     this.updateInsertButtonState();
   };
@@ -761,13 +789,84 @@
     this.scope = normalized;
 
     if (!this.scopeInputs.length) {
+      this.updateScopeHint();
+      this.updatePrimaryActionLabel();
       return;
     }
 
     this.scopeInputs.forEach(function (input) {
       input.checked = input.value === normalized;
     });
+
+    this.updateScopeHint();
+    this.updatePrimaryActionLabel();
   };
+
+  FormController.prototype.updateScopeHint = function updateScopeHint() {
+    if (!this.scopeHint) {
+      return;
+    }
+
+    if (this.mode !== 'edit') {
+      this.scopeHint.textContent = '';
+      this.scopeHint.hidden = true;
+      return;
+    }
+
+    var info = this.selectionInfo || defaultSelectionInfo();
+    var instancesCount = info.instancesCount;
+    if (typeof instancesCount !== 'number' || !isFinite(instancesCount)) {
+      instancesCount = 0;
+    }
+    instancesCount = Math.max(0, Math.round(instancesCount));
+
+    var sharesDefinition = info.sharesDefinition;
+    if (typeof sharesDefinition !== 'boolean') {
+      sharesDefinition = instancesCount > 1;
+    }
+
+    var message = '';
+    if (this.scope === 'all') {
+      var noun = instancesCount === 1 ? 'instance' : 'instances';
+      var name = info.definitionName;
+      var namePart = '';
+      if (typeof name === 'string' && name.trim()) {
+        namePart = " of '" + name.trim() + "'";
+      } else {
+        namePart = ' of this cabinet';
+      }
+      message = 'Will update ' + instancesCount + ' ' + noun + namePart + '.';
+    } else if (sharesDefinition) {
+      message = 'Will make this cabinet unique.';
+    }
+
+    this.scopeHint.textContent = message;
+    this.scopeHint.hidden = !message;
+  };
+
+  FormController.prototype.updatePrimaryActionLabel =
+    function updatePrimaryActionLabel() {
+      if (!this.insertButton) {
+        return;
+      }
+
+      var label = this.primaryActionLabel || '';
+      this.insertButton.textContent = label;
+
+      if (this.mode === 'edit') {
+        var scopeDescription =
+          this.scope === 'all' ? 'all instances' : 'this instance only';
+        var ariaLabel = label;
+        if (scopeDescription) {
+          ariaLabel = label + ' (' + scopeDescription + ')';
+        }
+        this.insertButton.setAttribute('aria-label', ariaLabel);
+      } else if (label) {
+        this.insertButton.setAttribute('aria-label', label);
+      } else {
+        this.insertButton.removeAttribute('aria-label');
+      }
+    };
 
   FormController.prototype.updateUnitsNotice = function updateUnitsNotice() {
     if (!this.unitsNote) {
@@ -1312,7 +1411,12 @@
   }
 
   function normalizeConfiguration(options) {
-    var normalized = { mode: 'insert', scope: 'instance' };
+    var normalized = {
+      mode: 'insert',
+      scope: 'instance',
+      scopeDefault: 'instance',
+      selection: null
+    };
     if (!options || typeof options !== 'object') {
       return normalized;
     }
@@ -1321,8 +1425,61 @@
       normalized.mode = 'edit';
     }
 
+    if (options.scope_default === 'all') {
+      normalized.scopeDefault = 'all';
+    }
+
     if (options.scope === 'all') {
       normalized.scope = 'all';
+    } else if (options.scope === 'instance') {
+      normalized.scope = 'instance';
+    } else {
+      normalized.scope = normalized.scopeDefault;
+    }
+
+    if (normalized.mode === 'edit') {
+      normalized.selection = normalizeSelection(options.selection);
+    } else {
+      normalized.scope = 'instance';
+      normalized.scopeDefault = 'instance';
+      normalized.selection = null;
+    }
+
+    return normalized;
+  }
+
+  function normalizeSelection(selection) {
+    var normalized = defaultSelectionInfo();
+    if (!selection || typeof selection !== 'object') {
+      return normalized;
+    }
+
+    var countValue = selection.instances_count;
+    if (countValue == null) {
+      countValue = selection.instancesCount;
+    }
+    countValue = Number(countValue);
+    if (isFinite(countValue)) {
+      normalized.instancesCount = Math.max(0, Math.round(countValue));
+    }
+
+    var nameValue = selection.definition_name;
+    if (nameValue == null) {
+      nameValue = selection.definitionName;
+    }
+    if (typeof nameValue === 'string') {
+      var trimmed = nameValue.trim();
+      normalized.definitionName = trimmed ? trimmed : null;
+    }
+
+    var sharesValue = selection.shares_definition;
+    if (sharesValue == null) {
+      sharesValue = selection.sharesDefinition;
+    }
+    if (typeof sharesValue === 'boolean') {
+      normalized.sharesDefinition = sharesValue;
+    } else {
+      normalized.sharesDefinition = normalized.instancesCount > 1;
     }
 
     return normalized;
@@ -1339,7 +1496,12 @@
       controller.configureMode(pendingConfiguration);
       pendingConfiguration = null;
     } else {
-      controller.configureMode({ mode: 'insert', scope: 'instance' });
+      controller.configureMode({
+        mode: 'insert',
+        scope: 'instance',
+        scopeDefault: 'instance',
+        selection: null
+      });
     }
     if (pendingUnitSettings) {
       controller.setUnits(pendingUnitSettings);
