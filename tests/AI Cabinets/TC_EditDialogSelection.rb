@@ -14,6 +14,7 @@ class TC_EditDialogSelection < TestUp::TestCase
     panel_thickness_mm: 19.0,
     toe_kick_height_mm: 0.0,
     toe_kick_depth_mm: 0.0,
+    toe_kick_thickness_mm: 19.0,
     back_thickness_mm: 6.0,
     top_thickness_mm: 19.0,
     bottom_thickness_mm: 19.0

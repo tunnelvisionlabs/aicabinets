@@ -77,6 +77,7 @@ class OverridesTest < Minitest::Test
       panel_thickness_mm
       toe_kick_height_mm
       toe_kick_depth_mm
+      toe_kick_thickness_mm
       front
       shelves
       partitions
@@ -91,6 +92,11 @@ class OverridesTest < Minitest::Test
     assert_equal(2, partitions['count'])
     assert_equal([100.0, 250.123], partitions['positions_mm'])
     assert_nil(partitions['panel_thickness_mm'])
+    assert_in_delta(
+      params[:toe_kick_thickness_mm],
+      cabinet_base['toe_kick_thickness_mm'],
+      0.001
+    )
   end
 
   def test_load_effective_mm_merges_overrides

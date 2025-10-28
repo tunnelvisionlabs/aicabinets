@@ -129,6 +129,18 @@ module AICabinets
 
         copy = deep_copy(params_mm)
 
+        thickness_value =
+          if params_mm.key?(:toe_kick_thickness_mm)
+            value = params_mm[:toe_kick_thickness_mm]
+            unless value.is_a?(Numeric) && value.finite?
+              raise ArgumentError, 'toe_kick_thickness_mm must be a finite number in millimeters'
+            end
+            value.to_f
+          else
+            params_mm[:panel_thickness_mm].to_f
+          end
+        copy[:toe_kick_thickness_mm] = thickness_value
+
         if copy.key?(:front)
           front_value = copy[:front]
           front_string =

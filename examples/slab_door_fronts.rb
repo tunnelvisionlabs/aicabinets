@@ -15,7 +15,8 @@ begin
     height_mm: 720.0,
     panel_thickness_mm: 18.0,
     toe_kick_height_mm: 100.0,
-    toe_kick_depth_mm: 50.0
+    toe_kick_depth_mm: 50.0,
+    toe_kick_thickness_mm: 18.0
   }
 
   fronts = %w[doors_left doors_right doors_double]

@@ -13,6 +13,7 @@ class TC_ToeKickOrientation < TestUp::TestCase
     panel_thickness_mm: 19.0,
     toe_kick_height_mm: 0.0,
     toe_kick_depth_mm: 0.0,
+    toe_kick_thickness_mm: 19.0,
     back_thickness_mm: 6.0,
     top_thickness_mm: 19.0,
     bottom_thickness_mm: 19.0
@@ -20,7 +21,8 @@ class TC_ToeKickOrientation < TestUp::TestCase
 
   TOE_KICK_PARAMS_MM = BASE_PARAMS_MM.merge(
     toe_kick_height_mm: 100.0,
-    toe_kick_depth_mm: 75.0
+    toe_kick_depth_mm: 75.0,
+    toe_kick_thickness_mm: 19.0
   ).freeze
 
   def setup
@@ -166,6 +168,54 @@ class TC_ToeKickOrientation < TestUp::TestCase
       assert_values_close([0.0, depth_mm], bottom_values, tolerance_mm,
                           'No toe-kick notch should be present when height is zero')
     end
+  end
+
+  def test_toe_kick_front_board_dimensions_and_tagging
+    params_mm = TOE_KICK_PARAMS_MM.merge(toe_kick_thickness_mm: 16.0)
+    _, result = build_carcass_definition(params_mm)
+
+    front = result.instances[:toe_kick_front]
+    refute_nil(front, 'Expected toe-kick front board to be created')
+    assert_kind_of(Sketchup::ComponentInstance, front)
+
+    tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
+    bbox = front.bounds
+
+    min_x = AICabinetsTestHelper.mm_from_length(bbox.min.x)
+    max_x = AICabinetsTestHelper.mm_from_length(bbox.max.x)
+    assert_in_delta(params_mm[:panel_thickness_mm], min_x, tolerance_mm,
+                    'Front board should start at the inside face of the left side panel')
+    expected_max_x = params_mm[:width_mm] - params_mm[:panel_thickness_mm]
+    assert_in_delta(expected_max_x, max_x, tolerance_mm,
+                    'Front board should meet the inside face of the right side panel')
+
+    min_y = AICabinetsTestHelper.mm_from_length(bbox.min.y)
+    max_y = AICabinetsTestHelper.mm_from_length(bbox.max.y)
+    toe_depth_mm = params_mm[:toe_kick_depth_mm]
+    effective_thickness_mm = [params_mm[:toe_kick_thickness_mm], toe_depth_mm].min
+    assert_in_delta(toe_depth_mm - effective_thickness_mm, min_y, tolerance_mm,
+                    'Front board front face should align with the toe recess opening')
+    assert_in_delta(toe_depth_mm, max_y, tolerance_mm,
+                    'Front board back face should align with the toe return plane')
+
+    min_z = AICabinetsTestHelper.mm_from_length(bbox.min.z)
+    max_z = AICabinetsTestHelper.mm_from_length(bbox.max.z)
+    assert_in_delta(0.0, min_z, tolerance_mm,
+                    'Front board bottom should align with cabinet bottom reference plane')
+    assert_in_delta(params_mm[:toe_kick_height_mm], max_z, tolerance_mm,
+                    'Front board height should match the toe kick height')
+
+    assert_equal('ToeKick/Front', front.name)
+    assert_equal('ToeKick/Front', front.definition.name)
+    assert_equal('AICabinets/ToeKick', front.layer&.name)
+  end
+
+  def test_toe_kick_front_board_skipped_when_thickness_non_positive
+    params_mm = TOE_KICK_PARAMS_MM.merge(toe_kick_thickness_mm: 0.0)
+    _, result = build_carcass_definition(params_mm)
+
+    assert_nil(result.instances[:toe_kick_front],
+               'Front board should not be created when thickness is zero')
   end
 
   private
