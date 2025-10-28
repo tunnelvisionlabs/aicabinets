@@ -47,7 +47,7 @@ module AICabinets
           return unless ensure_html_dialog_support
 
           dialog = ensure_dialog
-          set_dialog_context(mode: :insert, prefill: nil)
+          set_dialog_context(mode: :insert, prefill: nil, selection: nil)
           update_dialog_title(dialog)
           show_dialog(dialog)
           dialog
@@ -64,8 +64,10 @@ module AICabinets
             return nil
           end
 
+          selection_details = selection_details_for(instance)
+
           dialog = ensure_dialog
-          set_dialog_context(mode: :edit, prefill: params)
+          set_dialog_context(mode: :edit, prefill: params, selection: selection_details)
           update_dialog_title(dialog)
           show_dialog(dialog)
           dialog
@@ -95,13 +97,14 @@ module AICabinets
         private_class_method :build_dialog
 
         def dialog_context
-          @dialog_context ||= { mode: :insert, prefill: nil }
+          @dialog_context ||= { mode: :insert, prefill: nil, selection: nil }
         end
         private_class_method :dialog_context
 
-        def set_dialog_context(mode:, prefill: nil)
+        def set_dialog_context(mode:, prefill: nil, selection: nil)
           dialog_context[:mode] = mode
           dialog_context[:prefill] = prefill
+          dialog_context[:selection] = selection.is_a?(Hash) ? selection.dup : nil
         end
         private_class_method :set_dialog_context
 
@@ -114,6 +117,11 @@ module AICabinets
           dialog_context[:prefill]
         end
         private_class_method :dialog_prefill
+
+        def dialog_selection
+          dialog_context[:selection]
+        end
+        private_class_method :dialog_selection
 
         def attach_callbacks(dialog)
           dialog.add_action_callback('dialog_ready') do |_action_context, _payload|
@@ -152,7 +160,11 @@ module AICabinets
 
         def deliver_dialog_configuration(dialog)
           configuration = { mode: dialog_mode.to_s }
-          configuration[:scope] = 'instance' if dialog_mode == :edit
+          if dialog_mode == :edit
+            configuration[:scope] = 'instance'
+            configuration[:scope_default] = 'instance'
+            configuration[:selection] = dialog_selection
+          end
           payload = JSON.generate(configuration)
           script = <<~JS
             (function () {
@@ -503,15 +515,58 @@ module AICabinets
         end
         private_class_method :fetch_definition_for_all_scope
 
+        def selection_details_for(instance)
+          details = {
+            definition_name: nil,
+            instances_count: 0,
+            shares_definition: false
+          }
+
+          return details unless defined?(Sketchup::ComponentInstance)
+          return details unless instance.is_a?(Sketchup::ComponentInstance)
+
+          definition = instance.definition
+          return details unless definition
+          return details if definition.respond_to?(:valid?) && !definition.valid?
+
+          details[:definition_name] = sanitized_definition_name(definition)
+          count = count_definition_instances(definition)
+          count_value = count.respond_to?(:to_i) ? count.to_i : 0
+          details[:instances_count] = count_value
+          details[:shares_definition] = count_value > 1
+          details
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to build selection metadata: #{e.message}")
+          details
+        end
+
         def count_definition_instances(definition)
           return 0 unless definition && definition.respond_to?(:instances)
 
           instances = definition.instances
-          instances.respond_to?(:size) ? instances.size : Array(instances).size
+          count = if instances.respond_to?(:size)
+                    instances.size
+                  else
+                    Array(instances).size
+                  end
+          count.respond_to?(:to_i) ? count.to_i : 0
         rescue StandardError
           0
         end
         private_class_method :count_definition_instances
+
+        def sanitized_definition_name(definition)
+          return unless definition.respond_to?(:name)
+
+          name = definition.name
+          return unless name.is_a?(String)
+
+          stripped = name.strip
+          stripped.empty? ? nil : stripped
+        rescue StandardError
+          nil
+        end
+        private_class_method :sanitized_definition_name
 
         def confirm_edit_all_instances?(instance_count)
           return true unless instance_count && instance_count > 1

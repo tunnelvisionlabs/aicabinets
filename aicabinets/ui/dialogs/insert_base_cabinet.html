@@ -18,6 +18,39 @@
 
       <main class="dialog__content" role="main">
         <form class="form" data-role="insert-form" novalidate>
+          <section class="dialog__scope is-hidden" data-role="scope-section">
+            <fieldset class="scope-toggle" data-field="scope">
+              <legend class="scope-toggle__legend" id="scope-toggle-legend">
+                Scope
+              </legend>
+              <div
+                class="scope-toggle__options"
+                role="radiogroup"
+                aria-labelledby="scope-toggle-legend"
+              >
+                <label class="scope-toggle__option">
+                  <input
+                    type="radio"
+                    name="scope"
+                    value="instance"
+                    checked
+                  />
+                  <span>This instance only</span>
+                </label>
+                <label class="scope-toggle__option">
+                  <input type="radio" name="scope" value="all" />
+                  <span>All instances</span>
+                </label>
+              </div>
+            </fieldset>
+            <p
+              class="scope-toggle__hint"
+              data-role="scope-hint"
+              aria-live="polite"
+              hidden
+            ></p>
+          </section>
+
           <p class="form__notice" data-role="units-note">
             Values without a suffix use the model’s display unit. Examples: 600, 450mm, 2' 3-1/2", 24 in.
           </p>
@@ -180,31 +213,6 @@
                 Comma-separated distances from the left interior wall. Values must increase and use allowed units.
               </p>
               <p class="field-error" data-error-for="partitions_positions" aria-live="polite"></p>
-            </div>
-          </section>
-
-          <section class="form__section is-hidden" data-role="scope-section">
-            <h2 class="form__section-title">Scope</h2>
-            <div class="form-field form-field--radio-group" data-field="scope">
-              <label class="radio-option">
-                <input
-                  type="radio"
-                  name="scope"
-                  value="instance"
-                  checked
-                />
-                <span>
-                  This instance only
-                  <small>Updates just the selected cabinet.</small>
-                </span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="scope" value="all" />
-                <span>
-                  All instances (shared definition)
-                  <small>Apply changes to every instance of this cabinet.</small>
-                </span>
-              </label>
             </div>
           </section>
         </form>

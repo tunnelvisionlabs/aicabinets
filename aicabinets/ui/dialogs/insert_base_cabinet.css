@@ -52,6 +52,87 @@ body {
   gap: 24px;
 }
 
+.dialog__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(30, 136, 229, 0.25);
+  background-color: rgba(30, 136, 229, 0.08);
+}
+
+.scope-toggle {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.scope-toggle__legend {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.scope-toggle__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scope-toggle__option {
+  position: relative;
+  flex: 1 1 160px;
+}
+
+.scope-toggle__option input[type='radio'] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.scope-toggle__option span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(30, 136, 229, 0.35);
+  background-color: rgba(255, 255, 255, 0.95);
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.scope-toggle__option span:hover {
+  background-color: rgba(30, 136, 229, 0.12);
+}
+
+.scope-toggle__option input[type='radio']:focus-visible + span {
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.35);
+}
+
+.scope-toggle__option input[type='radio']:checked + span {
+  background-color: #1e88e5;
+  color: #ffffff;
+  border-color: #1e88e5;
+  box-shadow: 0 0 0 1px rgba(30, 136, 229, 0.55);
+}
+
+.scope-toggle__hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.75);
+}
+
 .form__notice {
   margin: 0;
   padding: 12px 16px;
@@ -111,32 +192,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.form-field--radio-group {
-  gap: 12px;
-}
-
-.radio-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.radio-option input[type='radio'] {
-  margin-top: 4px;
-}
-
-.radio-option span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-weight: 600;
-}
-
-.radio-option span small {
-  font-weight: 400;
-  color: rgba(0, 0, 0, 0.6);
 }
 
 .form-field label {
@@ -238,6 +293,10 @@ body {
   .dialog__content {
     padding: 12px;
   }
+
+  .scope-toggle__option {
+    flex-basis: 140px;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -248,6 +307,11 @@ body {
   .dialog__content {
     border-color: rgba(255, 255, 255, 0.2);
     background-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .dialog__scope {
+    border-color: rgba(144, 202, 249, 0.45);
+    background-color: rgba(144, 202, 249, 0.12);
   }
 
   .form__notice {
@@ -264,6 +328,30 @@ body {
   .form-field select {
     background-color: rgba(30, 30, 30, 0.9);
     border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .scope-toggle__option span {
+    background-color: rgba(30, 30, 30, 0.9);
+    border-color: rgba(144, 202, 249, 0.45);
+  }
+
+  .scope-toggle__option span:hover {
+    background-color: rgba(144, 202, 249, 0.18);
+  }
+
+  .scope-toggle__option input[type='radio']:focus-visible + span {
+    box-shadow: 0 0 0 3px rgba(144, 202, 249, 0.4);
+  }
+
+  .scope-toggle__option input[type='radio']:checked + span {
+    background-color: #42a5f5;
+    border-color: #42a5f5;
+    color: #0d1b2a;
+    box-shadow: 0 0 0 1px rgba(144, 202, 249, 0.6);
+  }
+
+  .scope-toggle__hint {
+    color: rgba(255, 255, 255, 0.85);
   }
 
   .form-field input[data-invalid='true'],
