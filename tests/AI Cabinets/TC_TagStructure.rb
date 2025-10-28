@@ -89,6 +89,31 @@ class TC_TagStructure < TestUp::TestCase
            'Collision tag should be stored within the AICabinets folder')
   end
 
+  def test_ensure_structure_adopts_existing_cabinet_tag_when_owned
+    skip('SketchUp release does not support tag folders') unless defined?(Sketchup::LayerFolder)
+
+    model = Sketchup.active_model
+    layers = model.layers
+
+    existing = layers.add('Cabinet')
+    existing.visible = false
+    layers.add('AICabinets/Sides')
+
+    tag = AICabinets::Tags.ensure_structure!(model)
+
+    folder = find_folder(layers, AICabinets::Tags::CABINET_FOLDER_NAME)
+    refute_nil(folder, 'Expected folder to exist after adopting owned cabinet tag')
+
+    assert(tag&.valid?, 'Expected ensure_structure! to return an adopted tag')
+    assert_same(existing, tag, 'Existing cabinet tag should be reused')
+    assert_same(folder, tag.folder)
+    assert_equal('Cabinet', tag.name)
+    assert_equal(false, tag.visible?, 'Visibility should be preserved for adopted cabinet tag')
+
+    assert_nil(layers[AICabinets::Tags::CABINET_TAG_COLLISION_NAME],
+               'Collision tag should not be created when adopting owned cabinet tag')
+  end
+
   def test_ensure_structure_migrates_other_owned_tags
     skip('SketchUp release does not support tag folders') unless defined?(Sketchup::LayerFolder)
 

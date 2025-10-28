@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
 require 'sketchup.rb'
 
 module AICabinets
@@ -36,7 +35,7 @@ module AICabinets
 
       folder = infer_folder(layers)
       base_names = owned_base_names_present(layers)
-      base_names << CABINET_TAG_NAME
+      base_names << CABINET_TAG_NAME unless base_names.include?(CABINET_TAG_NAME)
 
       changes_required =
         folder.nil? ||
@@ -46,8 +45,7 @@ module AICabinets
       operation_open = false
       begin
         if changes_required
-          model.start_operation(OPERATION_NAME, true)
-          operation_open = true
+          operation_open = model.start_operation(OPERATION_NAME, true)
           folder ||= layers.add_folder(CABINET_FOLDER_NAME)
 
           base_names.each do |base_name|
@@ -122,15 +120,13 @@ module AICabinets
     private_class_method :owned_base_name_from
 
     def owned_base_names_present(layers)
-      names = Set.new
+      names = []
       return names unless layers.respond_to?(:each)
 
       layers.each do |tag|
         base_name = base_name_from_tag(tag)
         next unless base_name
-        next unless OWNED_TAG_BASE_NAMES.include?(base_name)
-
-        names << base_name
+        names << base_name unless names.include?(base_name)
       end
 
       names
@@ -150,9 +146,7 @@ module AICabinets
       return fallback if fallback
 
       folder = tag.respond_to?(:folder) ? tag.folder : nil
-      if folder && folder_display_name(folder) == CABINET_FOLDER_NAME && OWNED_TAG_BASE_NAMES.include?(name)
-        return name
-      end
+      return name if folder && folder_display_name(folder) == CABINET_FOLDER_NAME
 
       nil
     end
@@ -174,13 +168,20 @@ module AICabinets
       return true if legacy_tag
 
       owned_tag = find_marked_tag(layers, base_name)
-      return false if owned_tag && tag_in_folder?(owned_tag, folder)
+      if owned_tag
+        return false if tag_in_folder?(owned_tag, folder)
+        return true
+      end
 
       preferred_tag = layers[base_name]
-      return true if collision_tag?(preferred_tag, folder, base_name)
+      if base_name == CABINET_TAG_NAME && likely_owned_cabinet_tag?(preferred_tag) && !tag_in_folder?(preferred_tag, folder)
+        return true
+      end
+
+      return true if collision_tag?(layers, preferred_tag, folder, base_name)
 
       fallback_tag = find_fallback_candidate(layers, base_name)
-      return true if collision_tag?(fallback_tag, folder, base_name)
+      return true if collision_tag?(layers, fallback_tag, folder, base_name)
 
       return true if base_name == CABINET_TAG_NAME && preferred_tag.nil? && fallback_tag.nil? && owned_tag.nil?
 
@@ -208,21 +209,24 @@ module AICabinets
     end
     private_class_method :find_fallback_candidate
 
-    def collision_tag?(tag, folder, base_name)
+    def collision_tag?(layers, tag, folder, base_name)
       return false unless tag
-      return false if usable_as_owned_tag?(tag, folder, base_name)
+      return false if usable_as_owned_tag?(layers, tag, folder, base_name)
 
       true
     end
     private_class_method :collision_tag?
 
-    def usable_as_owned_tag?(tag, folder, base_name)
+    def usable_as_owned_tag?(layers, tag, folder, base_name)
       return false unless tag.respond_to?(:valid?) && tag.valid?
       return true if owned_tag?(tag, base_name)
 
       tag_folder = tag.respond_to?(:folder) ? tag.folder : nil
-      tag_folder && folder && folder_display_name(tag_folder) == CABINET_FOLDER_NAME &&
-        OWNED_TAG_BASE_NAMES.include?(tag.name.to_s)
+      if tag_folder && folder && folder_display_name(tag_folder) == CABINET_FOLDER_NAME
+        return true if owned_tag?(tag) || tag.name.to_s == base_name
+      end
+
+      base_name == CABINET_TAG_NAME && likely_owned_cabinet_tag?(tag)
     end
     private_class_method :usable_as_owned_tag?
 
@@ -234,7 +238,7 @@ module AICabinets
 
       return value == base_name if base_name
 
-      OWNED_TAG_BASE_NAMES.include?(value)
+      true
     end
     private_class_method :owned_tag?
 
@@ -249,7 +253,7 @@ module AICabinets
 
       legacy_tag = layers[legacy_name_for(base_name)]
       preferred_tag = layers[base_name]
-      collision = collision_tag?(preferred_tag, folder, base_name)
+      collision = collision_tag?(layers, preferred_tag, folder, base_name)
 
       if legacy_tag
         target_name = next_available_owned_name(layers, base_name, prefer_base: !collision, except: [legacy_tag])
@@ -264,7 +268,7 @@ module AICabinets
       end
 
       fallback_tag = find_fallback_candidate(layers, base_name)
-      if fallback_tag && usable_as_owned_tag?(fallback_tag, folder, base_name)
+      if fallback_tag && usable_as_owned_tag?(layers, fallback_tag, folder, base_name)
         assign_folder(fallback_tag, folder)
         mark_owned_tag(fallback_tag, base_name)
         return fallback_tag
@@ -414,5 +418,21 @@ module AICabinets
       tag.name = target_name
     end
     private_class_method :rename_tag
+
+    def likely_owned_cabinet_tag?(tag)
+      return false unless tag
+      return false unless tag.respond_to?(:name)
+
+      name = tag.name.to_s
+      return false unless name == CABINET_TAG_NAME
+
+      return true if owned_tag?(tag, CABINET_TAG_NAME)
+
+      folder = tag.respond_to?(:folder) ? tag.folder : nil
+      return true if folder && folder_display_name(folder) == CABINET_FOLDER_NAME
+
+      false
+    end
+    private_class_method :likely_owned_cabinet_tag?
   end
 end
