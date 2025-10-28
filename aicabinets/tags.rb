@@ -45,7 +45,8 @@ module AICabinets
       operation_open = false
       begin
         if changes_required
-          operation_open = model.start_operation(OPERATION_NAME, true)
+          model.start_operation(OPERATION_NAME, true)
+          operation_open = true
           folder ||= layers.add_folder(CABINET_FOLDER_NAME)
 
           base_names.each do |base_name|
@@ -226,7 +227,7 @@ module AICabinets
         return true if owned_tag?(tag) || tag.name.to_s == base_name
       end
 
-      base_name == CABINET_TAG_NAME && likely_owned_cabinet_tag?(tag)
+      base_name == CABINET_TAG_NAME && likely_owned_cabinet_tag?(layers, tag)
     end
     private_class_method :usable_as_owned_tag?
 
@@ -419,7 +420,7 @@ module AICabinets
     end
     private_class_method :rename_tag
 
-    def likely_owned_cabinet_tag?(tag)
+    def likely_owned_cabinet_tag?(layers, tag)
       return false unless tag
       return false unless tag.respond_to?(:name)
 
@@ -431,8 +432,24 @@ module AICabinets
       folder = tag.respond_to?(:folder) ? tag.folder : nil
       return true if folder && folder_display_name(folder) == CABINET_FOLDER_NAME
 
-      false
+      other_owned_tags_present?(layers, exclude: tag)
     end
     private_class_method :likely_owned_cabinet_tag?
+
+    def other_owned_tags_present?(layers, exclude: nil)
+      return false unless layers.respond_to?(:each)
+
+      layers.each do |candidate|
+        next if exclude && candidate.equal?(exclude)
+
+        base_name = base_name_from_tag(candidate)
+        next unless base_name
+
+        return true
+      end
+
+      false
+    end
+    private_class_method :other_owned_tags_present?
   end
 end
