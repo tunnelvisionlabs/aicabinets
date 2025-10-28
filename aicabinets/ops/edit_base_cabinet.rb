@@ -6,6 +6,7 @@ require 'sketchup.rb'
 
 Sketchup.require('aicabinets/generator/carcass')
 Sketchup.require('aicabinets/ops/insert_base_cabinet')
+Sketchup.require('aicabinets/tags')
 
 module AICabinets
   module Ops
@@ -35,6 +36,8 @@ module AICabinets
 
         scope_value = normalize_scope(scope)
         params = validate_params!(params_mm)
+
+        AICabinets::Tags.ensure_structure!(model)
 
         selection_result = selected_cabinet_instance(model)
         unless selection_result.error_code.nil?

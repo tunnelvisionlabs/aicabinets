@@ -6,6 +6,7 @@ require 'sketchup.rb'
 
 Sketchup.require('aicabinets/generator/carcass')
 Sketchup.require('aicabinets/ops/tags')
+Sketchup.require('aicabinets/tags')
 
 module AICabinets
   module Ops
@@ -22,7 +23,10 @@ module AICabinets
       DEF_KEY = 'def_key'
       LEGACY_FINGERPRINT_KEY = 'fingerprint'
       PARAMS_JSON_KEY = 'params_json_mm'
-      WRAPPER_TAG_NAME = 'AICabinets/Cabinet'
+      WRAPPER_TAG_NAME = AICabinets::Tags::LEGACY_CABINET_TAG_NAME
+
+      PREFERRED_WRAPPER_TAG_NAME = AICabinets::Tags::CABINET_TAG_NAME
+      CABINET_TAG_COLLISION_NAME = AICabinets::Tags::CABINET_TAG_COLLISION_NAME
 
       REQUIRED_LENGTH_KEYS = %i[
         width_mm
@@ -56,6 +60,8 @@ module AICabinets
         params = validate_params!(params_mm)
         def_key, params_json = build_definition_key(params)
 
+        cabinet_tag = AICabinets::Tags.ensure_structure!(model)
+
         operation_open = false
         model.start_operation(OPERATION_NAME, true)
         operation_open = true
@@ -63,7 +69,7 @@ module AICabinets
         definition = ensure_definition(model, params, def_key, params_json)
         transform = placement_transform(model, point3d)
         instance = add_instance(model, definition, transform)
-        Tags.assign!(instance, WRAPPER_TAG_NAME)
+        assign_wrapper_tag(instance, cabinet_tag)
         model.commit_operation
         operation_open = false
         select_instance(model, instance)
@@ -85,6 +91,35 @@ module AICabinets
         raise ArgumentError, 'point3d must be a Geom::Point3d'
       end
       private_class_method :validate_point!
+
+      def assign_wrapper_tag(instance, cabinet_tag)
+        return unless instance.respond_to?(:layer=)
+
+        model = instance.model
+        tag =
+          if cabinet_tag && cabinet_tag.valid?
+            cabinet_tag
+          else
+            fallback_name = cabinet_tag_name_for(model)
+            Ops::Tags.ensure_tag(model, fallback_name)
+          end
+
+        instance.layer = tag if tag
+        tag
+      end
+      private_class_method :assign_wrapper_tag
+
+      def cabinet_tag_name_for(model)
+        layers = model.layers
+        preferred = layers[PREFERRED_WRAPPER_TAG_NAME]
+        return preferred.name if preferred && preferred.valid?
+
+        collision = layers[CABINET_TAG_COLLISION_NAME]
+        return collision.name if collision && collision.valid?
+
+        WRAPPER_TAG_NAME
+      end
+      private_class_method :cabinet_tag_name_for
 
       def validate_params!(params_mm)
         unless params_mm.is_a?(Hash)

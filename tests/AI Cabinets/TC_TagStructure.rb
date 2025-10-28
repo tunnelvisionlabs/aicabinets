@@ -1,0 +1,90 @@
+# frozen_string_literal: true
+
+require 'testup/testcase'
+require_relative 'suite_helper'
+
+Sketchup.require('aicabinets/tags')
+
+class TC_TagStructure < TestUp::TestCase
+  def setup
+    AICabinetsTestHelper.clean_model!
+  end
+
+  def teardown
+    AICabinetsTestHelper.clean_model!
+  end
+
+  def test_ensure_structure_creates_folder_and_tag
+    skip('SketchUp release does not support tag folders') unless defined?(Sketchup::LayerFolder)
+
+    model = Sketchup.active_model
+
+    tag = AICabinets::Tags.ensure_structure!(model)
+
+    layers = model.layers
+    folder = find_folder(layers, AICabinets::Tags::CABINET_FOLDER_NAME)
+
+    refute_nil(folder, 'Expected AICabinets folder to be created')
+    assert_kind_of(Sketchup::LayerFolder, folder)
+
+    assert(tag&.valid?, 'Expected ensure_structure! to return a valid tag')
+    assert_equal(AICabinets::Tags::CABINET_TAG_NAME, tag.name)
+    assert_same(folder, tag.folder)
+
+    legacy = layers[AICabinets::Tags::LEGACY_CABINET_TAG_NAME]
+    assert_nil(legacy, 'Legacy slash-named tag should not remain after ensuring structure')
+  end
+
+  def test_ensure_structure_migrates_legacy_tag_preserving_visibility
+    skip('SketchUp release does not support tag folders') unless defined?(Sketchup::LayerFolder)
+
+    model = Sketchup.active_model
+    layers = model.layers
+
+    legacy = layers.add(AICabinets::Tags::LEGACY_CABINET_TAG_NAME)
+    legacy.visible = false
+
+    tag = AICabinets::Tags.ensure_structure!(model)
+
+    assert_equal(AICabinets::Tags::CABINET_TAG_NAME, tag.name)
+    assert_equal(false, tag.visible?, 'Migrated tag should preserve legacy visibility state')
+
+    folder = find_folder(layers, AICabinets::Tags::CABINET_FOLDER_NAME)
+    refute_nil(folder, 'Expected migration to create the AICabinets folder')
+    assert_same(folder, tag.folder)
+
+    legacy_after = layers[AICabinets::Tags::LEGACY_CABINET_TAG_NAME]
+    assert_nil(legacy_after, 'Legacy slash-named tag should no longer be present')
+  end
+
+  def test_ensure_structure_handles_user_cabinet_tag_collision
+    skip('SketchUp release does not support tag folders') unless defined?(Sketchup::LayerFolder)
+
+    model = Sketchup.active_model
+    layers = model.layers
+
+    user_tag = layers.add('Cabinet')
+    user_tag.visible = true
+
+    tag = AICabinets::Tags.ensure_structure!(model)
+
+    refute_same(user_tag, tag, 'Extension should not repurpose user-owned Cabinet tag')
+    assert_equal('Cabinet', user_tag.name, 'User-owned tag should remain untouched')
+
+    assert_equal(AICabinets::Tags::CABINET_TAG_COLLISION_NAME, tag.name)
+
+    folder = find_folder(layers, AICabinets::Tags::CABINET_FOLDER_NAME)
+    refute_nil(folder, 'Expected folder to exist after handling collision')
+    assert_same(folder, tag.folder)
+  end
+
+  private
+
+  def find_folder(layers, name)
+    return unless layers.respond_to?(:folders)
+
+    layers.folders.find do |folder|
+      folder.respond_to?(:display_name) && folder.display_name.to_s == name
+    end
+  end
+end
