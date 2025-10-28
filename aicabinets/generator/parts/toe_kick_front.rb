@@ -32,7 +32,7 @@ module AICabinets
           instance = group.to_component
           instance.name = name if instance.respond_to?(:name=)
           definition = instance.definition
-          definition.name = name if definition&.respond_to?(:name=)
+          definition.name = name if definition.respond_to?(:name=)
 
           instance
         end
