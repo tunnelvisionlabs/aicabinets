@@ -45,8 +45,7 @@ module AICabinets
       operation_open = false
       begin
         if changes_required
-          model.start_operation(OPERATION_NAME, true)
-          operation_open = true
+          operation_open = model.start_operation(OPERATION_NAME, true)
           folder ||= layers.add_folder(CABINET_FOLDER_NAME)
 
           base_names.each do |base_name|
@@ -56,7 +55,7 @@ module AICabinets
 
           tag = normalize_owned_tag(layers, folder, CABINET_TAG_NAME, create_if_missing: true)
 
-          model.commit_operation
+          model.commit_operation if operation_open
           operation_open = false
         else
           folder ||= infer_folder(layers)
@@ -175,7 +174,8 @@ module AICabinets
       end
 
       preferred_tag = layers[base_name]
-      if base_name == CABINET_TAG_NAME && likely_owned_cabinet_tag?(preferred_tag) && !tag_in_folder?(preferred_tag, folder)
+      if base_name == CABINET_TAG_NAME && likely_owned_cabinet_tag?(layers, preferred_tag) &&
+         !tag_in_folder?(preferred_tag, folder)
         return true
       end
 
