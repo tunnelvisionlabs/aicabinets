@@ -43,12 +43,12 @@ class TC_ToeKickOrientation < TestUp::TestCase
     toe_height_mm = TOE_KICK_PARAMS_MM[:toe_kick_height_mm]
     depth_mm = TOE_KICK_PARAMS_MM[:depth_mm]
 
-    expected_bottom = [0.0, toe_depth_mm, depth_mm]
+    expected_bottom = [toe_depth_mm, depth_mm]
 
     sides.each do |side|
       bottom_values = y_values_at_z(side, 0.0, tolerance_mm)
       assert_values_close(expected_bottom, bottom_values, tolerance_mm,
-                          'Bottom edge should span front notch and back depth')
+                          'Remaining bottom should begin at the notch step and extend to the back')
 
       step_values = y_values_at_z(side, toe_height_mm, tolerance_mm)
       assert_operator(step_values.length, :>=, 2,
@@ -98,15 +98,21 @@ class TC_ToeKickOrientation < TestUp::TestCase
     toe_height_mm = TOE_KICK_PARAMS_MM[:toe_kick_height_mm]
 
     sides.each do |side|
-      bottom_values = y_values_at_z(side, 0.0, tolerance_mm)
-      notch_depth = bottom_values[1] - bottom_values[0]
-      assert_in_delta(toe_depth_mm, notch_depth, tolerance_mm,
-                      'Toe-kick notch depth should match the configured depth')
-
       step_values = y_values_at_z(side, toe_height_mm, tolerance_mm)
+      assert_operator(step_values.length, :>=, 2,
+                      'Toe-kick step should include the front edge and notch depth')
+
+      front_position = step_values[0]
       notch_position = step_values[1]
+
+      assert_in_delta(0.0, front_position, tolerance_mm,
+                      'Toe-kick front edge should align with the cabinet front (Y=0)')
       assert_in_delta(toe_depth_mm, notch_position, tolerance_mm,
                       'Toe-kick step should align with the configured depth from the front')
+
+      notch_depth = notch_position - front_position
+      assert_in_delta(toe_depth_mm, notch_depth, tolerance_mm,
+                      'Toe-kick notch depth should match the configured depth')
     end
   end
 
