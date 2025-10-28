@@ -351,6 +351,9 @@ module AICabinets
 
           thickness_length = Ops::Units.to_length_mm(effective_thickness_mm)
 
+          front_plane_mm = params.toe_kick_depth_mm
+          rear_plane_mm = front_plane_mm + effective_thickness_mm
+
           Parts::ToeKickFront.build(
             parent_entities: entities,
             name: 'ToeKick/Front',
@@ -358,7 +361,7 @@ module AICabinets
             height: params.toe_kick_height,
             thickness: thickness_length,
             x_offset: Ops::Units.to_length_mm(0.0),
-            y_offset: Ops::Units.to_length_mm(params.toe_kick_depth_mm),
+            y_offset: Ops::Units.to_length_mm(rear_plane_mm),
             z_offset: Ops::Units.to_length_mm(0.0)
           )
         end
