@@ -136,6 +136,29 @@ module AICabinets
         end
         private_class_method :dialog_selection
 
+        def determine_scope_default(selection)
+          default_scope = 'instance'
+          return default_scope unless selection.is_a?(Hash)
+
+          raw_count = selection[:instances_count]
+          raw_count = selection['instances_count'] if raw_count.nil?
+
+          begin
+            count_value = Integer(raw_count)
+          rescue ArgumentError, TypeError
+            warn('AI Cabinets: Selection metadata missing instances_count; defaulting edit scope to instance.')
+            return default_scope
+          end
+
+          return 'definition' if count_value > 1
+
+          default_scope
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to determine scope default: #{e.message}")
+          default_scope
+        end
+        private_class_method :determine_scope_default
+
         def attach_callbacks(dialog)
           dialog.add_action_callback('dialog_ready') do |_action_context, _payload|
             deliver_units_bootstrap(dialog)
@@ -174,9 +197,12 @@ module AICabinets
         def deliver_dialog_configuration(dialog)
           configuration = { mode: dialog_mode.to_s }
           if dialog_mode == :edit
-            configuration[:scope] = 'instance'
-            configuration[:scope_default] = 'instance'
-            configuration[:selection] = dialog_selection
+            selection = dialog_selection
+            scope_default = determine_scope_default(selection)
+
+            configuration[:scope] = scope_default
+            configuration[:scope_default] = scope_default
+            configuration[:selection] = selection
           end
           payload = JSON.generate(configuration)
           script = <<~JS
