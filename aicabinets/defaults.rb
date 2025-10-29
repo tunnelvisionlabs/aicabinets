@@ -3,6 +3,8 @@
 require 'json'
 require 'fileutils'
 
+require 'aicabinets/params_sanitizer'
+
 module AICabinets
   module Defaults
     module_function
@@ -19,11 +21,17 @@ module AICabinets
     PARTITION_MODES = %w[none even positions].freeze
     MAX_PARTITION_COUNT = 20
 
+    BAY_FALLBACK = {
+      shelf_count: 0,
+      door_mode: 'doors_double'
+    }.freeze
+
     PARTITIONS_FALLBACK = {
       mode: 'none',
       count: 0,
       positions_mm: [].freeze,
-      panel_thickness_mm: nil
+      panel_thickness_mm: nil,
+      bays: [BAY_FALLBACK].freeze
     }.freeze
 
     FALLBACK_MM = {
@@ -46,10 +54,12 @@ module AICabinets
     def load_mm
       raw = read_defaults_file(DEFAULTS_PATH)
       sanitized = sanitize_defaults(raw)
-      canonicalize(sanitized)
+      canonical = canonicalize(sanitized)
+      ParamsSanitizer.sanitize!(canonical, global_defaults: canonical)
     rescue StandardError => error
       warn("AI Cabinets: defaults load failed (#{error.message}); using built-in fallbacks.")
-      deep_dup(FALLBACK_MM)
+      fallback = deep_dup(FALLBACK_MM)
+      ParamsSanitizer.sanitize!(fallback, global_defaults: fallback)
     end
 
     def load_effective_mm
@@ -58,7 +68,8 @@ module AICabinets
 
       return defaults if overrides.empty?
 
-      merge_defaults(defaults, overrides)
+      result = merge_defaults(defaults, overrides)
+      ParamsSanitizer.sanitize!(result, global_defaults: result)
     rescue StandardError => error
       warn("AI Cabinets: effective defaults load failed (#{error.message}); using shipped defaults.")
       defaults
@@ -215,12 +226,49 @@ module AICabinets
             numeric = sanitize_override_numeric('overrides.partitions.panel_thickness_mm', value)
             sanitized[:panel_thickness_mm] = numeric unless numeric.nil?
           end
+        when 'bays'
+          bays = sanitize_override_bays(value)
+          sanitized[:bays] = bays if bays
         end
       end
 
       sanitized
     end
     private_class_method :sanitize_overrides_partitions
+
+    def sanitize_override_bays(raw)
+      unless raw.is_a?(Array)
+        warn('AI Cabinets: overrides.partitions.bays must be an array; ignoring override.')
+        return nil
+      end
+
+      raw.each_with_index.map do |element, index|
+        unless element.is_a?(Hash)
+          warn("AI Cabinets: overrides.partitions.bays[#{index}] must be an object; ignoring override.")
+          return nil
+        end
+
+        entry = {}
+
+        shelf = sanitize_override_integer(
+          "overrides.partitions.bays[#{index}].shelf_count",
+          element['shelf_count'] || element[:shelf_count],
+          min: 0,
+          max: MAX_PARTITION_COUNT
+        )
+        entry[:shelf_count] = shelf if shelf
+
+        door = sanitize_override_enum(
+          "overrides.partitions.bays[#{index}].door_mode",
+          element['door_mode'] || element[:door_mode],
+          FRONT_OPTIONS
+        )
+        entry[:door_mode] = door if door
+
+        entry
+      end
+    end
+    private_class_method :sanitize_override_bays
 
     def sanitize_override_positions(value)
       unless value.is_a?(Array)
@@ -388,9 +436,42 @@ module AICabinets
           []
         end
 
+      sanitized[:bays] = sanitize_partitions_bays(raw['bays'])
+
       canonicalize_partitions(sanitized)
     end
     private_class_method :sanitize_partitions
+
+    def sanitize_partitions_bays(raw)
+      return [] unless raw.is_a?(Array)
+
+      raw.each_with_index.map do |element, index|
+        unless element.is_a?(Hash)
+          warn("AI Cabinets: defaults cabinet_base.partitions.bays[#{index}] must be an object; ignoring bays.")
+          return []
+        end
+
+        entry = {}
+        entry[:shelf_count] = sanitize_integer_field(
+          "cabinet_base.partitions.bays[#{index}].shelf_count",
+          element['shelf_count'],
+          BAY_FALLBACK[:shelf_count],
+          min: 0,
+          max: MAX_PARTITION_COUNT
+        )
+        door = sanitize_enum_field(
+          "cabinet_base.partitions.bays[#{index}].door_mode",
+          element['door_mode'],
+          FRONT_OPTIONS,
+          BAY_FALLBACK[:door_mode]
+        )
+        entry[:door_mode] = door if door
+        entry
+      end
+    rescue StandardError
+      []
+    end
+    private_class_method :sanitize_partitions_bays
 
     def sanitize_positions(raw)
       unless raw.is_a?(Array)
@@ -533,6 +614,8 @@ module AICabinets
         base[key] =
           if key == :positions_mm && value.is_a?(Array)
             value.map { |element| element.to_f }
+          elsif key == :bays && value.is_a?(Array)
+            value.map { |element| deep_dup(element) }
           else
             value
           end
@@ -583,10 +666,33 @@ module AICabinets
           when :panel_thickness_mm
             element = raw[key]
             element.nil? ? nil : normalize_length_mm(element)
+          when :bays
+            build_overrides_bays(raw[key])
           end
       end
     end
     private_class_method :build_overrides_partitions
+
+    def build_overrides_bays(value)
+      array = value.is_a?(Array) ? value : []
+      array.map do |bay|
+        next {} unless bay.is_a?(Hash)
+
+        result = {}
+        shelf = bay[:shelf_count] || bay['shelf_count']
+        begin
+          result['shelf_count'] = Integer(shelf)
+        rescue ArgumentError, TypeError
+          # omit invalid shelf count to allow sanitizer to supply defaults
+        end
+
+        door = bay[:door_mode] || bay['door_mode']
+        result['door_mode'] = door.to_s if door
+
+        result
+      end
+    end
+    private_class_method :build_overrides_bays
 
     def normalize_length_mm(value)
       return nil if value.nil?
@@ -623,8 +729,15 @@ module AICabinets
       PARTITIONS_FALLBACK.each_key do |key|
         current = raw.fetch(key, PARTITIONS_FALLBACK[key])
         result[key] =
-          if key == :positions_mm
+          case key
+          when :positions_mm
             current.is_a?(Array) ? current.map { |value| value.to_f } : PARTITIONS_FALLBACK[:positions_mm].dup
+          when :bays
+            if current.is_a?(Array)
+              current.map { |value| canonicalize_bay(value) }
+            else
+              PARTITIONS_FALLBACK[:bays].map { |value| canonicalize_bay(value) }
+            end
           else
             deep_dup(current)
           end
@@ -635,6 +748,15 @@ module AICabinets
       result
     end
     private_class_method :canonicalize_partitions
+
+    def canonicalize_bay(value)
+      bay = value.is_a?(Hash) ? value : {}
+      {
+        shelf_count: bay[:shelf_count] || bay['shelf_count'],
+        door_mode: bay[:door_mode] || bay['door_mode']
+      }
+    end
+    private_class_method :canonicalize_bay
 
     def parse_numeric(value)
       case value

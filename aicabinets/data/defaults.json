@@ -13,7 +13,8 @@
     "partitions": {
       "mode": "none",
       "count": 0,
-      "positions_mm": []
+      "positions_mm": [],
+      "bays": []
     }
   }
 }
