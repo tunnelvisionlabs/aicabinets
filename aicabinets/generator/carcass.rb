@@ -77,6 +77,10 @@ module AICabinets
               0.0
             end
           effective_toe_kick_thickness = Ops::Units.to_length_mm(effective_toe_kick_thickness_mm)
+          back_front_y = params.depth - params.back_thickness
+          if back_front_y.to_f.negative?
+            back_front_y = Ops::Units.to_length_mm(0.0)
+          end
 
           instances[:left_side] = Parts::SidePanel.build(
             parent_entities: entities,
@@ -128,6 +132,13 @@ module AICabinets
             else
               disabled_toe_kick_depth
             end
+          bottom_max_y = bottom_y_offset + bottom_depth
+          if bottom_max_y > back_front_y
+            bottom_depth = back_front_y - bottom_y_offset
+            if bottom_depth.to_f.negative?
+              bottom_depth = Ops::Units.to_length_mm(0.0)
+            end
+          end
           instances[:bottom] = Parts::BottomPanel.build(
             parent_entities: entities,
             name: 'Bottom',
@@ -146,7 +157,7 @@ module AICabinets
             parent_entities: entities,
             name: 'Top',
             width: top_width,
-            depth: params.depth,
+            depth: back_front_y,
             thickness: params.top_thickness,
             x_offset: params.panel_thickness,
             y_offset: 0,
@@ -159,14 +170,19 @@ module AICabinets
             default_material
           )
 
+          back_width = params.width - (params.panel_thickness * 2)
+          if back_width.to_f.negative?
+            back_width = Ops::Units.to_length_mm(0.0)
+          end
+
           instances[:back] = Parts::BackPanel.build(
             parent_entities: entities,
             name: 'Back',
-            width: params.width,
+            width: back_width,
             height: params.height - params.toe_kick_height,
             thickness: params.back_thickness,
-            x_offset: 0,
-            y_offset: params.depth - params.back_thickness,
+            x_offset: params.panel_thickness,
+            y_offset: back_front_y,
             z_offset: params.toe_kick_height
           )
           register_created(created, instances[:back])

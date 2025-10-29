@@ -394,6 +394,9 @@ module AICabinets
 
     cab_mat = material(cabinet_material)
 
+    back_front_y = depth - back_inset - back_thickness
+    back_front_y = 0 if back_front_y.to_f.negative?
+
     # Sides
     left = g.add_group
     left.entities.add_face(
@@ -446,8 +449,8 @@ module AICabinets
     bottom.entities.add_face(
       [x_offset + panel_thickness, 0, bottom_inset + panel_thickness],
       [x_offset + width - panel_thickness, 0, bottom_inset + panel_thickness],
-      [x_offset + width - panel_thickness, depth, bottom_inset + panel_thickness],
-      [x_offset + panel_thickness, depth, bottom_inset + panel_thickness]
+      [x_offset + width - panel_thickness, back_front_y, bottom_inset + panel_thickness],
+      [x_offset + panel_thickness, back_front_y, bottom_inset + panel_thickness]
     ).pushpull(-panel_thickness)
     bottom_comp = bottom.to_component
     bottom_comp.material = cab_mat
@@ -464,12 +467,15 @@ module AICabinets
       front_comp = front.to_component
       front_comp.material = cab_mat
 
+      back_stringer_front = back_front_y - top_stringer_width
+      back_stringer_front = 0 if back_stringer_front.to_f.negative?
+
       back_stringer = g.add_group
       back_stringer.entities.add_face(
-        [x_offset + panel_thickness, depth - top_stringer_width, height - top_inset - panel_thickness],
-        [x_offset + width - panel_thickness, depth - top_stringer_width, height - top_inset - panel_thickness],
-        [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
-        [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
+        [x_offset + panel_thickness, back_stringer_front, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, back_stringer_front, height - top_inset - panel_thickness],
+        [x_offset + width - panel_thickness, back_front_y, height - top_inset - panel_thickness],
+        [x_offset + panel_thickness, back_front_y, height - top_inset - panel_thickness]
       ).pushpull(panel_thickness)
       back_stringer_comp = back_stringer.to_component
       back_stringer_comp.material = cab_mat
@@ -478,8 +484,8 @@ module AICabinets
       top.entities.add_face(
         [x_offset + panel_thickness, 0, height - top_inset - panel_thickness],
         [x_offset + width - panel_thickness, 0, height - top_inset - panel_thickness],
-        [x_offset + width - panel_thickness, depth, height - top_inset - panel_thickness],
-        [x_offset + panel_thickness, depth, height - top_inset - panel_thickness]
+        [x_offset + width - panel_thickness, back_front_y, height - top_inset - panel_thickness],
+        [x_offset + panel_thickness, back_front_y, height - top_inset - panel_thickness]
       ).pushpull(panel_thickness)
       top_comp = top.to_component
       top_comp.material = cab_mat
