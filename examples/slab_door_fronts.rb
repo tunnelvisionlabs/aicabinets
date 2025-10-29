@@ -1,5 +1,7 @@
 # Demonstrates slab door front options for the base cabinet generator.
 # Run this script from SketchUp's Ruby console after loading the extension.
+# The cabinets use a toe kick so you can inspect how door bottoms clear the
+# notch and how the bottom panel now reaches the front plane.
 
 require 'sketchup.rb'
 
@@ -16,7 +18,10 @@ begin
     panel_thickness_mm: 18.0,
     toe_kick_height_mm: 100.0,
     toe_kick_depth_mm: 50.0,
-    toe_kick_thickness_mm: 18.0
+    toe_kick_thickness_mm: 18.0,
+    top_reveal_mm: 2.0,
+    bottom_reveal_mm: 3.0,
+    door_gap_mm: 3.0
   }
 
   fronts = %w[doors_left doors_right doors_double]

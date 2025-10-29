@@ -68,7 +68,9 @@ module AICabinets
         end
 
         width_mm = params.width_mm.to_f
-        height_mm = params.height_mm.to_f
+        total_height_mm = params.height_mm.to_f
+        toe_kick_offset_mm = toe_kick_clearance_mm(params)
+        available_height_mm = total_height_mm - toe_kick_offset_mm
         left_reveal_mm = params.door_edge_reveal_mm.to_f
         right_reveal_mm = params.door_edge_reveal_mm.to_f
         top_reveal_mm = params.door_top_reveal_mm.to_f
@@ -81,13 +83,13 @@ module AICabinets
           return []
         end
 
-        clear_height_mm = height_mm - top_reveal_mm - bottom_reveal_mm
+        clear_height_mm = available_height_mm - top_reveal_mm - bottom_reveal_mm
         if clear_height_mm <= MIN_DIMENSION_MM
           warn_skip('Skipped doors because reveals consumed the cabinet height.')
           return []
         end
 
-        bottom_z_mm = bottom_reveal_mm
+        bottom_z_mm = toe_kick_offset_mm + bottom_reveal_mm
 
         case mode
         when :doors_left
@@ -172,6 +174,18 @@ module AICabinets
         component
       end
       private_class_method :build_single_door
+
+      def toe_kick_clearance_mm(params)
+        return 0.0 unless params.respond_to?(:toe_kick_height_mm)
+        return 0.0 unless params.respond_to?(:toe_kick_depth_mm)
+
+        height_mm = params.toe_kick_height_mm.to_f
+        depth_mm = params.toe_kick_depth_mm.to_f
+        return 0.0 unless height_mm.positive? && depth_mm.positive?
+
+        height_mm
+      end
+      private_class_method :toe_kick_clearance_mm
 
       def validate_parent!(parent_entities)
         unless parent_entities.is_a?(Sketchup::Entities)
