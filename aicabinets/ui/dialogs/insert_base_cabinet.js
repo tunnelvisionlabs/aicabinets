@@ -857,6 +857,7 @@
 
       if (this.scopeControls) {
         this.scopeControls.hidden = !showControls;
+        this.scopeControls.classList.toggle('is-hidden', !showControls);
       }
 
       if (!showControls && this.scopeHint) {
@@ -866,6 +867,7 @@
 
       if (this.scopeNote) {
         this.scopeNote.hidden = !showNote;
+        this.scopeNote.classList.toggle('is-hidden', !showNote);
         if (showNote) {
           this.updateScopeNoteText();
         }
