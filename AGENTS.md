@@ -221,7 +221,7 @@ Use this section to standardize tone and content quality across issues, PRs, doc
 * Use third-person descriptive voice. The tone should be professional and informative. Use the present tense for descriptions.
 * Trim Unnecessary Details: If the documentation becomes too lengthy or includes information that’s not crucial for understanding a feature or API’s usage, trim it down. Developers typically read docs to decide how to use an API; focus on information that influences that decision or helps in using the API correctly. For example:
   * Omit internal algorithm details unless knowing them helps the user (e.g., mentioning that a method uses caching might explain why calling it repeatedly is cheap).
-  * Avoid repeating information that can be inferred. (If a parameter name is count and the <param> description just says “The count.”, that’s not helpful. Either expand on what “count” means in context or omit such a redundant comment.)
+  * Avoid repeating information that can be inferred. (If a parameter name is count and the parameter description just says “The count.”, that’s not helpful. Either expand on what “count” means in context or omit such a redundant comment.)
   * Ensure the length is appropriate: shorter for simple members, longer (but still focused) for complex ones. It’s better to be slightly succinct than to overwhelm with extraneous info.
 
 ### Terminology
@@ -257,3 +257,18 @@ Use this section to standardize tone and content quality across issues, PRs, doc
 * For behavior changes, include **Before/After** notes and link to the driving issue.
 * Keep screenshots minimal and current; annotate only where it clarifies behavior.
 * When describing measurements, state **units explicitly** and avoid mixing unit systems in a single example.
+
+## Local validation (docs & Ruby)
+
+Run these commands before sending a PR when you touch Markdown or Ruby files so CI matches local results:
+
+### Markdown changes
+
+* `npx --yes markdownlint-cli@0.41.0 "**/*.md" --config .markdownlint.jsonc --ignore node_modules --ignore dist`
+* `npx --yes cspell@8.14.2 "**/*.md" --config .cspell.json --no-progress --no-summary`
+* `npx --yes linkinator@6.0.0 "**/*.md" --config ./.linkinator.config.json --skip "https://help\\.sketchup\\.com/.*" --skip "https://www\\.githubstatus\\.com/.*"`
+
+### Ruby changes
+
+* `bundle exec rubocop --parallel --display-cop-names`
+  * If RuboCop is not yet installed locally, run `bundle install` first, or fallback to `gem install rubocop && rubocop --parallel --display-cop-names`.

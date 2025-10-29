@@ -5,6 +5,7 @@ This folder contains the TestUp test suite for AI Cabinets. Add the folder to th
 suite will appear in the TestUp panel as **AI Cabinets**.
 
 ## Running
+
 1. Install the AI Cabinets extension and the TestUp 2 extension in SketchUp.
 2. In TestUp Preferences, add the absolute path to this folder.
 3. Open the TestUp window and run the suite or the individual test cases such as
