@@ -4,12 +4,17 @@ require 'json'
 
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
+require 'aicabinets/ui/localization'
+require 'lib/cabinet'
 
 module AICabinets
   module UI
     module Dialogs
       module InsertBaseCabinet
         module_function
+
+        Localization = AICabinets::UI::Localization
+        private_constant :Localization
 
         INSERT_DIALOG_TITLE = 'AI Cabinets — Insert Base Cabinet'
         EDIT_DIALOG_TITLE = 'AI Cabinets — Edit Base Cabinet'
@@ -108,10 +113,21 @@ module AICabinets
         end
         private_class_method :dialog_context
 
+        def dialog_state
+          @dialog_state ||= {}
+        end
+        private_class_method :dialog_state
+
+        def reset_dialog_state!
+          @dialog_state = {}
+        end
+        private_class_method :reset_dialog_state!
+
         def set_dialog_context(mode:, prefill: nil, selection: nil)
           dialog_context[:mode] = mode
           dialog_context[:prefill] = normalize_prefill(prefill)
           dialog_context[:selection] = selection.is_a?(Hash) ? selection.dup : nil
+          reset_dialog_state!
         end
         private_class_method :set_dialog_context
 
@@ -126,6 +142,405 @@ module AICabinets
           copy
         end
         private_class_method :normalize_prefill
+
+        def dialog_defaults
+          dialog_state[:defaults] ||= AICabinets::Defaults.load_effective_mm
+        end
+        private_class_method :dialog_defaults
+
+        def store_dialog_params(params)
+          return unless params.is_a?(Hash)
+
+          copy = deep_copy_params(params)
+          AICabinets::ParamsSanitizer.sanitize!(copy, global_defaults: dialog_defaults)
+          dialog_state[:params] = copy
+        end
+        private_class_method :store_dialog_params
+
+        def current_params
+          dialog_state[:params]
+        end
+        private_class_method :current_params
+
+        def ensure_dialog_params
+          params = current_params
+          return params if params.is_a?(Hash)
+
+          defaults = dialog_defaults
+          store_dialog_params(defaults)
+          dialog_state[:params]
+        end
+        private_class_method :ensure_dialog_params
+
+        def fetch_partitions(params)
+          container = params[:partitions] || params['partitions']
+          container.is_a?(Hash) ? container : {}
+        end
+        private_class_method :fetch_partitions
+
+        def fetch_bays_array(params)
+          partitions = fetch_partitions(params)
+          bays = partitions[:bays] || partitions['bays']
+          return bays if bays.is_a?(Array)
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          partitions = fetch_partitions(params)
+          partitions[:bays] || []
+        end
+        private_class_method :fetch_bays_array
+
+        def default_bay_template
+          partitions = fetch_partitions(dialog_defaults)
+          bays = partitions[:bays]
+          sample = bays.is_a?(Array) ? bays.first : nil
+          template = sample.is_a?(Hash) ? sample : { shelf_count: 0, door_mode: nil }
+          deep_copy_params(template)
+        end
+        private_class_method :default_bay_template
+
+        def build_double_validity(params)
+          bays = fetch_bays_array(params)
+          return [] unless bays.is_a?(Array)
+
+          bays.each_with_index.map do |_bay, index|
+            allowed, reason = evaluate_double_validity(params, index)
+            { allowed: allowed, reason: reason }
+          end
+        end
+        private_class_method :build_double_validity
+
+        # Queries the cabinet helper for double-door feasibility and resolves the
+        # returned localization key into a user-facing string.
+        def evaluate_double_validity(params, index)
+          result = AICabinets::Cabinet.double_door_validity(params_mm: params, bay_index: index)
+          allowed = result.is_a?(Array) ? result[0] : false
+          reason_value = result.is_a?(Array) ? result[1] : nil
+          reason =
+            case reason_value
+            when Symbol
+              Localization.string(reason_value)
+            when String
+              reason_value
+            else
+              nil
+            end
+          [allowed ? true : false, reason]
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to compute double door validity for bay #{index}: #{e.message}")
+          [false, Localization.string(:door_mode_double_disabled_hint)]
+        end
+        private_class_method :evaluate_double_validity
+
+        def execute_state_callback(dialog, function_name, *args)
+          return unless dialog
+
+          serialized = args.map { |arg| JSON.generate(arg) }
+          script = <<~JS
+            (function () {
+              var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertBaseCabinet;
+              if (root && typeof root.#{function_name} === 'function') {
+                root.#{function_name}(#{serialized.join(', ')});
+              }
+            })();
+          JS
+
+          dialog.execute_script(script)
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to deliver #{function_name} message to dialog: #{e.message}")
+        end
+        private_class_method :execute_state_callback
+
+        def deliver_bay_state(dialog)
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          partitions = fetch_partitions(params)
+          state = {
+            partitions: {
+              count: partitions[:count] || partitions['count'] || 0,
+              positions_mm: partitions[:positions_mm] || partitions['positions_mm'] || []
+            },
+            bays: fetch_bays_array(params).map { |bay| deep_copy_params(bay) },
+            selected_index: selected_bay_index,
+            can_double: build_double_validity(params)
+          }
+
+          execute_state_callback(dialog, 'state_init', state)
+        end
+        private_class_method :deliver_bay_state
+
+        def deliver_state_update_bay(dialog, index, bay)
+          execute_state_callback(dialog, 'state_update_bay', index, bay)
+        end
+        private_class_method :deliver_state_update_bay
+
+        def deliver_double_validity(dialog, index, allowed, reason)
+          execute_state_callback(dialog, 'state_set_double_validity', index, allowed ? true : false, reason)
+        end
+        private_class_method :deliver_double_validity
+
+        def deliver_double_validity_for_all(dialog, params)
+          build_double_validity(params).each_with_index do |entry, index|
+            deliver_double_validity(dialog, index, entry[:allowed], entry[:reason])
+          end
+        end
+        private_class_method :deliver_double_validity_for_all
+
+        def deliver_toast(dialog, message)
+          return unless message && !message.to_s.empty?
+
+          execute_state_callback(dialog, 'toast', message.to_s)
+        end
+        private_class_method :deliver_toast
+
+        def parse_payload(payload)
+          case payload
+          when String
+            JSON.parse(payload, symbolize_names: true)
+          when Hash
+            payload.each_with_object({}) do |(key, value), memo|
+              memo[key.is_a?(String) ? key.to_sym : key] = value
+            end
+          else
+            {}
+          end
+        rescue JSON::ParserError
+          {}
+        end
+        private_class_method :parse_payload
+
+        def extract_index(data)
+          return nil unless data.is_a?(Hash)
+
+          value = data[:index] || data['index']
+          Integer(value)
+        rescue ArgumentError, TypeError
+          nil
+        end
+        private_class_method :extract_index
+
+        def extract_integer(value)
+          numeric = Integer(value)
+          return nil if numeric.negative?
+
+          numeric
+        rescue ArgumentError, TypeError
+          nil
+        end
+        private_class_method :extract_integer
+
+        def extract_string(value)
+          return nil if value.nil?
+
+          text = value.to_s.strip
+          text.empty? ? nil : text
+        end
+        private_class_method :extract_string
+
+        def handle_ui_init_ready(dialog)
+          deliver_bay_state(dialog)
+        end
+        private_class_method :handle_ui_init_ready
+
+        def handle_ui_select_bay(payload)
+          data = parse_payload(payload)
+          index = extract_index(data)
+          return unless index
+
+          params = ensure_dialog_params
+          bays = fetch_bays_array(params)
+          max_index = [bays.length - 1, 0].max
+          clamped = [[index, 0].max, max_index].min
+          set_selected_bay_index(clamped)
+        end
+        private_class_method :handle_ui_select_bay
+
+        def handle_ui_set_shelf_count(dialog, payload)
+          data = parse_payload(payload)
+          index = extract_index(data)
+          return unless index && index >= 0
+
+          value = extract_integer(data[:value] || data['value'])
+          return if value.nil?
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          bays = fetch_bays_array(params)
+          while bays.length <= index
+            bays << default_bay_template
+          end
+
+          bays[index][:shelf_count] = value
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          updated_bays = fetch_bays_array(updated_params)
+          deliver_state_update_bay(dialog, index, updated_bays[index])
+          allowed, reason = evaluate_double_validity(updated_params, index)
+          deliver_double_validity(dialog, index, allowed, reason)
+        end
+        private_class_method :handle_ui_set_shelf_count
+
+        def handle_ui_set_door_mode(dialog, payload)
+          data = parse_payload(payload)
+          index = extract_index(data)
+          return unless index && index >= 0
+
+          raw_value = extract_string(data[:value] || data['value'])
+          value = raw_value == 'none' ? nil : raw_value
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          bays = fetch_bays_array(params)
+          while bays.length <= index
+            bays << default_bay_template
+          end
+
+          if value == 'doors_double'
+            allowed, reason = evaluate_double_validity(params, index)
+            unless allowed
+              deliver_double_validity(dialog, index, allowed, reason)
+              return
+            end
+          end
+
+          bays[index][:door_mode] = value
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          updated_bays = fetch_bays_array(updated_params)
+          deliver_state_update_bay(dialog, index, updated_bays[index])
+          allowed, reason = evaluate_double_validity(updated_params, index)
+          deliver_double_validity(dialog, index, allowed, reason)
+        end
+        private_class_method :handle_ui_set_door_mode
+
+        def handle_ui_apply_to_all(dialog, payload)
+          data = parse_payload(payload)
+          index = extract_index(data)
+          return unless index && index >= 0
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          bays = fetch_bays_array(params)
+          return unless index < bays.length
+
+          source = bays[index]
+          source_shelf = extract_integer(source[:shelf_count]) || 0
+          source_door = source[:door_mode]
+          skipped = 0
+
+          bays.each_with_index do |bay, bay_index|
+            bay[:shelf_count] = source_shelf
+            next if bay_index == index
+
+            if source_door == 'doors_double'
+              allowed, = evaluate_double_validity(params, bay_index)
+              if allowed
+                bay[:door_mode] = source_door
+              else
+                skipped += 1
+              end
+            else
+              bay[:door_mode] = source_door
+            end
+          end
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          updated_bays = fetch_bays_array(updated_params)
+          updated_bays.each_with_index do |bay, bay_index|
+            deliver_state_update_bay(dialog, bay_index, bay)
+          end
+          deliver_double_validity_for_all(dialog, updated_params)
+
+          if skipped.positive?
+            template = Localization.string(:bay_double_skip_notice)
+            message = format(template, count: skipped)
+            deliver_toast(dialog, message)
+          end
+        end
+        private_class_method :handle_ui_apply_to_all
+
+        def handle_ui_copy_left_to_right(dialog)
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          bays = fetch_bays_array(params)
+          length = bays.length
+          return if length < 2
+
+          skipped = 0
+          (0...(length / 2)).each do |left_index|
+            dest_index = length - 1 - left_index
+            next if dest_index == left_index
+
+            source = bays[left_index]
+            dest = bays[dest_index]
+            next unless source.is_a?(Hash) && dest.is_a?(Hash)
+
+            dest[:shelf_count] = extract_integer(source[:shelf_count]) || 0
+            door_mode = source[:door_mode]
+            if door_mode == 'doors_double'
+              allowed, = evaluate_double_validity(params, dest_index)
+              if allowed
+                dest[:door_mode] = door_mode
+              else
+                skipped += 1
+              end
+            else
+              dest[:door_mode] = door_mode
+            end
+          end
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          updated_bays = fetch_bays_array(updated_params)
+          updated_bays.each_with_index do |bay, bay_index|
+            deliver_state_update_bay(dialog, bay_index, bay)
+          end
+          deliver_double_validity_for_all(dialog, updated_params)
+
+          if skipped.positive?
+            template = Localization.string(:bay_double_skip_notice)
+            message = format(template, count: skipped)
+            deliver_toast(dialog, message)
+          end
+        end
+        private_class_method :handle_ui_copy_left_to_right
+
+        def handle_ui_request_validity(dialog, payload)
+          data = parse_payload(payload)
+          index = extract_index(data)
+          return unless index && index >= 0
+
+          params = ensure_dialog_params
+          allowed, reason = evaluate_double_validity(params, index)
+          deliver_double_validity(dialog, index, allowed, reason)
+        end
+        private_class_method :handle_ui_request_validity
+
+        def selected_bay_index
+          value = dialog_state[:selected_bay]
+          return value.to_i if value.is_a?(Numeric)
+
+          0
+        end
+        private_class_method :selected_bay_index
+
+        def set_selected_bay_index(index)
+          dialog_state[:selected_bay] = index.to_i
+        end
+        private_class_method :set_selected_bay_index
 
         def dialog_mode
           dialog_context[:mode] || :insert
@@ -185,6 +600,34 @@ module AICabinets
 
           dialog.add_action_callback('cancel_placement') do |_action_context, _payload|
             cancel_active_placement(dialog)
+          end
+
+          dialog.add_action_callback('ui_init_ready') do |_action_context, _payload|
+            handle_ui_init_ready(dialog)
+          end
+
+          dialog.add_action_callback('ui_select_bay') do |_context, payload|
+            handle_ui_select_bay(payload)
+          end
+
+          dialog.add_action_callback('ui_set_shelf_count') do |_context, payload|
+            handle_ui_set_shelf_count(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_set_door_mode') do |_context, payload|
+            handle_ui_set_door_mode(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_apply_to_all') do |_context, payload|
+            handle_ui_apply_to_all(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_copy_left_to_right') do |_context, _payload|
+            handle_ui_copy_left_to_right(dialog)
+          end
+
+          dialog.add_action_callback('ui_request_validity') do |_context, payload|
+            handle_ui_request_validity(dialog, payload)
           end
         end
         private_class_method :attach_callbacks
@@ -254,6 +697,8 @@ module AICabinets
           JS
 
           dialog.execute_script(script)
+          store_dialog_params(defaults)
+          deliver_bay_state(dialog)
         end
         private_class_method :deliver_insert_defaults
 
@@ -275,6 +720,8 @@ module AICabinets
           JS
 
           dialog.execute_script(script)
+          store_dialog_params(prefill)
+          deliver_bay_state(dialog)
         end
         private_class_method :deliver_edit_prefill
 

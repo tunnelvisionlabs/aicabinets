@@ -228,6 +228,93 @@
               <p class="field-error" data-error-for="partitions_positions" aria-live="polite"></p>
             </div>
           </section>
+
+          <section class="form__section" data-role="bay-section">
+            <h2 class="form__section-title" data-role="bay-section-title"></h2>
+            <div class="bay" data-role="bay-controls">
+              <div class="bay__selector" role="group" aria-label="" data-role="bay-selector">
+                <div class="bay__chips" data-role="bay-chips"></div>
+              </div>
+
+              <div class="bay__row" data-role="bay-shelf-row">
+                <label class="bay__label" for="bay-shelf-count" data-role="bay-shelf-label"></label>
+                <div class="bay-stepper" data-role="bay-stepper">
+                  <button
+                    type="button"
+                    class="bay-stepper__button"
+                    data-role="bay-stepper-decrease"
+                    aria-label=""
+                  ></button>
+                  <input
+                    type="number"
+                    id="bay-shelf-count"
+                    class="bay-stepper__input"
+                    data-role="bay-shelf-input"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                    aria-label=""
+                  />
+                  <button
+                    type="button"
+                    class="bay-stepper__button"
+                    data-role="bay-stepper-increase"
+                    aria-label=""
+                  ></button>
+                </div>
+              </div>
+
+              <fieldset class="bay-door" data-role="bay-door-fieldset">
+                <legend class="bay-door__legend" data-role="bay-door-legend"></legend>
+                <div class="bay-door__options" data-role="bay-door-options">
+                  <label class="bay-door__option">
+                    <input
+                      type="radio"
+                      name="bay-door-mode"
+                      value="none"
+                      data-role="bay-door-option"
+                    />
+                    <span data-role="bay-door-label-none"></span>
+                  </label>
+                  <label class="bay-door__option">
+                    <input
+                      type="radio"
+                      name="bay-door-mode"
+                      value="doors_left"
+                      data-role="bay-door-option"
+                    />
+                    <span data-role="bay-door-label-left"></span>
+                  </label>
+                  <label class="bay-door__option">
+                    <input
+                      type="radio"
+                      name="bay-door-mode"
+                      value="doors_right"
+                      data-role="bay-door-option"
+                    />
+                    <span data-role="bay-door-label-right"></span>
+                  </label>
+                  <label class="bay-door__option">
+                    <input
+                      type="radio"
+                      name="bay-door-mode"
+                      value="doors_double"
+                      data-role="bay-door-option"
+                    />
+                    <span data-role="bay-door-label-double"></span>
+                  </label>
+                </div>
+                <p class="bay-door__hint" data-role="bay-double-hint" aria-live="polite" hidden></p>
+              </fieldset>
+
+              <div class="bay__actions" data-role="bay-actions">
+                <button type="button" class="button button--tertiary" data-role="bay-apply-all"></button>
+                <button type="button" class="button button--tertiary" data-role="bay-copy-lr" hidden></button>
+              </div>
+
+              <div class="visually-hidden" aria-live="polite" data-role="bay-status"></div>
+            </div>
+          </section>
         </form>
       </main>
 
@@ -252,6 +339,7 @@
       </footer>
     </div>
 
+    <script src="../strings/en.js"></script>
     <script src="insert_base_cabinet.js"></script>
   </body>
 </html>

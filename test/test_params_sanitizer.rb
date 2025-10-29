@@ -112,4 +112,33 @@ class ParamsSanitizerTest < Minitest::Test
     assert_equal(first, second)
     assert_equal(2, second[:partitions][:bays].length)
   end
+
+  def test_preserves_explicit_nil_door_mode
+    params = {
+      partitions: {
+        count: 0,
+        bays: [{ shelf_count: 1, door_mode: nil }]
+      }
+    }
+
+    result = AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: @defaults)
+
+    bay = result[:partitions][:bays].first
+    assert_nil(bay[:door_mode])
+    assert_equal(1, bay[:shelf_count])
+  end
+
+  def test_maps_none_string_to_nil_door_mode
+    params = {
+      partitions: {
+        count: 0,
+        bays: [{ door_mode: 'none' }]
+      }
+    }
+
+    result = AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: @defaults)
+
+    bay = result[:partitions][:bays].first
+    assert_nil(bay[:door_mode])
+  end
 end

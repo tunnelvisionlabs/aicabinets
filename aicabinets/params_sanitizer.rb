@@ -75,13 +75,21 @@ module AICabinets
 
       sanitized = deep_dup(template)
 
-      shelf_value = bay[:shelf_count] || bay['shelf_count']
-      shelf_count = coerce_non_negative_integer(shelf_value)
-      sanitized[:shelf_count] = shelf_count unless shelf_count.nil?
+      if bay.key?(:shelf_count) || bay.key?('shelf_count')
+        shelf_value = bay[:shelf_count] || bay['shelf_count']
+        shelf_count = coerce_non_negative_integer(shelf_value)
+        sanitized[:shelf_count] = shelf_count unless shelf_count.nil?
+      end
 
-      door_value = bay[:door_mode] || bay['door_mode']
-      door_mode = sanitize_door_mode(door_value)
-      sanitized[:door_mode] = door_mode if door_mode
+      if bay.key?(:door_mode) || bay.key?('door_mode')
+        door_value = bay[:door_mode] || bay['door_mode']
+        if door_value.nil? || door_value.to_s.strip.casecmp('none').zero?
+          sanitized[:door_mode] = nil
+        else
+          door_mode = sanitize_door_mode(door_value)
+          sanitized[:door_mode] = door_mode if door_mode
+        end
+      end
 
       sanitized
     end

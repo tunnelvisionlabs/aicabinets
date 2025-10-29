@@ -102,3 +102,7 @@ Generated base cabinets accept a `partitions` payload to divide the interior int
 - `bays` stores per-bay settings such as `shelf_count` and `door_mode`. Its length always matches `count + 1`, and missing or partial entries are filled from the active defaults.
 - Partitions use the carcass panel thickness (or an explicit `panel_thickness_mm` value when provided) and span the interior height (top of the bottom panel to the underside of the top or stringers) and depth (front face to the back panel).
 - Invalid or overlapping requests are ignored, and the generator logs warnings when positions are clamped to the cabinet interior or discarded because they violate minimum bay widths.
+
+## Per-bay Controls
+
+The Insert/Edit HtmlDialog surfaces a bay selector (chips), shelf stepper, and door mode segmented control for each bay. Selecting **None** persists `door_mode: null`, while the Ruby helper blocks “Double” whenever the bay’s clear width cannot accommodate two leaves. Quality-of-life actions apply settings to every bay or mirror the left half to the right, skipping destinations that would violate the double-door constraints.
