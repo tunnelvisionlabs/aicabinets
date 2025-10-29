@@ -176,6 +176,24 @@ body {
   display: none;
 }
 
+.form__placing-indicator {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  border: 1px dashed rgba(30, 136, 229, 0.45);
+  background-color: rgba(30, 136, 229, 0.12);
+  color: rgba(13, 71, 161, 0.95);
+  font-size: 0.95rem;
+}
+
+.form__placing-indicator[hidden] {
+  display: none;
+}
+
+.dialog.is-placing .dialog__content {
+  opacity: 0.85;
+}
+
 .form__banner--error {
   border-color: rgba(211, 47, 47, 0.35);
   background-color: rgba(211, 47, 47, 0.1);

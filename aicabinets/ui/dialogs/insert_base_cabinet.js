@@ -20,6 +20,7 @@
   var pendingUnitSettings = null;
   var pendingDefaults = null;
   var pendingConfiguration = null;
+  var pendingPlacementEvents = [];
 
   var UNIT_TO_MM = {
     inch: 25.4,
@@ -466,6 +467,12 @@
     };
     this.values.lengths.toe_kick_thickness = null;
 
+    this.isPlacing = false;
+    this.dialogRoot = document.querySelector('.dialog');
+    this.placingIndicator = document.querySelector('[data-role="placing-indicator"]');
+    this.interactiveElements = [];
+    this.disabledByPlacement = new Map();
+
     this.unitsNote = form.querySelector('[data-role="units-note"]');
     this.insertButton =
       document.querySelector('[data-role="primary-action"]') ||
@@ -497,6 +504,7 @@
     this.selectionInfo = defaultSelectionInfo();
     this.selectionProvided = false;
     this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
+    this.placementNotice = '';
 
     this.initializeElements();
     this.bindEvents();
@@ -506,6 +514,11 @@
 
   FormController.prototype.initializeElements = function initializeElements() {
     var self = this;
+    var interactiveNodeList = this.form.querySelectorAll('input, select, textarea');
+    this.interactiveElements = Array.prototype.slice.call(interactiveNodeList);
+    this.interactiveElements.forEach(function (element) {
+      self.disabledByPlacement.set(element, element.disabled);
+    });
     LENGTH_FIELDS.forEach(function (name) {
       var input = self.form.querySelector('[name="' + name + '"]');
       self.inputs[name] = input;
@@ -758,6 +771,10 @@
 
     var mode = options.mode === 'edit' ? 'edit' : 'insert';
     this.mode = mode;
+    if (options && typeof options.placementNotice === 'string') {
+      this.placementNotice = options.placementNotice;
+    }
+    this.setPlacingState(false);
 
     var copy = MODE_COPY[mode] || MODE_COPY.insert;
     if (this.dialogTitle) {
@@ -1338,7 +1355,56 @@
       return;
     }
 
-    this.insertButton.disabled = this.isSubmitting || !this.isFormValid();
+    this.insertButton.disabled = this.isSubmitting || this.isPlacing || !this.isFormValid();
+  };
+
+  FormController.prototype.setPlacingState = function setPlacingState(active, options) {
+    var isActive = !!active;
+    this.isPlacing = isActive;
+
+    var message = options && typeof options.message === 'string' ? options.message.trim() : '';
+    if (!message) {
+      message = this.placementNotice || '';
+    }
+
+    if (this.placingIndicator) {
+      if (isActive && message) {
+        this.placingIndicator.textContent = message;
+        this.placingIndicator.hidden = false;
+      } else {
+        this.placingIndicator.hidden = true;
+      }
+    }
+
+    if (this.dialogRoot) {
+      this.dialogRoot.classList.toggle('is-placing', isActive);
+    }
+
+    this.toggleFormDisabled(isActive);
+
+    if (isActive) {
+      this.clearBanner();
+    }
+
+    this.updateInsertButtonState();
+  };
+
+  FormController.prototype.toggleFormDisabled = function toggleFormDisabled(disabled) {
+    if (!this.interactiveElements || !this.interactiveElements.length) {
+      return;
+    }
+
+    var self = this;
+    this.interactiveElements.forEach(function (element) {
+      var originallyDisabled = self.disabledByPlacement.get(element);
+      if (disabled) {
+        if (!originallyDisabled) {
+          element.disabled = true;
+        }
+      } else if (!originallyDisabled) {
+        element.disabled = false;
+      }
+    });
   };
 
   FormController.prototype.buildPayload = function buildPayload() {
@@ -1382,6 +1448,10 @@
   };
 
   FormController.prototype.handleSubmit = function handleSubmit() {
+    if (this.isPlacing) {
+      return;
+    }
+
     if (this.isSubmitting) {
       return;
     }
@@ -1423,7 +1493,11 @@
     }
 
     if (ack.ok) {
-      this.setBanner('success', 'Parameters sent to SketchUp.', { autoHide: true });
+      if (ack.placement) {
+        this.clearBanner();
+      } else {
+        this.setBanner('success', 'Parameters sent to SketchUp.', { autoHide: true });
+      }
       return;
     }
 
@@ -1505,6 +1579,24 @@
     }
   };
 
+  namespace.beginPlacement = function beginPlacement(options) {
+    var payload = options && typeof options === 'object' ? options : {};
+    if (controller) {
+      controller.setPlacingState(true, payload);
+    } else {
+      pendingPlacementEvents.push({ type: 'begin', options: payload });
+    }
+  };
+
+  namespace.finishPlacement = function finishPlacement(options) {
+    var payload = options && typeof options === 'object' ? options : {};
+    if (controller) {
+      handlePlacementFinish(payload);
+    } else {
+      pendingPlacementEvents.push({ type: 'finish', options: payload });
+    }
+  };
+
   function handleButtonClick(event) {
     var target = event.target;
     if (!(target instanceof HTMLButtonElement)) {
@@ -1530,13 +1622,32 @@
     invokeSketchUp(action);
   }
 
+  function handlePlacementFinish(options) {
+    if (!controller) {
+      return;
+    }
+
+    controller.setPlacingState(false, options);
+
+    var status = options && typeof options.status === 'string' ? options.status.toLowerCase() : '';
+    var message = options && typeof options.message === 'string' ? options.message : '';
+
+    if (status === 'error' && message) {
+      controller.setBanner('error', message);
+      return;
+    }
+
+    controller.clearBanner();
+  }
+
   function normalizeConfiguration(options) {
     var normalized = {
       mode: 'insert',
       scope: 'instance',
       scopeDefault: 'instance',
       selection: null,
-      selectionProvided: false
+      selectionProvided: false,
+      placementNotice: ''
     };
     if (!options || typeof options !== 'object') {
       return normalized;
@@ -1566,6 +1677,10 @@
       normalized.scopeDefault = 'instance';
       normalized.selection = null;
       normalized.selectionProvided = false;
+    }
+
+    if (options && typeof options.placement_notice === 'string') {
+      normalized.placementNotice = options.placement_notice;
     }
 
     return normalized;
@@ -1633,6 +1748,17 @@
     if (pendingDefaults) {
       controller.applyDefaults(pendingDefaults);
       pendingDefaults = null;
+    }
+
+    if (pendingPlacementEvents.length) {
+      pendingPlacementEvents.forEach(function (event) {
+        if (event.type === 'begin') {
+          controller.setPlacingState(true, event.options);
+        } else if (event.type === 'finish') {
+          handlePlacementFinish(event.options);
+        }
+      });
+      pendingPlacementEvents = [];
     }
 
     invokeSketchUp('dialog_ready');

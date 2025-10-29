@@ -195,7 +195,10 @@ module AICabinets
         private_class_method :deliver_units_bootstrap
 
         def deliver_dialog_configuration(dialog)
-          configuration = { mode: dialog_mode.to_s }
+          configuration = {
+            mode: dialog_mode.to_s,
+            placement_notice: AICabinets::UI::Localization.string(:placement_indicator)
+          }
           if dialog_mode == :edit
             selection = dialog_selection
             scope_default = determine_scope_default(selection)
@@ -273,12 +276,12 @@ module AICabinets
             typed_params = parse_submit_params(json)
             store_last_valid_params(deep_copy_params(typed_params))
 
-            if dialog_mode == :edit
-              ack = apply_edit_operation(typed_params)
-            else
-              params_for_tool = deep_copy_params(typed_params)
-              ack = { ok: true }
-            end
+          if dialog_mode == :edit
+            ack = apply_edit_operation(typed_params)
+          else
+            params_for_tool = deep_copy_params(typed_params)
+            ack = { ok: true, placement: true }
+          end
           rescue PayloadError => e
             ack = build_error_ack(e.code, e.message, e.field)
           rescue StandardError => e
@@ -292,8 +295,8 @@ module AICabinets
 
           if dialog_mode == :insert && params_for_tool
             params_for_tool.delete(:scope)
-            close_dialog_if_visible(dialog)
-            activate_insert_tool(params_for_tool)
+            enter_placement_mode(dialog)
+            activate_insert_tool(dialog, params_for_tool)
           elsif dialog_mode == :edit
             close_dialog_if_visible(dialog)
           end
@@ -715,7 +718,7 @@ module AICabinets
         private_class_method :deep_copy_params
 
         def close_dialog_if_visible(dialog)
-          return unless dialog
+          return unless dialog&.visible?
 
           dialog.close if dialog.visible?
         rescue StandardError => e
@@ -723,34 +726,102 @@ module AICabinets
         end
         private_class_method :close_dialog_if_visible
 
-        def activate_insert_tool(params_mm)
+        def activate_insert_tool(dialog, params_mm)
+          activation_error = AICabinets::UI::Localization.string(:placement_activation_failed)
+
           unless defined?(Sketchup) && defined?(Sketchup::Model)
             warn('AI Cabinets: SketchUp environment is unavailable for tool activation.')
+            finish_placement_mode(dialog, status: :error, message: activation_error)
             return
           end
 
           unless defined?(AICabinets::UI::Tools::InsertBaseCabinetTool)
             warn('AI Cabinets: Insert Base Cabinet tool is not available.')
+            finish_placement_mode(dialog, status: :error, message: activation_error)
             return
           end
 
           model = Sketchup.active_model
           unless model.is_a?(Sketchup::Model)
             warn('AI Cabinets: No active model is available for insertion.')
+            finish_placement_mode(dialog, status: :error, message: activation_error)
             return
           end
 
           tools = model.tools
           unless tools.respond_to?(:push_tool)
             warn('AI Cabinets: Tool stack is unavailable for activation.')
+            finish_placement_mode(dialog, status: :error, message: activation_error)
             return
           end
 
-          tools.push_tool(AICabinets::UI::Tools::InsertBaseCabinetTool.new(params_mm))
+          callbacks = placement_tool_callbacks(dialog)
+          tool = AICabinets::UI::Tools::InsertBaseCabinetTool.new(
+            params_mm,
+            callbacks: callbacks
+          )
+          tools.push_tool(tool)
         rescue StandardError => e
           warn("AI Cabinets: Unable to activate base cabinet placement tool: #{e.message}")
+          finish_placement_mode(dialog, status: :error, message: activation_error)
         end
         private_class_method :activate_insert_tool
+
+        def placement_tool_callbacks(dialog)
+          {
+            cancel: lambda {
+              finish_placement_mode(dialog, status: :cancelled)
+            },
+            complete: lambda { |_instance|
+              finish_placement_mode(dialog, status: :placed)
+            },
+            error: lambda { |message|
+              finish_placement_mode(dialog, status: :error, message: message)
+            }
+          }
+        end
+        private_class_method :placement_tool_callbacks
+
+        def enter_placement_mode(dialog)
+          return unless dialog&.visible?
+
+          payload = {
+            message: AICabinets::UI::Localization.string(:placement_indicator)
+          }
+          deliver_dialog_script(dialog, 'beginPlacement', payload)
+        end
+        private_class_method :enter_placement_mode
+
+        def finish_placement_mode(dialog, status:, message: nil)
+          return unless dialog&.visible?
+
+          status_string = status.to_s
+          message = AICabinets::UI::Localization.string(:placement_failed) if status_string == 'error' && (message.nil? || message.empty?)
+
+          payload = { status: status_string }
+          payload[:message] = message if message && !message.empty?
+          deliver_dialog_script(dialog, 'finishPlacement', payload)
+        end
+        private_class_method :finish_placement_mode
+
+        def deliver_dialog_script(dialog, function_name, payload)
+          return unless dialog&.visible?
+
+          json = JSON.generate(payload)
+          script = <<~JS
+            (function () {
+              var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertBaseCabinet;
+              if (root && typeof root.#{function_name} === 'function') {
+                root.#{function_name}(#{json});
+              }
+            })();
+          JS
+
+          dialog.execute_script(script)
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to deliver dialog script #{function_name}: #{e.message}")
+        end
+        private_class_method :deliver_dialog_script
 
         def current_unit_settings
           model = ::Sketchup.active_model

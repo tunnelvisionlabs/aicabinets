@@ -2,91 +2,78 @@
 
 require 'sketchup.rb'
 
+Sketchup.require('aicabinets/ui/icons')
+Sketchup.require('aicabinets/ui/tools/placement_tool')
 Sketchup.require('aicabinets/ops/insert_base_cabinet')
 
 module AICabinets
   module UI
     module Tools
-      # SketchUp tool responsible for placing a base cabinet component at a
-      # picked point. The tool performs a single placement action and then
-      # deactivates itself so the user immediately returns to the previous tool.
-      class InsertBaseCabinetTool
-        STATUS_HINT = 'Tip: Use Move (M) with Ctrl/Option to copy the new cabinet.'
+      # Placement tool specialized for inserting a base cabinet. Provides a
+      # preview sized to cabinet parameters and performs insertion in a single
+      # undoable operation when the user clicks a point in the model.
+      class InsertBaseCabinetTool < PlacementTool
+        CURSOR_HOT_X = 2
+        CURSOR_HOT_Y = 2
 
-        def initialize(params_mm)
+        def initialize(params_mm, callbacks: {}, placer: nil)
           raise ArgumentError, 'params_mm must be a Hash' unless params_mm.is_a?(Hash)
 
           @params_mm = deep_freeze(params_mm.dup)
-          @input_point = nil
-          @placing = false
+          @placer = placer || method(:default_place)
+          super(callbacks: callbacks)
         end
 
-        def activate(view = nil)
-          @input_point = Sketchup::InputPoint.new
-          view.invalidate if view
+        def self.preview_bounds_mm(params_mm)
+          width = numeric_param(params_mm, :width_mm)
+          depth = numeric_param(params_mm, :depth_mm)
+          height = numeric_param(params_mm, :height_mm)
+
+          {
+            min: [0.0, 0.0, 0.0],
+            max: [width, depth, height]
+          }
         end
 
-        def deactivate(_view = nil)
-          @input_point = nil
-        end
+        def self.cursor_spec
+          path = AICabinets::UI::Icons.cursor_icon_path('insert_base_cabinet')
+          return nil unless path
 
-        def onCancel(_reason, _view)
-          exit_tool
-        end
-
-        def onLButtonDown(_flags, x, y, view)
-          return if @placing
-
-          model = Sketchup.active_model
-          unless model.is_a?(Sketchup::Model)
-            warn('AI Cabinets: No active model to insert cabinet into.')
-            exit_tool
-            return
-          end
-
-          input_point = pick_point(view, x, y)
-          unless input_point&.valid?
-            warn('AI Cabinets: Unable to determine pick point for cabinet placement.')
-            exit_tool
-            return
-          end
-
-          @placing = true
-
-          instance = AICabinets::Ops::InsertBaseCabinet.place_at_point!(
-            model: model,
-            point3d: input_point.position,
-            params_mm: @params_mm
-          )
-
-          status_message = instance ? STATUS_HINT : nil
-          exit_tool(status_message: status_message)
-
-          instance
-        ensure
-          @placing = false
+          { path: path, hotspot_x: CURSOR_HOT_X, hotspot_y: CURSOR_HOT_Y }
         end
 
         private
 
-        def pick_point(view, x, y)
-          return unless view && @input_point
-
-          @input_point.pick(view, x, y)
-          @input_point
-        rescue StandardError => e
-          warn("AI Cabinets: Error while picking point: #{e.message}")
-          nil
+        def perform_place(model:, point3d:)
+          @placer.call(model: model, point3d: point3d, params_mm: @params_mm)
         end
 
-        def exit_tool(status_message: nil)
-          model = defined?(Sketchup) ? Sketchup.active_model : nil
-          return unless model
+        def preview_corners_mm
+          bounds = self.class.preview_bounds_mm(@params_mm)
+          max = bounds[:max]
 
-          model.select_tool(nil)
-          return unless status_message && Sketchup.respond_to?(:set_status_text)
+          width = max[0]
+          depth = max[1]
+          height = max[2]
 
-          Sketchup.set_status_text(status_message)
+          [
+            [0.0, 0.0, 0.0],
+            [width, 0.0, 0.0],
+            [width, depth, 0.0],
+            [0.0, depth, 0.0],
+            [0.0, 0.0, height],
+            [width, 0.0, height],
+            [width, depth, height],
+            [0.0, depth, height]
+          ]
+        end
+
+        def default_place(model:, point3d:, params_mm:)
+          AICabinets::Ops::InsertBaseCabinet.place_at_point!(
+            model: model,
+            point3d: point3d,
+            params_mm: params_mm
+          )
         end
 
         def deep_freeze(object)
@@ -101,6 +88,16 @@ module AICabinets
             object.freeze
           end
         end
+
+        def self.numeric_param(params, key)
+          value = params[key]
+          value = params[key.to_s] if value.nil?
+          value = value.to_f if value.respond_to?(:to_f)
+          raise ArgumentError, "Missing numeric parameter: #{key}" unless value.finite?
+
+          value
+        end
+        private_class_method :numeric_param
       end
     end
   end
