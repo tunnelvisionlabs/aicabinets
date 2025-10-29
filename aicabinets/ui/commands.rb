@@ -76,56 +76,36 @@ module AICabinets
           return nil
         end
 
-        instance = selected_cabinet_instance
-        unless instance
-          notify_selection_issue('Select one AI Cabinets base cabinet to edit.')
+        result = AICabinets::Selection.require_editable_cabinet
+        unless result.valid?
+          notify_selection_issue(result.message, status: result.status)
           return nil
         end
 
+        instance = result.instance
+
         unless dialog.show_for_edit(instance)
-          notify_selection_issue('Unable to open the edit dialog for the selected cabinet.')
+          notify_selection_issue('Unable to open the edit dialog for the selected cabinet.', status: :dialog_failed)
         end
         nil
       end
 
-      def selected_cabinet_instance
-        return unless defined?(Sketchup) && defined?(Sketchup::Model)
+      def notify_selection_issue(message, status: nil)
+        log_message = if status
+                        "Edit Selected Cabinet aborted (#{status}): #{message}"
+                      else
+                        message
+                      end
+        warn("AI Cabinets: #{log_message}")
 
-        model = Sketchup.active_model
-        return unless model.is_a?(Sketchup::Model)
-
-        selection = model.selection
-        return unless selection&.count == 1
-
-        entity = selection.first
-        return unless entity.is_a?(Sketchup::ComponentInstance)
-
-        definition = entity.definition
-        dict = cabinet_metadata_dictionary(definition)
-        return unless dict
-
-        params_key = AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY
-        params_json = dict[params_key]
-        return unless params_json.is_a?(String) && !params_json.empty?
-
-        entity
-      end
-
-      def notify_selection_issue(message)
-        if defined?(::UI) && ::UI.respond_to?(:show_notification)
+        if defined?(::UI) && ::UI.respond_to?(:messagebox)
+          button_type = ::UI.const_defined?(:MB_OK) ? ::UI::MB_OK : 0
+          ::UI.messagebox(message, button_type, 'AI Cabinets')
+        elsif defined?(::UI) && ::UI.respond_to?(:show_notification)
           ::UI.show_notification('AI Cabinets', message)
-        else
-          warn("AI Cabinets: #{message}")
         end
       end
 
-      def cabinet_metadata_dictionary(definition)
-        return unless defined?(AICabinets::Ops::InsertBaseCabinet)
-        return unless definition.is_a?(Sketchup::ComponentDefinition)
-
-        dictionary_name = AICabinets::Ops::InsertBaseCabinet::DICTIONARY_NAME
-        definition.attribute_dictionary(dictionary_name)
-      end
     end
   end
 end

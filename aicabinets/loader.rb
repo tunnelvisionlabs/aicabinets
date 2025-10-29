@@ -4,6 +4,7 @@ module AICabinets
   if defined?(Sketchup)
     Sketchup.require('aicabinets/version')
     Sketchup.require('aicabinets/ops/units')
+    Sketchup.require('aicabinets/selection')
     Sketchup.require('aicabinets/tags')
     Sketchup.require('aicabinets/generator/carcass')
     Sketchup.require('aicabinets/ops/insert_base_cabinet')
