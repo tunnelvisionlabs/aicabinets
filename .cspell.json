@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "language": "en",
+  "ignorePaths": [
+    "dist/**",
+    "node_modules/**",
+    ".git/**"
+  ],
+  "words": [
+    "AICabinets",
+    "HtmlDialog",
+    "Linkinator",
+    "Markdownlint",
+    "frameless",
+    "RBZ",
+    "RuboCop",
+    "SketchUp",
+    "TestUp",
+    "postconditions",
+    "undoable"
+  ]
+}

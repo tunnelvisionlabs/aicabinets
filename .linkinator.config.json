@@ -1,0 +1,19 @@
+{
+  "recurse": true,
+  "markdown": true,
+  "timeout": 60000,
+  "retry": {
+    "count": 2,
+    "statusCodes": [
+      429,
+      500,
+      502,
+      503,
+      504
+    ]
+  },
+  "linksToSkip": [
+    "https://help\\.sketchup\\.com/.*",
+    "https://www\\.githubstatus\\.com/.*"
+  ]
+}

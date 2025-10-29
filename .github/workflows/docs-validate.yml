@@ -1,0 +1,56 @@
+name: Docs Validate
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.md'
+      - '.github/workflows/docs-validate.yml'
+      - '.markdownlint.jsonc'
+      - '.cspell.json'
+      - '.linkinator.config.json'
+  pull_request:
+    paths:
+      - '**/*.md'
+      - '.github/workflows/docs-validate.yml'
+      - '.markdownlint.jsonc'
+      - '.cspell.json'
+      - '.linkinator.config.json'
+
+jobs:
+  docs:
+    name: Documentation validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run markdownlint
+        run: >-
+          npx --yes markdownlint-cli@0.41.0
+          "**/*.md"
+          --config .markdownlint.jsonc
+          --ignore node_modules
+          --ignore dist
+
+      - name: Run cspell
+        run: >-
+          npx --yes cspell@8.14.2
+          "**/*.md"
+          --config .cspell.json
+          --no-progress
+          --no-summary
+
+      - name: Run linkinator
+        run: >-
+          npx --yes linkinator@6.0.0
+          "**/*.md"
+          --config ./.linkinator.config.json
+          --skip "https://help\\.sketchup\\.com/.*"
+          --skip "https://www\\.githubstatus\\.com/.*"
