@@ -196,7 +196,11 @@ class TC_CabinetGeometry < TestUp::TestCase
   end
 
   def component_instances_of(group)
-    group.entities.grep(Sketchup::ComponentInstance).select(&:valid?)
+    group.entities.select do |entity|
+      next unless entity&.valid?
+
+      entity.is_a?(Sketchup::ComponentInstance) || entity.is_a?(Sketchup::Group)
+    end
   end
 
   def find_back_panel(instances, back_thickness_mm)

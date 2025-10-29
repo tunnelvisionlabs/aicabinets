@@ -91,8 +91,12 @@ class TC_ToeKickGeometry < TestUp::TestCase
 
     assert_in_delta(0.0, min_y_mm, tolerance_mm,
                     'Bottom panel front edge should align with carcass front plane')
-    assert_in_delta(params_mm[:depth_mm], max_y_mm, tolerance_mm,
-                    'Bottom panel should extend to the cabinet back')
+
+    back_inset_mm = params_mm.fetch(:back_inset_mm, 0.0)
+    expected_back_plane_mm = params_mm[:depth_mm] - back_inset_mm - params_mm[:back_thickness_mm]
+
+    assert_in_delta(expected_back_plane_mm, max_y_mm, tolerance_mm,
+                    'Bottom panel should terminate at the back panel front face')
   end
 
   def test_door_bottom_unchanged_when_toe_kick_disabled
@@ -152,8 +156,12 @@ class TC_ToeKickGeometry < TestUp::TestCase
 
     assert_in_delta(0.0, min_y_mm, tolerance_mm,
                     'Bottom panel front edge should remain flush without a toe kick height')
-    assert_in_delta(params_mm[:depth_mm], max_y_mm, tolerance_mm,
-                    'Bottom panel should span the full cabinet depth when toe kick is disabled by height')
+
+    back_inset_mm = params_mm.fetch(:back_inset_mm, 0.0)
+    expected_back_plane_mm = params_mm[:depth_mm] - back_inset_mm - params_mm[:back_thickness_mm]
+
+    assert_in_delta(expected_back_plane_mm, max_y_mm, tolerance_mm,
+                    'Bottom panel should terminate at the back panel front face when toe kick height is zero')
   end
 
   def test_partitioned_cabinet_doors_respect_toe_kick
