@@ -100,19 +100,8 @@ module AICabinets
         return unless defined?(Sketchup)
 
         model = Sketchup.active_model
-        return false unless model.is_a?(Sketchup::Model)
-
-        selection = model.selection
-        return false unless selection&.count == 1
-
-        entity = selection.first
-        return false unless entity.is_a?(Sketchup::ComponentInstance)
-        return false if entity.respond_to?(:locked?) && entity.locked?
-
-        definition = entity.definition
-        return false unless definition.is_a?(Sketchup::ComponentDefinition)
-
-        !!cabinet_metadata_dictionary(definition)
+        result = AICabinets::Selection.require_editable_cabinet(model: model)
+        result.valid?
       end
 
     end
