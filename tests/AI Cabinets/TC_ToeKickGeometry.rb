@@ -134,6 +134,28 @@ class TC_ToeKickGeometry < TestUp::TestCase
     end
   end
 
+  def test_bottom_panel_alignment_when_toe_kick_height_zero
+    params_mm = BASE_PARAMS_MM.merge(
+      toe_kick_height_mm: 0.0,
+      toe_kick_depth_mm: 75.0
+    )
+    _, result = build_carcass_definition(params_mm)
+
+    bottom = result.instances[:bottom]
+    refute_nil(bottom, 'Expected bottom panel to exist when toe kick height is zero')
+    assert_nil(result.instances[:toe_kick_front],
+               'Toe kick front should not exist when toe kick height is zero')
+
+    tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
+    min_y_mm = AICabinetsTestHelper.mm_from_length(bottom.bounds.min.y)
+    max_y_mm = AICabinetsTestHelper.mm_from_length(bottom.bounds.max.y)
+
+    assert_in_delta(0.0, min_y_mm, tolerance_mm,
+                    'Bottom panel front edge should remain flush without a toe kick height')
+    assert_in_delta(params_mm[:depth_mm], max_y_mm, tolerance_mm,
+                    'Bottom panel should span the full cabinet depth when toe kick is disabled by height')
+  end
+
   def test_partitioned_cabinet_doors_respect_toe_kick
     params_mm = BASE_PARAMS_MM.merge(
       partitions: {

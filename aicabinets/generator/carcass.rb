@@ -107,14 +107,26 @@ module AICabinets
           apply_category(instances[:right_side], 'AICabinets/Sides', default_material)
 
           bottom_width = params.width - (params.panel_thickness * 2)
-          toe_kick_enabled =
-            params.toe_kick_height_mm.positive? && params.toe_kick_depth_mm.positive?
-          bottom_depth = toe_kick_enabled ? params.depth : params.depth - params.toe_kick_depth
+          toe_kick_height_positive = params.toe_kick_height_mm.positive?
+          toe_kick_depth_positive = params.toe_kick_depth_mm.positive?
+          toe_kick_enabled = toe_kick_height_positive && toe_kick_depth_positive
+          disabled_toe_kick_depth =
+            if toe_kick_height_positive
+              params.toe_kick_depth
+            else
+              Ops::Units.to_length_mm(0.0)
+            end
+          bottom_depth =
+            if toe_kick_enabled
+              params.depth
+            else
+              params.depth - disabled_toe_kick_depth
+            end
           bottom_y_offset =
             if toe_kick_enabled
               Ops::Units.to_length_mm(0.0)
             else
-              params.toe_kick_depth
+              disabled_toe_kick_depth
             end
           instances[:bottom] = Parts::BottomPanel.build(
             parent_entities: entities,
