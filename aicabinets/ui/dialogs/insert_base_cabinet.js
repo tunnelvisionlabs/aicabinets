@@ -473,11 +473,17 @@
     this.dialogTitle = document.querySelector('[data-role="dialog-title"]');
     this.dialogSubtitle = document.querySelector('[data-role="dialog-subtitle"]');
     this.scopeSection = form.querySelector('[data-role="scope-section"]');
+    this.scopeControls = this.scopeSection
+      ? this.scopeSection.querySelector('[data-role="scope-controls"]')
+      : null;
     this.scopeInputs = Array.prototype.slice.call(
       form.querySelectorAll('input[name="scope"]')
     );
-    this.scopeHint = this.scopeSection
-      ? this.scopeSection.querySelector('[data-role="scope-hint"]')
+    this.scopeHint = this.scopeControls
+      ? this.scopeControls.querySelector('[data-role="scope-hint"]')
+      : null;
+    this.scopeNote = this.scopeSection
+      ? this.scopeSection.querySelector('[data-role="scope-note"]')
       : null;
     this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
@@ -487,7 +493,9 @@
     this.mode = 'insert';
     this.scope = 'instance';
     this.scopeDefault = 'instance';
+    this.scopeDisplayMode = 'hidden';
     this.selectionInfo = defaultSelectionInfo();
+    this.selectionProvided = false;
     this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
 
     this.initializeElements();
@@ -769,7 +777,9 @@
 
     if (mode === 'edit') {
       this.scopeDefault = options.scopeDefault === 'all' ? 'all' : 'instance';
-      var selection = options.selection && typeof options.selection === 'object'
+      var selectionProvided = options.selectionProvided === true;
+      this.selectionProvided = selectionProvided;
+      var selection = selectionProvided && options.selection && typeof options.selection === 'object'
         ? {
             instancesCount: options.selection.instancesCount,
             definitionName: options.selection.definitionName,
@@ -777,6 +787,9 @@
           }
         : defaultSelectionInfo();
       this.selectionInfo = selection;
+
+      this.scopeDisplayMode = this.determineScopeDisplayMode(selection);
+      this.applyScopeDisplayMode();
 
       var scopeValue =
         options.scope === 'all'
@@ -788,13 +801,98 @@
     } else {
       this.scopeDefault = 'instance';
       this.selectionInfo = defaultSelectionInfo();
+      this.scopeDisplayMode = 'hidden';
+      this.selectionProvided = false;
+      this.applyScopeDisplayMode();
       this.setScope('instance');
     }
 
+    this.updateScopeNoteText();
     this.updatePrimaryActionLabel();
 
     this.updateInsertButtonState();
   };
+
+  FormController.prototype.determineScopeDisplayMode =
+    function determineScopeDisplayMode(selection) {
+      if (this.mode !== 'edit') {
+        return 'hidden';
+      }
+
+      var info = selection || this.selectionInfo || defaultSelectionInfo();
+      var count = info.instancesCount;
+      var hasCount = typeof count === 'number' && isFinite(count);
+      var selectionProvided = this.selectionProvided === true;
+      if (!hasCount) {
+        if (selectionProvided && info.sharesDefinition === false) {
+          return 'note';
+        }
+        return 'controls';
+      }
+
+      var normalized = Math.max(0, Math.round(count));
+      if (normalized <= 1) {
+        return selectionProvided ? 'note' : 'controls';
+      }
+
+      if (normalized > 1) {
+        return 'controls';
+      }
+
+      return 'controls';
+    };
+
+  FormController.prototype.applyScopeDisplayMode =
+    function applyScopeDisplayMode() {
+      var mode = this.scopeDisplayMode;
+      var showControls = mode === 'controls';
+      var showNote = mode === 'note';
+
+      if (this.scopeSection) {
+        this.scopeSection.classList.toggle(
+          'dialog__scope--note-only',
+          showNote
+        );
+      }
+
+      if (this.scopeControls) {
+        this.scopeControls.hidden = !showControls;
+        this.scopeControls.classList.toggle('is-hidden', !showControls);
+      }
+
+      if (!showControls && this.scopeHint) {
+        this.scopeHint.textContent = '';
+        this.scopeHint.hidden = true;
+      }
+
+      if (this.scopeNote) {
+        this.scopeNote.hidden = !showNote;
+        this.scopeNote.classList.toggle('is-hidden', !showNote);
+        if (showNote) {
+          this.updateScopeNoteText();
+        }
+      }
+    };
+
+  FormController.prototype.updateScopeNoteText =
+    function updateScopeNoteText() {
+      if (!this.scopeNote || this.scopeDisplayMode !== 'note') {
+        return;
+      }
+
+      var info = this.selectionInfo || defaultSelectionInfo();
+      var name = info.definitionName;
+      var label = 'This cabinet';
+      if (typeof name === 'string') {
+        var trimmed = name.trim();
+        if (trimmed) {
+          label = trimmed;
+        }
+      }
+
+      this.scopeNote.textContent =
+        'Scope: ' + label + ' (already unique).';
+    };
 
   FormController.prototype.setScope = function setScope(value) {
     var normalized = value === 'all' ? 'all' : 'instance';
@@ -819,7 +917,7 @@
       return;
     }
 
-    if (this.mode !== 'edit') {
+    if (this.mode !== 'edit' || this.scopeDisplayMode !== 'controls') {
       this.scopeHint.textContent = '';
       this.scopeHint.hidden = true;
       return;
@@ -866,13 +964,19 @@
       this.insertButton.textContent = label;
 
       if (this.mode === 'edit') {
-        var scopeDescription =
-          this.scope === 'all' ? 'all instances' : 'this instance only';
-        var ariaLabel = label;
-        if (scopeDescription) {
-          ariaLabel = label + ' (' + scopeDescription + ')';
+        if (this.scopeDisplayMode === 'controls') {
+          var scopeDescription =
+            this.scope === 'all' ? 'all instances' : 'this instance only';
+          var ariaLabel = label;
+          if (scopeDescription) {
+            ariaLabel = label + ' (' + scopeDescription + ')';
+          }
+          this.insertButton.setAttribute('aria-label', ariaLabel);
+        } else if (label) {
+          this.insertButton.setAttribute('aria-label', label);
+        } else {
+          this.insertButton.removeAttribute('aria-label');
         }
-        this.insertButton.setAttribute('aria-label', ariaLabel);
       } else if (label) {
         this.insertButton.setAttribute('aria-label', label);
       } else {
@@ -1431,7 +1535,8 @@
       mode: 'insert',
       scope: 'instance',
       scopeDefault: 'instance',
-      selection: null
+      selection: null,
+      selectionProvided: false
     };
     if (!options || typeof options !== 'object') {
       return normalized;
@@ -1454,11 +1559,13 @@
     }
 
     if (normalized.mode === 'edit') {
+      normalized.selectionProvided = !!options.selection;
       normalized.selection = normalizeSelection(options.selection);
     } else {
       normalized.scope = 'instance';
       normalized.scopeDefault = 'instance';
       normalized.selection = null;
+      normalized.selectionProvided = false;
     }
 
     return normalized;
