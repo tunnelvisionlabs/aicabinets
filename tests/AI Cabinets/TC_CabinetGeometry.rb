@@ -217,20 +217,24 @@ class TC_CabinetGeometry < TestUp::TestCase
   def dimensions_mm(entity)
     bounds = entity.bounds
     {
-      width: mm(bounds.max.x - bounds.min.x),
-      depth: mm(bounds.max.y - bounds.min.y),
-      height: mm(bounds.max.z - bounds.min.z),
-      min_x: mm(bounds.min.x),
-      max_x: mm(bounds.max.x),
-      min_y: mm(bounds.min.y),
-      max_y: mm(bounds.max.y),
-      min_z: mm(bounds.min.z),
-      max_z: mm(bounds.max.z)
+      width: mm_from_length(bounds.max.x - bounds.min.x),
+      depth: mm_from_length(bounds.max.y - bounds.min.y),
+      height: mm_from_length(bounds.max.z - bounds.min.z),
+      min_x: mm_from_length(bounds.min.x),
+      max_x: mm_from_length(bounds.max.x),
+      min_y: mm_from_length(bounds.min.y),
+      max_y: mm_from_length(bounds.max.y),
+      min_z: mm_from_length(bounds.min.z),
+      max_z: mm_from_length(bounds.max.z)
     }
   end
 
   def mm(value)
     AICabinetsTestHelper.mm(value)
+  end
+
+  def mm_from_length(value)
+    AICabinetsTestHelper.mm_from_length(value)
   end
 
   def tolerance_mm

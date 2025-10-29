@@ -188,9 +188,15 @@ module AICabinets
           if back_width.to_f.negative?
             back_width = zero_length
           end
-          bottom_top_z = bottom_z_offset + params.bottom_thickness
-          back_height = top_z_offset - bottom_top_z
-          back_height = zero_length if back_height.to_f.negative?
+          back_bottom_z = bottom_z_offset
+          back_top_z = top_z_offset + params.top_thickness
+          if back_top_z < back_bottom_z
+            back_height = zero_length
+            back_z_offset = back_bottom_z
+          else
+            back_height = back_top_z - back_bottom_z
+            back_z_offset = back_bottom_z
+          end
 
           instances[:back] = Parts::BackPanel.build(
             parent_entities: entities,
@@ -200,7 +206,7 @@ module AICabinets
             thickness: params.back_thickness,
             x_offset: params.panel_thickness,
             y_offset: back_front_y,
-            z_offset: bottom_top_z
+            z_offset: back_z_offset
           )
           register_created(created, instances[:back])
           apply_category(instances[:back], 'AICabinets/Back', default_material)
