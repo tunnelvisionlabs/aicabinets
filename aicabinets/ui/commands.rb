@@ -99,7 +99,7 @@ module AICabinets
         warn("AI Cabinets: #{log_message}")
 
         if defined?(::UI) && ::UI.respond_to?(:messagebox)
-          button_type = ::UI.const_defined?(:MB_OK) ? ::UI::MB_OK : 0
+          button_type = defined?(::MB_OK) ? ::MB_OK : 0
           ::UI.messagebox(message, button_type, 'AI Cabinets')
         elsif defined?(::UI) && ::UI.respond_to?(:show_notification)
           ::UI.show_notification('AI Cabinets', message)
