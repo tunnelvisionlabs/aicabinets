@@ -17,6 +17,10 @@ module AICabinets
         resolve_icon_path(base_name, size: LARGE_SIZE)
       end
 
+      def cursor_icon_path(base_name)
+        icon_path_for(base_name, 'png', size: LARGE_SIZE)
+      end
+
       def resolve_icon_path(base_name, size:)
         preferred_ext = preferred_vector_extension
         preferred_path = icon_path_for(base_name, preferred_ext) if preferred_ext

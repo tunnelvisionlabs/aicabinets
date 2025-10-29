@@ -11,6 +11,34 @@
     }
   }
 
+  function requestSketchUpFocus() {
+    if (typeof window.blur !== 'function') {
+      return;
+    }
+
+    window.setTimeout(function () {
+      try {
+        window.blur();
+      } catch (error) {
+        // Ignore focus errors; SketchUp will retain the previous focus target.
+      }
+    }, 0);
+  }
+
+  function restoreDialogFocus() {
+    if (typeof window.focus !== 'function') {
+      return;
+    }
+
+    window.setTimeout(function () {
+      try {
+        window.focus();
+      } catch (error) {
+        // Ignore focus errors; the dialog will remain in its prior state.
+      }
+    }, 0);
+  }
+
   var root = (window.AICabinets = window.AICabinets || {});
   var uiRoot = (root.UI = root.UI || {});
   var namespace = (uiRoot.InsertBaseCabinet = uiRoot.InsertBaseCabinet || {});
@@ -20,6 +48,7 @@
   var pendingUnitSettings = null;
   var pendingDefaults = null;
   var pendingConfiguration = null;
+  var pendingPlacementEvents = [];
 
   var UNIT_TO_MM = {
     inch: 25.4,
@@ -466,6 +495,20 @@
     };
     this.values.lengths.toe_kick_thickness = null;
 
+    this.isPlacing = false;
+    this.cancelPending = false;
+    this.dialogRoot = document.querySelector('.dialog');
+    this.placingIndicator = document.querySelector('[data-role="placing-indicator"]');
+    this.interactiveElements = [];
+    this.disabledByPlacement = new Map();
+    this.secondaryButton =
+      document.querySelector('[data-role="secondary-action"]') ||
+      document.querySelector('button[data-action="cancel"]');
+    this.secondaryDefaultLabel = 'Cancel';
+    this.secondaryPlacementLabel = 'Cancel Placement';
+    this.secondaryCloseLabel = 'Close';
+    this.secondaryCurrentAction = 'cancel';
+
     this.unitsNote = form.querySelector('[data-role="units-note"]');
     this.insertButton =
       document.querySelector('[data-role="primary-action"]') ||
@@ -497,15 +540,22 @@
     this.selectionInfo = defaultSelectionInfo();
     this.selectionProvided = false;
     this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
+    this.placementNotice = '';
 
     this.initializeElements();
     this.bindEvents();
     this.updatePartitionMode('none');
     this.updateInsertButtonState();
+    this.setSecondaryAction('cancel', this.secondaryDefaultLabel);
   }
 
   FormController.prototype.initializeElements = function initializeElements() {
     var self = this;
+    var interactiveNodeList = this.form.querySelectorAll('input, select, textarea');
+    this.interactiveElements = Array.prototype.slice.call(interactiveNodeList);
+    this.interactiveElements.forEach(function (element) {
+      self.disabledByPlacement.set(element, element.disabled);
+    });
     LENGTH_FIELDS.forEach(function (name) {
       var input = self.form.querySelector('[name="' + name + '"]');
       self.inputs[name] = input;
@@ -758,6 +808,10 @@
 
     var mode = options.mode === 'edit' ? 'edit' : 'insert';
     this.mode = mode;
+    if (options && typeof options.placementNotice === 'string') {
+      this.placementNotice = options.placementNotice;
+    }
+    this.setPlacingState(false);
 
     var copy = MODE_COPY[mode] || MODE_COPY.insert;
     if (this.dialogTitle) {
@@ -1338,7 +1392,89 @@
       return;
     }
 
-    this.insertButton.disabled = this.isSubmitting || !this.isFormValid();
+    this.insertButton.disabled = this.isSubmitting || this.isPlacing || !this.isFormValid();
+  };
+
+  FormController.prototype.setPlacingState = function setPlacingState(active, options) {
+    var isActive = !!active;
+    var payload = options && typeof options === 'object' ? options : {};
+    var keepSecondaryAction = payload.keepSecondaryAction === true;
+    this.isPlacing = isActive;
+    this.cancelPending = false;
+
+    if (isActive) {
+      if (!keepSecondaryAction) {
+        this.setSecondaryAction('cancel-placement', this.secondaryPlacementLabel);
+      }
+    } else if (!keepSecondaryAction) {
+      this.setSecondaryAction('cancel', this.secondaryDefaultLabel);
+    }
+
+    var message = typeof payload.message === 'string' ? payload.message.trim() : '';
+    if (!message) {
+      message = this.placementNotice || '';
+    }
+
+    if (this.placingIndicator) {
+      if (isActive && message) {
+        this.placingIndicator.textContent = message;
+        this.placingIndicator.hidden = false;
+      } else {
+        this.placingIndicator.hidden = true;
+      }
+    }
+
+    if (this.dialogRoot) {
+      this.dialogRoot.classList.toggle('is-placing', isActive);
+    }
+
+    this.toggleFormDisabled(isActive);
+
+    if (isActive) {
+      this.clearBanner();
+    }
+
+    this.updateInsertButtonState();
+  };
+
+  FormController.prototype.setSecondaryAction = function setSecondaryAction(action, label) {
+    if (!this.secondaryButton) {
+      return;
+    }
+
+    var nextAction = typeof action === 'string' && action.trim() ? action.trim() : 'cancel';
+    var text;
+
+    if (label == null) {
+      text = this.secondaryDefaultLabel;
+    } else {
+      text = String(label);
+      if (!text.trim()) {
+        text = this.secondaryDefaultLabel;
+      }
+    }
+
+    this.secondaryCurrentAction = nextAction;
+    this.secondaryButton.setAttribute('data-action', nextAction);
+    this.secondaryButton.textContent = text;
+  };
+
+  FormController.prototype.toggleFormDisabled = function toggleFormDisabled(disabled) {
+    if (!this.interactiveElements || !this.interactiveElements.length) {
+      return;
+    }
+
+    var self = this;
+    this.interactiveElements.forEach(function (element) {
+      var originallyDisabled = self.disabledByPlacement.get(element);
+      if (disabled) {
+        if (!originallyDisabled) {
+          element.disabled = true;
+        }
+      } else if (!originallyDisabled) {
+        element.disabled = false;
+      }
+    });
   };
 
   FormController.prototype.buildPayload = function buildPayload() {
@@ -1382,6 +1518,10 @@
   };
 
   FormController.prototype.handleSubmit = function handleSubmit() {
+    if (this.isPlacing) {
+      return;
+    }
+
     if (this.isSubmitting) {
       return;
     }
@@ -1423,7 +1563,11 @@
     }
 
     if (ack.ok) {
-      this.setBanner('success', 'Parameters sent to SketchUp.', { autoHide: true });
+      if (ack.placement) {
+        this.clearBanner();
+      } else {
+        this.setBanner('success', 'Parameters sent to SketchUp.', { autoHide: true });
+      }
       return;
     }
 
@@ -1505,6 +1649,25 @@
     }
   };
 
+  namespace.beginPlacement = function beginPlacement(options) {
+    var payload = options && typeof options === 'object' ? options : {};
+    if (controller) {
+      controller.setPlacingState(true, payload);
+      requestSketchUpFocus();
+    } else {
+      pendingPlacementEvents.push({ type: 'begin', options: payload, shouldBlur: true });
+    }
+  };
+
+  namespace.finishPlacement = function finishPlacement(options) {
+    var payload = options && typeof options === 'object' ? options : {};
+    if (controller) {
+      handlePlacementFinish(payload);
+    } else {
+      pendingPlacementEvents.push({ type: 'finish', options: payload });
+    }
+  };
+
   function handleButtonClick(event) {
     var target = event.target;
     if (!(target instanceof HTMLButtonElement)) {
@@ -1527,7 +1690,82 @@
       return;
     }
 
+    if (action === 'cancel-placement') {
+      invokeSketchUp('cancel_placement');
+      return;
+    }
+
+    if (action === 'close') {
+      invokeSketchUp('cancel');
+      return;
+    }
+
     invokeSketchUp(action);
+  }
+
+  function handleDialogKeyDown(event) {
+    if (!event) {
+      return;
+    }
+
+    var isEscape = false;
+    if (event.key === 'Escape' || event.key === 'Esc') {
+      isEscape = true;
+    } else if (event.keyCode === 27) {
+      isEscape = true;
+    }
+
+    if (!isEscape) {
+      return;
+    }
+
+    if (!controller || !controller.isPlacing) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (controller.cancelPending) {
+      return;
+    }
+
+    controller.cancelPending = true;
+    invokeSketchUp('cancel_placement');
+  }
+
+  function handlePlacementFinish(options) {
+    if (!controller) {
+      return;
+    }
+
+    var payload = {};
+    if (options && typeof options === 'object') {
+      Object.keys(options).forEach(function (key) {
+        payload[key] = options[key];
+      });
+    }
+    payload.keepSecondaryAction = true;
+
+    controller.setPlacingState(false, payload);
+    controller.cancelPending = false;
+
+    var status = options && typeof options.status === 'string' ? options.status.toLowerCase() : '';
+    var message = options && typeof options.message === 'string' ? options.message : '';
+
+    if (status === 'error' && message) {
+      controller.setBanner('error', message);
+      return;
+    }
+
+    if (status === 'placed') {
+      controller.setSecondaryAction('close', controller.secondaryCloseLabel);
+    } else {
+      controller.setSecondaryAction('cancel', controller.secondaryDefaultLabel);
+    }
+
+    controller.clearBanner();
+    restoreDialogFocus();
   }
 
   function normalizeConfiguration(options) {
@@ -1536,7 +1774,8 @@
       scope: 'instance',
       scopeDefault: 'instance',
       selection: null,
-      selectionProvided: false
+      selectionProvided: false,
+      placementNotice: ''
     };
     if (!options || typeof options !== 'object') {
       return normalized;
@@ -1566,6 +1805,10 @@
       normalized.scopeDefault = 'instance';
       normalized.selection = null;
       normalized.selectionProvided = false;
+    }
+
+    if (options && typeof options.placement_notice === 'string') {
+      normalized.placementNotice = options.placement_notice;
     }
 
     return normalized;
@@ -1635,12 +1878,27 @@
       pendingDefaults = null;
     }
 
+    if (pendingPlacementEvents.length) {
+      pendingPlacementEvents.forEach(function (event) {
+        if (event.type === 'begin') {
+          controller.setPlacingState(true, event.options);
+          if (event.shouldBlur) {
+            requestSketchUpFocus();
+          }
+        } else if (event.type === 'finish') {
+          handlePlacementFinish(event.options);
+        }
+      });
+      pendingPlacementEvents = [];
+    }
+
     invokeSketchUp('dialog_ready');
     invokeSketchUp('request_defaults');
   }
 
   document.addEventListener('DOMContentLoaded', initialize);
   document.addEventListener('click', handleButtonClick);
+  document.addEventListener('keydown', handleDialogKeyDown, true);
   window.addEventListener('unload', function () {
     controller = null;
   });
