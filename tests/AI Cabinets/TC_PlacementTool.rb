@@ -49,6 +49,32 @@ class TC_PlacementTool < TestUp::TestCase
     assert(tool.send(:finish?), 'Tool should mark placement session as finished')
   end
 
+  def test_cancel_from_ui_triggers_callback_once
+    cancel_count = 0
+    tool = build_tool(callbacks: { cancel: -> { cancel_count += 1 } })
+
+    tool.define_singleton_method(:exit_tool) { |_options = {}| @exit_called = true }
+
+    tool.cancel_from_ui
+
+    assert_equal(1, cancel_count, 'Cancel callback should fire exactly once when invoked from UI')
+    assert(tool.instance_variable_get(:@exit_called), 'Exit should be invoked when cancelling from UI')
+    assert(tool.send(:finish?), 'Tool should mark placement session as finished after cancel_from_ui')
+  end
+
+  def test_escape_key_triggers_cancel
+    cancel_count = 0
+    tool = build_tool(callbacks: { cancel: -> { cancel_count += 1 } })
+
+    tool.define_singleton_method(:exit_tool) { |_options = {}| @exit_called = true }
+
+    tool.onKeyDown(27, 0, 0, nil)
+
+    assert_equal(1, cancel_count, 'Cancel callback should fire when escape key is pressed')
+    assert(tool.instance_variable_get(:@exit_called), 'Escape key should exit the tool')
+    assert(tool.send(:finish?), 'Tool should mark placement session as finished after escape key cancel')
+  end
+
   def test_double_click_guard_prevents_duplicate_insert
     placements = []
     created_instances = []

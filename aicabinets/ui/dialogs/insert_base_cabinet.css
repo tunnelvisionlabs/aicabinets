@@ -250,6 +250,15 @@ body {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.form-field input:disabled,
+.form-field select:disabled,
+.form-field textarea:disabled {
+  background-color: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.15);
+  color: rgba(0, 0, 0, 0.55);
+  cursor: not-allowed;
+}
+
 .form-field input[data-invalid='true'],
 .form-field select[data-invalid='true'] {
   border-color: rgba(211, 47, 47, 0.85);
@@ -368,6 +377,14 @@ body {
   .form-field select {
     background-color: rgba(30, 30, 30, 0.9);
     border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .form-field input:disabled,
+  .form-field select:disabled,
+  .form-field textarea:disabled {
+    background-color: rgba(45, 45, 45, 0.9);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.55);
   }
 
   .scope-toggle__option span {

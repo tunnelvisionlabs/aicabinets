@@ -15,6 +15,7 @@ module AICabinets
         STATUS_PROMPT_KEY = :placement_prompt
         STATUS_CANCEL_KEY = :placement_cancelled
         STATUS_TIP_KEY = :placement_tip
+        ESCAPE_KEY_CODE = 27
 
         def initialize(callbacks: {})
           @callbacks = (callbacks || {}).dup.freeze
@@ -27,6 +28,7 @@ module AICabinets
 
         def activate(view = nil)
           @input_point = Sketchup::InputPoint.new
+          @finished = false
           set_status_text(status_text_for(status_prompt_key))
           view.invalidate if view
         end
@@ -41,10 +43,14 @@ module AICabinets
         end
 
         def onCancel(_reason, _view)
-          return if @finished
+          cancel_tool
+        end
 
-          notify_cancelled
-          exit_tool(status_key: status_cancel_key)
+        def onKeyDown(key, _repeat, _flags, _view)
+          return unless escape_key?(key)
+
+          cancel_tool
+          true
         end
 
         def onLButtonDown(_flags, x, y, view)
@@ -90,6 +96,10 @@ module AICabinets
           end
         rescue StandardError => e
           warn("AI Cabinets: Error while tracking placement point: #{e.message}")
+        end
+
+        def cancel_from_ui
+          cancel_tool
         end
 
         def draw(view)
@@ -141,6 +151,13 @@ module AICabinets
 
         def status_text_for(key)
           Localization.string(key)
+        end
+
+        def cancel_tool
+          return if finish?
+
+          notify_cancelled
+          exit_tool(status_key: status_cancel_key)
         end
 
         def place_instance(model, point3d)
@@ -255,6 +272,15 @@ module AICabinets
 
         def preview_corners_mm
           raise NotImplementedError, 'Subclasses must implement preview_corners_mm'
+        end
+
+        def escape_key?(key)
+          return false if key.nil?
+
+          key_value = key.to_i
+          return true if key_value == ESCAPE_KEY_CODE
+
+          defined?(Sketchup) && defined?(Sketchup::VK_ESCAPE) && key_value == Sketchup::VK_ESCAPE
         end
 
         module Localization

@@ -92,7 +92,10 @@ module AICabinets
           dialog = ::UI::HtmlDialog.new(options)
           attach_callbacks(dialog)
           set_dialog_file(dialog)
-          dialog.set_on_closed { @dialog = nil }
+          dialog.set_on_closed do
+            cancel_active_placement(dialog)
+            @dialog = nil
+          end
           dialog
         end
         private_class_method :build_dialog
@@ -175,6 +178,10 @@ module AICabinets
 
           dialog.add_action_callback('cancel') do |_action_context, _payload|
             dialog.close
+          end
+
+          dialog.add_action_callback('cancel_placement') do |_action_context, _payload|
+            cancel_active_placement(dialog)
           end
         end
         private_class_method :attach_callbacks
@@ -295,8 +302,8 @@ module AICabinets
 
           if dialog_mode == :insert && params_for_tool
             params_for_tool.delete(:scope)
-            enter_placement_mode(dialog)
-            activate_insert_tool(dialog, params_for_tool)
+            activated = activate_insert_tool(dialog, params_for_tool)
+            enter_placement_mode(dialog) if activated
           elsif dialog_mode == :edit
             close_dialog_if_visible(dialog)
           end
@@ -732,27 +739,27 @@ module AICabinets
           unless defined?(Sketchup) && defined?(Sketchup::Model)
             warn('AI Cabinets: SketchUp environment is unavailable for tool activation.')
             finish_placement_mode(dialog, status: :error, message: activation_error)
-            return
+            return false
           end
 
           unless defined?(AICabinets::UI::Tools::InsertBaseCabinetTool)
             warn('AI Cabinets: Insert Base Cabinet tool is not available.')
             finish_placement_mode(dialog, status: :error, message: activation_error)
-            return
+            return false
           end
 
           model = Sketchup.active_model
           unless model.is_a?(Sketchup::Model)
             warn('AI Cabinets: No active model is available for insertion.')
             finish_placement_mode(dialog, status: :error, message: activation_error)
-            return
+            return false
           end
 
           tools = model.tools
           unless tools.respond_to?(:push_tool)
             warn('AI Cabinets: Tool stack is unavailable for activation.')
             finish_placement_mode(dialog, status: :error, message: activation_error)
-            return
+            return false
           end
 
           callbacks = placement_tool_callbacks(dialog)
@@ -761,9 +768,12 @@ module AICabinets
             callbacks: callbacks
           )
           tools.push_tool(tool)
+          register_active_placement_tool(tool)
+          true
         rescue StandardError => e
           warn("AI Cabinets: Unable to activate base cabinet placement tool: #{e.message}")
           finish_placement_mode(dialog, status: :error, message: activation_error)
+          false
         end
         private_class_method :activate_insert_tool
 
@@ -793,6 +803,7 @@ module AICabinets
         private_class_method :enter_placement_mode
 
         def finish_placement_mode(dialog, status:, message: nil)
+          clear_active_placement_tool
           return unless dialog&.visible?
 
           status_string = status.to_s
@@ -803,6 +814,52 @@ module AICabinets
           deliver_dialog_script(dialog, 'finishPlacement', payload)
         end
         private_class_method :finish_placement_mode
+
+        def active_placement_tool
+          defined?(@active_placement_tool) ? @active_placement_tool : nil
+        end
+        private_class_method :active_placement_tool
+
+        def register_active_placement_tool(tool)
+          @active_placement_tool = tool
+        end
+        private_class_method :register_active_placement_tool
+
+        def clear_active_placement_tool(tool = nil)
+          return unless defined?(@active_placement_tool)
+          return if tool && !@active_placement_tool.equal?(tool)
+
+          @active_placement_tool = nil
+        end
+        private_class_method :clear_active_placement_tool
+
+        def cancel_active_placement(dialog)
+          tool = active_placement_tool
+
+          unless tool
+            clear_active_placement_tool
+            finish_placement_mode(dialog, status: :cancelled)
+            return
+          end
+
+          if tool.respond_to?(:cancel_from_ui)
+            tool.cancel_from_ui
+            return
+          end
+
+          model = defined?(Sketchup) ? Sketchup.active_model : nil
+          if model
+            model.select_tool(nil)
+          else
+            clear_active_placement_tool
+            finish_placement_mode(dialog, status: :cancelled)
+          end
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to cancel placement tool: #{e.message}")
+          clear_active_placement_tool
+          finish_placement_mode(dialog, status: :error, message: AICabinets::UI::Localization.string(:placement_failed))
+        end
+        private_class_method :cancel_active_placement
 
         def deliver_dialog_script(dialog, function_name, payload)
           return unless dialog&.visible?

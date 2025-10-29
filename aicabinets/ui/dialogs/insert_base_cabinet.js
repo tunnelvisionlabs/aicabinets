@@ -472,6 +472,13 @@
     this.placingIndicator = document.querySelector('[data-role="placing-indicator"]');
     this.interactiveElements = [];
     this.disabledByPlacement = new Map();
+    this.secondaryButton =
+      document.querySelector('[data-role="secondary-action"]') ||
+      document.querySelector('button[data-action="cancel"]');
+    this.secondaryDefaultLabel = 'Cancel';
+    this.secondaryPlacementLabel = 'Cancel Placement';
+    this.secondaryCloseLabel = 'Close';
+    this.secondaryCurrentAction = 'cancel';
 
     this.unitsNote = form.querySelector('[data-role="units-note"]');
     this.insertButton =
@@ -510,6 +517,7 @@
     this.bindEvents();
     this.updatePartitionMode('none');
     this.updateInsertButtonState();
+    this.setSecondaryAction('cancel', this.secondaryDefaultLabel);
   }
 
   FormController.prototype.initializeElements = function initializeElements() {
@@ -1360,9 +1368,19 @@
 
   FormController.prototype.setPlacingState = function setPlacingState(active, options) {
     var isActive = !!active;
+    var payload = options && typeof options === 'object' ? options : {};
+    var keepSecondaryAction = payload.keepSecondaryAction === true;
     this.isPlacing = isActive;
 
-    var message = options && typeof options.message === 'string' ? options.message.trim() : '';
+    if (isActive) {
+      if (!keepSecondaryAction) {
+        this.setSecondaryAction('cancel-placement', this.secondaryPlacementLabel);
+      }
+    } else if (!keepSecondaryAction) {
+      this.setSecondaryAction('cancel', this.secondaryDefaultLabel);
+    }
+
+    var message = typeof payload.message === 'string' ? payload.message.trim() : '';
     if (!message) {
       message = this.placementNotice || '';
     }
@@ -1387,6 +1405,28 @@
     }
 
     this.updateInsertButtonState();
+  };
+
+  FormController.prototype.setSecondaryAction = function setSecondaryAction(action, label) {
+    if (!this.secondaryButton) {
+      return;
+    }
+
+    var nextAction = typeof action === 'string' && action.trim() ? action.trim() : 'cancel';
+    var text;
+
+    if (label == null) {
+      text = this.secondaryDefaultLabel;
+    } else {
+      text = String(label);
+      if (!text.trim()) {
+        text = this.secondaryDefaultLabel;
+      }
+    }
+
+    this.secondaryCurrentAction = nextAction;
+    this.secondaryButton.setAttribute('data-action', nextAction);
+    this.secondaryButton.textContent = text;
   };
 
   FormController.prototype.toggleFormDisabled = function toggleFormDisabled(disabled) {
@@ -1619,6 +1659,16 @@
       return;
     }
 
+    if (action === 'cancel-placement') {
+      invokeSketchUp('cancel_placement');
+      return;
+    }
+
+    if (action === 'close') {
+      invokeSketchUp('cancel');
+      return;
+    }
+
     invokeSketchUp(action);
   }
 
@@ -1627,7 +1677,15 @@
       return;
     }
 
-    controller.setPlacingState(false, options);
+    var payload = {};
+    if (options && typeof options === 'object') {
+      Object.keys(options).forEach(function (key) {
+        payload[key] = options[key];
+      });
+    }
+    payload.keepSecondaryAction = true;
+
+    controller.setPlacingState(false, payload);
 
     var status = options && typeof options.status === 'string' ? options.status.toLowerCase() : '';
     var message = options && typeof options.message === 'string' ? options.message : '';
@@ -1635,6 +1693,12 @@
     if (status === 'error' && message) {
       controller.setBanner('error', message);
       return;
+    }
+
+    if (status === 'placed') {
+      controller.setSecondaryAction('close', controller.secondaryCloseLabel);
+    } else {
+      controller.setSecondaryAction('cancel', controller.secondaryDefaultLabel);
     }
 
     controller.clearBanner();
