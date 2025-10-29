@@ -3,9 +3,26 @@
 require 'testup/testcase'
 require_relative 'suite_helper'
 
-Sketchup.require('aicabinets/generator/legacy/cabinet')
+Sketchup.require('aicabinets/generator/carcass')
 
 class TC_CabinetGeometry < TestUp::TestCase
+  LENGTH_OVERRIDE_KEYS = %i[
+    width
+    depth
+    height
+    panel_thickness
+    back_thickness
+    top_thickness
+    bottom_thickness
+    toe_kick_height
+    toe_kick_depth
+    toe_kick_thickness
+    top_inset
+    bottom_inset
+    back_inset
+    top_stringer_width
+  ].freeze
+
   def setup
     AICabinetsTestHelper.clean_model!
   end
@@ -15,15 +32,14 @@ class TC_CabinetGeometry < TestUp::TestCase
   end
 
   def test_back_panel_width_matches_interior_width
-    group, config, cabinet = build_cabinet_group
-    instances = component_instances_of(group)
+    _, params_mm, result = build_carcass
 
-    back = find_back_panel(instances, mm(config[:back_thickness]))
+    back = single_entity(result.instances[:back])
     refute_nil(back, 'Expected to find back panel component')
 
     dims = dimensions_mm(back)
-    panel_thickness_mm = mm(config[:panel_thickness])
-    width_mm = mm(cabinet[:width])
+    panel_thickness_mm = params_mm[:panel_thickness_mm]
+    width_mm = params_mm[:width_mm]
     expected_width = width_mm - (2 * panel_thickness_mm)
 
     assert_in_delta(expected_width, dims[:width], tolerance_mm,
@@ -36,19 +52,13 @@ class TC_CabinetGeometry < TestUp::TestCase
   end
 
   def test_top_panel_depth_stops_at_back_front_face
-    group, config, _cabinet = build_cabinet_group
-    instances = component_instances_of(group)
+    _, params_mm, result = build_carcass
 
-    top = find_top_panel(
-      instances,
-      mm(config[:panel_thickness]),
-      mm(config[:height]),
-      mm(config[:top_inset])
-    )
+    top = single_entity(result.instances[:top_or_stretchers])
     refute_nil(top, 'Expected to find top panel component')
 
     dims = dimensions_mm(top)
-    expected_depth = back_front_plane_mm(config)
+    expected_depth = back_front_plane_mm(params_mm)
 
     assert_in_delta(expected_depth, dims[:depth], tolerance_mm,
                     'Top panel depth should stop at back front face')
@@ -57,18 +67,13 @@ class TC_CabinetGeometry < TestUp::TestCase
   end
 
   def test_bottom_panel_depth_stops_at_back_front_face
-    group, config, _cabinet = build_cabinet_group
-    instances = component_instances_of(group)
+    _, params_mm, result = build_carcass
 
-    bottom = find_bottom_panel(
-      instances,
-      mm(config[:panel_thickness]),
-      mm(config[:bottom_inset])
-    )
+    bottom = single_entity(result.instances[:bottom])
     refute_nil(bottom, 'Expected to find bottom panel component')
 
     dims = dimensions_mm(bottom)
-    expected_depth = back_front_plane_mm(config)
+    expected_depth = back_front_plane_mm(params_mm)
 
     assert_in_delta(expected_depth, dims[:depth], tolerance_mm,
                     'Bottom panel depth should stop at back front face')
@@ -77,40 +82,24 @@ class TC_CabinetGeometry < TestUp::TestCase
   end
 
   def test_back_inset_reduces_top_and_bottom_depth
-    group_zero, config_zero, _cabinet_zero = build_cabinet_group({ back_inset: 0.mm })
-    instances_zero = component_instances_of(group_zero)
+    _, params_zero_mm, result_zero = build_carcass(back_inset_mm: 0.0)
 
-    top_zero = find_top_panel(
-      instances_zero,
-      mm(config_zero[:panel_thickness]),
-      mm(config_zero[:height]),
-      mm(config_zero[:top_inset])
-    )
-    bottom_zero = find_bottom_panel(
-      instances_zero,
-      mm(config_zero[:panel_thickness]),
-      mm(config_zero[:bottom_inset])
-    )
+    top_zero = single_entity(result_zero.instances[:top_or_stretchers])
+    bottom_zero = single_entity(result_zero.instances[:bottom])
+    refute_nil(top_zero, 'Expected top panel with zero back inset')
+    refute_nil(bottom_zero, 'Expected bottom panel with zero back inset')
+
     top_depth_zero = dimensions_mm(top_zero)[:depth]
     bottom_depth_zero = dimensions_mm(bottom_zero)[:depth]
 
-    AICabinetsTestHelper.clean_model!
-
     inset_mm = 6.0
-    group_inset, config_inset, _cabinet_inset = build_cabinet_group({ back_inset: inset_mm.mm })
-    instances_inset = component_instances_of(group_inset)
+    _, params_inset_mm, result_inset = build_carcass(back_inset_mm: inset_mm)
 
-    top_inset = find_top_panel(
-      instances_inset,
-      mm(config_inset[:panel_thickness]),
-      mm(config_inset[:height]),
-      mm(config_inset[:top_inset])
-    )
-    bottom_inset = find_bottom_panel(
-      instances_inset,
-      mm(config_inset[:panel_thickness]),
-      mm(config_inset[:bottom_inset])
-    )
+    top_inset = single_entity(result_inset.instances[:top_or_stretchers])
+    bottom_inset = single_entity(result_inset.instances[:bottom])
+    refute_nil(top_inset, 'Expected top panel with inset back')
+    refute_nil(bottom_inset, 'Expected bottom panel with inset back')
+
     top_depth_inset = dimensions_mm(top_inset)[:depth]
     bottom_depth_inset = dimensions_mm(bottom_inset)[:depth]
 
@@ -118,29 +107,27 @@ class TC_CabinetGeometry < TestUp::TestCase
                     'Top depth should reduce by back inset amount')
     assert_in_delta(inset_mm, bottom_depth_zero - bottom_depth_inset, tolerance_mm,
                     'Bottom depth should reduce by back inset amount')
+
+    expected_plane_zero = back_front_plane_mm(params_zero_mm)
+    expected_plane_inset = back_front_plane_mm(params_inset_mm)
+    assert_in_delta(inset_mm, expected_plane_zero - expected_plane_inset, tolerance_mm,
+                    'Back front plane should shift by inset amount')
   end
 
   def test_top_stringers_align_with_back_front_face
-    config_overrides = {
+    overrides = {
       top_type: :stringers,
-      top_stringer_width: 120.mm
+      top_stringer_width_mm: 120.0
     }
-    group, config, _cabinet = build_cabinet_group(config_overrides)
-    instances = component_instances_of(group)
+    _, params_mm, result = build_carcass(overrides)
 
-    stringers = find_top_stringers(
-      instances,
-      mm(config[:panel_thickness]),
-      mm(config[:height]),
-      mm(config[:top_inset])
-    )
-
+    stringers = entities_from(result.instances[:top_or_stretchers])
     assert_equal(2, stringers.length, 'Expected front and back stringers')
 
-    rear_stringer = stringers.max_by { |instance| dimensions_mm(instance)[:max_y] }
+    expected_plane = back_front_plane_mm(params_mm)
+    stringer_width_mm = params_mm[:top_stringer_width_mm]
+    rear_stringer = stringers.max_by { |entity| dimensions_mm(entity)[:max_y] }
     rear_dims = dimensions_mm(rear_stringer)
-    expected_plane = back_front_plane_mm(config)
-    stringer_width_mm = mm(config[:top_stringer_width])
     front_plane = [expected_plane - stringer_width_mm, 0.0].max
 
     assert_in_delta(expected_plane, rear_dims[:max_y], tolerance_mm,
@@ -148,7 +135,7 @@ class TC_CabinetGeometry < TestUp::TestCase
     assert_in_delta(front_plane, rear_dims[:min_y], tolerance_mm,
                     'Back stringer front should preserve requested width')
 
-    front_stringer = stringers.min_by { |instance| dimensions_mm(instance)[:max_y] }
+    front_stringer = stringers.min_by { |entity| dimensions_mm(entity)[:max_y] }
     front_dims = dimensions_mm(front_stringer)
     assert_in_delta(0.0, front_dims[:min_y], tolerance_mm,
                     'Front stringer should start at cabinet front')
@@ -158,88 +145,72 @@ class TC_CabinetGeometry < TestUp::TestCase
 
   private
 
-  def build_cabinet_group(config_overrides = {}, cabinet_overrides = {})
-    config = base_config.merge(config_overrides)
-    cabinet = base_cabinet_config.merge(cabinet_overrides)
-    config[:cabinets] = [cabinet]
+  def build_carcass(overrides = {})
+    params_mm = base_params_mm.merge(normalize_overrides(overrides))
+    definition, result = build_carcass_definition(params_mm)
+    [definition, params_mm, result]
+  end
 
+  def base_params_mm
+    {
+      width_mm: 800.0,
+      depth_mm: 600.0,
+      height_mm: 720.0,
+      panel_thickness_mm: 19.0,
+      back_thickness_mm: 6.0,
+      top_thickness_mm: 19.0,
+      bottom_thickness_mm: 19.0,
+      toe_kick_height_mm: 0.0,
+      toe_kick_depth_mm: 0.0,
+      toe_kick_thickness_mm: 19.0,
+      top_inset_mm: 0.0,
+      bottom_inset_mm: 0.0,
+      back_inset_mm: 0.0,
+      top_type: :panel,
+      top_stringer_width_mm: 100.0
+    }
+  end
+
+  def normalize_overrides(overrides)
+    overrides.each_with_object({}) do |(key, value), acc|
+      symbol_key = key.to_sym
+      if symbol_key.to_s.end_with?('_mm')
+        acc[symbol_key] = value.is_a?(Numeric) ? value.to_f : mm(value)
+      elsif LENGTH_OVERRIDE_KEYS.include?(symbol_key)
+        acc["#{symbol_key}_mm".to_sym] = mm(value)
+      else
+        acc[symbol_key] = value
+      end
+    end
+  end
+
+  def build_carcass_definition(params_mm)
     model = Sketchup.active_model
-    before_ids = model.entities.grep(Sketchup::Group).map(&:entityID)
-    AICabinets.create_frameless_cabinet(config)
-    group = model.entities.grep(Sketchup::Group).find { |entity| !before_ids.include?(entity.entityID) }
-    assert(group, 'Expected cabinet group to be created')
-
-    [group, config, cabinet]
+    name = next_definition_name
+    definition = model.definitions.add(name)
+    result = AICabinets::Generator.build_base_carcass!(parent: definition, params_mm: params_mm)
+    [definition, result]
   end
 
-  def base_config
-    {
-      height: 720.mm,
-      depth: 600.mm,
-      panel_thickness: 19.mm,
-      back_thickness: 6.mm,
-      top_inset: 0.mm,
-      bottom_inset: 0.mm,
-      back_inset: 0.mm
-    }
+  def next_definition_name
+    sequence = self.class.instance_variable_get(:@definition_sequence) || 0
+    sequence += 1
+    self.class.instance_variable_set(:@definition_sequence, sequence)
+    "Cabinet Geometry #{sequence}"
   end
 
-  def base_cabinet_config
-    {
-      width: 800.mm,
-      shelf_count: 0,
-      doors: nil,
-      drawers: [],
-      partitions: [],
-      hole_columns: []
-    }
+  def single_entity(container)
+    entities_from(container).first
   end
 
-  def component_instances_of(group)
-    group.entities.select do |entity|
-      next unless entity&.valid?
-
-      entity.is_a?(Sketchup::ComponentInstance) || entity.is_a?(Sketchup::Group)
-    end
+  def entities_from(container)
+    Array(container).flatten.compact.select { |entity| entity&.valid? }
   end
 
-  def find_back_panel(instances, back_thickness_mm)
-    instances.find do |instance|
-      (dimensions_mm(instance)[:depth] - back_thickness_mm).abs <= tolerance_mm
-    end
-  end
-
-  def find_top_panel(instances, panel_thickness_mm, height_mm, top_inset_mm)
-    instances.find do |instance|
-      dims = dimensions_mm(instance)
-      thickness_matches = (dims[:height] - panel_thickness_mm).abs <= tolerance_mm
-      top_plane_matches = (dims[:max_z] - (height_mm - top_inset_mm)).abs <= tolerance_mm
-      thickness_matches && top_plane_matches
-    end
-  end
-
-  def find_bottom_panel(instances, panel_thickness_mm, bottom_inset_mm)
-    instances.find do |instance|
-      dims = dimensions_mm(instance)
-      thickness_matches = (dims[:height] - panel_thickness_mm).abs <= tolerance_mm
-      bottom_plane_matches = (dims[:min_z] - bottom_inset_mm).abs <= tolerance_mm
-      thickness_matches && bottom_plane_matches
-    end
-  end
-
-  def find_top_stringers(instances, panel_thickness_mm, height_mm, top_inset_mm)
-    instances.select do |instance|
-      dims = dimensions_mm(instance)
-      thickness_matches = (dims[:height] - panel_thickness_mm).abs <= tolerance_mm
-      top_plane_matches = (dims[:max_z] - (height_mm - top_inset_mm)).abs <= tolerance_mm
-      thickness_matches && top_plane_matches
-    end
-  end
-
-  def back_front_plane_mm(config)
-    depth_mm = mm(config[:depth])
-    inset_mm = mm(config[:back_inset])
-    thickness_mm = mm(config[:back_thickness])
+  def back_front_plane_mm(params_mm)
+    depth_mm = params_mm[:depth_mm]
+    inset_mm = params_mm[:back_inset_mm]
+    thickness_mm = params_mm[:back_thickness_mm]
     [depth_mm - inset_mm - thickness_mm, 0.0].max
   end
 
