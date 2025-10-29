@@ -11,6 +11,34 @@
     }
   }
 
+  function requestSketchUpFocus() {
+    if (typeof window.blur !== 'function') {
+      return;
+    }
+
+    window.setTimeout(function () {
+      try {
+        window.blur();
+      } catch (error) {
+        // Ignore focus errors; SketchUp will retain the previous focus target.
+      }
+    }, 0);
+  }
+
+  function restoreDialogFocus() {
+    if (typeof window.focus !== 'function') {
+      return;
+    }
+
+    window.setTimeout(function () {
+      try {
+        window.focus();
+      } catch (error) {
+        // Ignore focus errors; the dialog will remain in its prior state.
+      }
+    }, 0);
+  }
+
   var root = (window.AICabinets = window.AICabinets || {});
   var uiRoot = (root.UI = root.UI || {});
   var namespace = (uiRoot.InsertBaseCabinet = uiRoot.InsertBaseCabinet || {});
@@ -468,6 +496,7 @@
     this.values.lengths.toe_kick_thickness = null;
 
     this.isPlacing = false;
+    this.cancelPending = false;
     this.dialogRoot = document.querySelector('.dialog');
     this.placingIndicator = document.querySelector('[data-role="placing-indicator"]');
     this.interactiveElements = [];
@@ -1371,6 +1400,7 @@
     var payload = options && typeof options === 'object' ? options : {};
     var keepSecondaryAction = payload.keepSecondaryAction === true;
     this.isPlacing = isActive;
+    this.cancelPending = false;
 
     if (isActive) {
       if (!keepSecondaryAction) {
@@ -1623,8 +1653,9 @@
     var payload = options && typeof options === 'object' ? options : {};
     if (controller) {
       controller.setPlacingState(true, payload);
+      requestSketchUpFocus();
     } else {
-      pendingPlacementEvents.push({ type: 'begin', options: payload });
+      pendingPlacementEvents.push({ type: 'begin', options: payload, shouldBlur: true });
     }
   };
 
@@ -1672,6 +1703,37 @@
     invokeSketchUp(action);
   }
 
+  function handleDialogKeyDown(event) {
+    if (!event) {
+      return;
+    }
+
+    var isEscape = false;
+    if (event.key === 'Escape' || event.key === 'Esc') {
+      isEscape = true;
+    } else if (event.keyCode === 27) {
+      isEscape = true;
+    }
+
+    if (!isEscape) {
+      return;
+    }
+
+    if (!controller || !controller.isPlacing) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (controller.cancelPending) {
+      return;
+    }
+
+    controller.cancelPending = true;
+    invokeSketchUp('cancel_placement');
+  }
+
   function handlePlacementFinish(options) {
     if (!controller) {
       return;
@@ -1686,6 +1748,7 @@
     payload.keepSecondaryAction = true;
 
     controller.setPlacingState(false, payload);
+    controller.cancelPending = false;
 
     var status = options && typeof options.status === 'string' ? options.status.toLowerCase() : '';
     var message = options && typeof options.message === 'string' ? options.message : '';
@@ -1702,6 +1765,7 @@
     }
 
     controller.clearBanner();
+    restoreDialogFocus();
   }
 
   function normalizeConfiguration(options) {
@@ -1818,6 +1882,9 @@
       pendingPlacementEvents.forEach(function (event) {
         if (event.type === 'begin') {
           controller.setPlacingState(true, event.options);
+          if (event.shouldBlur) {
+            requestSketchUpFocus();
+          }
         } else if (event.type === 'finish') {
           handlePlacementFinish(event.options);
         }
@@ -1831,6 +1898,7 @@
 
   document.addEventListener('DOMContentLoaded', initialize);
   document.addEventListener('click', handleButtonClick);
+  document.addEventListener('keydown', handleDialogKeyDown, true);
   window.addEventListener('unload', function () {
     controller = null;
   });

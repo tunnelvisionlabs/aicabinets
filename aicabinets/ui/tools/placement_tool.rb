@@ -33,9 +33,10 @@ module AICabinets
           view.invalidate if view
         end
 
-        def deactivate(_view = nil)
+        def deactivate(view = nil)
           @input_point = nil
           @current_point = nil
+          view.invalidate if view
         end
 
         def resume(view)
@@ -248,10 +249,13 @@ module AICabinets
 
           bottom = translated[0..3]
           top = translated[4..7]
-          view.draw(GL_LINE_LOOP, bottom)
-          view.draw(GL_LINE_LOOP, top)
           verticals = bottom.zip(top).flatten.compact
-          view.draw(GL_LINES, verticals)
+
+          view.line_stipple = '' if view.respond_to?(:line_stipple=)
+
+          draw_with_overlay(view, GL_LINE_LOOP, bottom)
+          draw_with_overlay(view, GL_LINE_LOOP, top)
+          draw_with_overlay(view, GL_LINES, verticals)
         rescue StandardError => e
           warn("AI Cabinets: Unable to draw placement preview: #{e.message}")
         end
@@ -281,6 +285,14 @@ module AICabinets
           return true if key_value == ESCAPE_KEY_CODE
 
           defined?(Sketchup) && defined?(Sketchup::VK_ESCAPE) && key_value == Sketchup::VK_ESCAPE
+        end
+
+        def draw_with_overlay(view, mode, points)
+          return unless view && points && !points.empty?
+
+          view.draw(mode, points, false)
+        rescue ArgumentError
+          view.draw(mode, points)
         end
 
         module Localization
