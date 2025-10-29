@@ -495,6 +495,7 @@
     this.scopeDefault = 'instance';
     this.scopeDisplayMode = 'hidden';
     this.selectionInfo = defaultSelectionInfo();
+    this.selectionProvided = false;
     this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
 
     this.initializeElements();
@@ -776,7 +777,9 @@
 
     if (mode === 'edit') {
       this.scopeDefault = options.scopeDefault === 'all' ? 'all' : 'instance';
-      var selection = options.selection && typeof options.selection === 'object'
+      var selectionProvided = options.selectionProvided === true;
+      this.selectionProvided = selectionProvided;
+      var selection = selectionProvided && options.selection && typeof options.selection === 'object'
         ? {
             instancesCount: options.selection.instancesCount,
             definitionName: options.selection.definitionName,
@@ -799,6 +802,7 @@
       this.scopeDefault = 'instance';
       this.selectionInfo = defaultSelectionInfo();
       this.scopeDisplayMode = 'hidden';
+      this.selectionProvided = false;
       this.applyScopeDisplayMode();
       this.setScope('instance');
     }
@@ -818,13 +822,17 @@
       var info = selection || this.selectionInfo || defaultSelectionInfo();
       var count = info.instancesCount;
       var hasCount = typeof count === 'number' && isFinite(count);
+      var selectionProvided = this.selectionProvided === true;
       if (!hasCount) {
+        if (selectionProvided && info.sharesDefinition === false) {
+          return 'note';
+        }
         return 'controls';
       }
 
       var normalized = Math.max(0, Math.round(count));
-      if (normalized === 1) {
-        return 'note';
+      if (normalized <= 1) {
+        return selectionProvided ? 'note' : 'controls';
       }
 
       if (normalized > 1) {
@@ -1525,7 +1533,8 @@
       mode: 'insert',
       scope: 'instance',
       scopeDefault: 'instance',
-      selection: null
+      selection: null,
+      selectionProvided: false
     };
     if (!options || typeof options !== 'object') {
       return normalized;
@@ -1548,11 +1557,13 @@
     }
 
     if (normalized.mode === 'edit') {
+      normalized.selectionProvided = !!options.selection;
       normalized.selection = normalizeSelection(options.selection);
     } else {
       normalized.scope = 'instance';
       normalized.scopeDefault = 'instance';
       normalized.selection = null;
+      normalized.selectionProvided = false;
     }
 
     return normalized;
