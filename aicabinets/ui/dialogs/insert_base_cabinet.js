@@ -1546,11 +1546,11 @@
       normalized.mode = 'edit';
     }
 
-    if (options.scope_default === 'all') {
+    if (options.scope_default === 'all' || options.scope_default === 'definition') {
       normalized.scopeDefault = 'all';
     }
 
-    if (options.scope === 'all') {
+    if (options.scope === 'all' || options.scope === 'definition') {
       normalized.scope = 'all';
     } else if (options.scope === 'instance') {
       normalized.scope = 'instance';
