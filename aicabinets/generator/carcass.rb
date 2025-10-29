@@ -77,6 +77,12 @@ module AICabinets
               0.0
             end
           effective_toe_kick_thickness = Ops::Units.to_length_mm(effective_toe_kick_thickness_mm)
+          zero_length = Ops::Units.to_length_mm(0.0)
+          bottom_z_offset = params.toe_kick_height + params.bottom_inset
+          top_z_offset = params.height - params.top_inset - params.top_thickness
+          top_z_offset = zero_length if top_z_offset.to_f.negative?
+          back_front_y = params.depth - params.back_inset - params.back_thickness
+          back_front_y = zero_length if back_front_y.to_f.negative?
 
           instances[:left_side] = Parts::SidePanel.build(
             parent_entities: entities,
@@ -124,10 +130,17 @@ module AICabinets
             end
           bottom_y_offset =
             if toe_kick_enabled
-              Ops::Units.to_length_mm(0.0)
+              zero_length
             else
               disabled_toe_kick_depth
             end
+          bottom_max_y = bottom_y_offset + bottom_depth
+          if bottom_max_y > back_front_y
+            bottom_depth = back_front_y - bottom_y_offset
+            if bottom_depth.to_f.negative?
+              bottom_depth = zero_length
+            end
+          end
           instances[:bottom] = Parts::BottomPanel.build(
             parent_entities: entities,
             name: 'Bottom',
@@ -136,22 +149,34 @@ module AICabinets
             thickness: params.bottom_thickness,
             x_offset: params.panel_thickness,
             y_offset: bottom_y_offset,
-            z_offset: params.toe_kick_height
+            z_offset: bottom_z_offset
           )
           register_created(created, instances[:bottom])
           apply_category(instances[:bottom], 'AICabinets/Bottom', default_material)
 
           top_width = params.width - (params.panel_thickness * 2)
-          instances[:top_or_stretchers] = Parts::TopPanel.build(
-            parent_entities: entities,
-            name: 'Top',
-            width: top_width,
-            depth: params.depth,
-            thickness: params.top_thickness,
-            x_offset: params.panel_thickness,
-            y_offset: 0,
-            z_offset: params.height - params.top_thickness
-          )
+          top_depth = back_front_y
+          if params.top_type == :stringers
+            stringers = build_top_stringers(
+              parent_entities: entities,
+              width: top_width,
+              available_depth: top_depth,
+              z_offset: top_z_offset
+            )
+            instances[:top_or_stretchers] = stringers
+          else
+            top_depth = zero_length if top_depth.to_f.negative?
+            instances[:top_or_stretchers] = Parts::TopPanel.build(
+              parent_entities: entities,
+              name: 'Top',
+              width: top_width,
+              depth: top_depth,
+              thickness: params.top_thickness,
+              x_offset: params.panel_thickness,
+              y_offset: zero_length,
+              z_offset: top_z_offset
+            )
+          end
           register_created(created, instances[:top_or_stretchers])
           apply_category(
             instances[:top_or_stretchers],
@@ -159,15 +184,29 @@ module AICabinets
             default_material
           )
 
+          back_width = params.width - (params.panel_thickness * 2)
+          if back_width.to_f.negative?
+            back_width = zero_length
+          end
+          back_bottom_z = bottom_z_offset
+          back_top_z = top_z_offset + params.top_thickness
+          if back_top_z < back_bottom_z
+            back_height = zero_length
+            back_z_offset = back_bottom_z
+          else
+            back_height = back_top_z - back_bottom_z
+            back_z_offset = back_bottom_z
+          end
+
           instances[:back] = Parts::BackPanel.build(
             parent_entities: entities,
             name: 'Back',
-            width: params.width,
-            height: params.height - params.toe_kick_height,
+            width: back_width,
+            height: back_height,
             thickness: params.back_thickness,
-            x_offset: 0,
-            y_offset: params.depth - params.back_thickness,
-            z_offset: params.toe_kick_height
+            x_offset: params.panel_thickness,
+            y_offset: back_front_y,
+            z_offset: back_z_offset
           )
           register_created(created, instances[:back])
           apply_category(instances[:back], 'AICabinets/Back', default_material)
@@ -286,6 +325,13 @@ module AICabinets
             ensure_numeric!(:toe_kick_thickness_mm, @raw_params[:toe_kick_thickness_mm])
           end
 
+          %i[top_inset_mm bottom_inset_mm back_inset_mm top_stringer_width_mm].each do |key|
+            next unless @raw_params.key?(key)
+
+            ensure_numeric!(key, @raw_params[key])
+            ensure_non_negative!(key, @raw_params[key])
+          end
+
           width = @raw_params[:width_mm].to_f
           depth = @raw_params[:depth_mm].to_f
           height = @raw_params[:height_mm].to_f
@@ -295,15 +341,26 @@ module AICabinets
           top = (@raw_params[:top_thickness_mm] || panel).to_f
           bottom = (@raw_params[:bottom_thickness_mm] || panel).to_f
           back = (@raw_params[:back_thickness_mm] || panel).to_f
+          top_inset = (@raw_params[:top_inset_mm] || 0.0).to_f
+          bottom_inset = (@raw_params[:bottom_inset_mm] || 0.0).to_f
+          back_inset = (@raw_params[:back_inset_mm] || 0.0).to_f
 
           raise ArgumentError, 'panel_thickness_mm must be less than half of width_mm' if panel * 2 >= width
           raise ArgumentError, 'panel_thickness_mm must be less than depth_mm' if panel >= depth
           raise ArgumentError, 'panel_thickness_mm must be less than height_mm' if panel >= height
           raise ArgumentError, 'toe_kick_height_mm must be between 0 and height_mm (exclusive)' unless toe_height >= 0 && toe_height < height
           raise ArgumentError, 'toe_kick_depth_mm must be between 0 and depth_mm (exclusive)' unless toe_depth >= 0 && toe_depth < depth
-          raise ArgumentError, 'top_thickness_mm must be positive and <= height_mm' unless top.positive? && top < height
-          raise ArgumentError, 'bottom_thickness_mm must be positive and <= (height_mm - toe_kick_height_mm)' unless bottom.positive? && bottom < (height - toe_height)
-          raise ArgumentError, 'back_thickness_mm must be positive and <= depth_mm' unless back.positive? && back < depth
+          raise ArgumentError, 'top_inset_mm must be between 0 and height_mm' unless top_inset >= 0 && top_inset < height
+          raise ArgumentError, 'bottom_inset_mm must be between 0 and (height_mm - toe_kick_height_mm)' unless bottom_inset >= 0 && bottom_inset < (height - toe_height)
+          raise ArgumentError, 'back_inset_mm must be between 0 and depth_mm' unless back_inset >= 0 && back_inset < depth
+
+          top_limit = height - top_inset
+          bottom_limit = height - toe_height - bottom_inset
+          back_limit = depth - back_inset
+
+          raise ArgumentError, 'top_thickness_mm must be positive and <= (height_mm - top_inset_mm)' unless top.positive? && top < top_limit
+          raise ArgumentError, 'bottom_thickness_mm must be positive and <= (height_mm - toe_kick_height_mm - bottom_inset_mm)' unless bottom.positive? && bottom < bottom_limit
+          raise ArgumentError, 'back_thickness_mm must be positive and <= (depth_mm - back_inset_mm)' unless back.positive? && back < back_limit
         end
 
         def ensure_numeric!(key, value)
@@ -347,6 +404,48 @@ module AICabinets
 
             created << entity
           end
+        end
+
+        def build_top_stringers(parent_entities:, width:, available_depth:, z_offset:)
+          zero_length = Ops::Units.to_length_mm(0.0)
+          depth = available_depth
+          depth = zero_length if depth.to_f.negative?
+
+          stringer_depth = [params.top_stringer_width, depth].min
+          return [] if stringer_depth.to_f <= 0.0
+
+          stringers = []
+
+          front = Parts::TopPanel.build(
+            parent_entities: parent_entities,
+            name: 'Front Stretcher',
+            width: width,
+            depth: stringer_depth,
+            thickness: params.top_thickness,
+            x_offset: params.panel_thickness,
+            y_offset: zero_length,
+            z_offset: z_offset
+          )
+          stringers << front if front&.valid?
+
+          rear_y_offset = depth - stringer_depth
+          rear_y_offset = zero_length if rear_y_offset.to_f.negative?
+          rear_depth = depth - rear_y_offset
+          if rear_depth.to_f.positive?
+            rear = Parts::TopPanel.build(
+              parent_entities: parent_entities,
+              name: 'Back Stretcher',
+              width: width,
+              depth: rear_depth,
+              thickness: params.top_thickness,
+              x_offset: params.panel_thickness,
+              y_offset: rear_y_offset,
+              z_offset: z_offset
+            )
+            stringers << rear if rear&.valid?
+          end
+
+          stringers
         end
 
         def apply_category(container, tag_name, material)
@@ -400,15 +499,20 @@ module AICabinets
       end
 
       class ParameterSet
+        TOP_TYPES = %i[panel stringers].freeze
+        DEFAULT_TOP_STRINGER_WIDTH_MM = 100.0
+
         attr_reader :width, :depth, :height, :panel_thickness, :toe_kick_height,
                     :toe_kick_depth, :toe_kick_thickness, :back_thickness, :top_thickness,
-                    :bottom_thickness, :width_mm, :depth_mm, :height_mm,
+                    :bottom_thickness, :top_inset, :bottom_inset, :back_inset,
+                    :top_type, :top_stringer_width, :width_mm, :depth_mm, :height_mm,
                     :panel_thickness_mm, :toe_kick_height_mm,
                     :toe_kick_depth_mm, :toe_kick_thickness_mm,
                     :back_thickness_mm, :top_thickness_mm,
-                    :bottom_thickness_mm, :shelf_count, :shelf_thickness,
-                    :shelf_thickness_mm, :interior_depth, :interior_depth_mm,
-                    :interior_bottom_z_mm, :interior_top_z_mm,
+                    :bottom_thickness_mm, :top_inset_mm, :bottom_inset_mm,
+                    :back_inset_mm, :top_stringer_width_mm, :shelf_count,
+                    :shelf_thickness, :shelf_thickness_mm, :interior_depth,
+                    :interior_depth_mm, :interior_bottom_z_mm, :interior_top_z_mm,
                     :interior_clear_height_mm, :partition_left_faces_mm,
                     :partition_thickness_mm, :front_mode, :door_thickness,
                     :door_thickness_mm, :door_edge_reveal_mm,
@@ -427,6 +531,25 @@ module AICabinets
           @back_thickness_mm = (params_mm[:back_thickness_mm] || @panel_thickness_mm).to_f
           @top_thickness_mm = (params_mm[:top_thickness_mm] || @panel_thickness_mm).to_f
           @bottom_thickness_mm = (params_mm[:bottom_thickness_mm] || @panel_thickness_mm).to_f
+
+          top_inset_override =
+            coerce_non_negative_numeric(params_mm[:top_inset_mm] || params_mm[:top_inset])
+          @top_inset_mm = (top_inset_override || 0.0).to_f
+
+          bottom_inset_override =
+            coerce_non_negative_numeric(params_mm[:bottom_inset_mm] || params_mm[:bottom_inset])
+          @bottom_inset_mm = (bottom_inset_override || 0.0).to_f
+
+          back_inset_override =
+            coerce_non_negative_numeric(params_mm[:back_inset_mm] || params_mm[:back_inset])
+          @back_inset_mm = (back_inset_override || 0.0).to_f
+
+          stringer_override =
+            coerce_non_negative_numeric(
+              params_mm[:top_stringer_width_mm] || params_mm[:top_stringer_width]
+            )
+          @top_stringer_width_mm = (stringer_override || DEFAULT_TOP_STRINGER_WIDTH_MM).to_f
+          @top_type = normalize_top_type(params_mm[:top_type])
 
           thickness_provided = params_mm.key?(:toe_kick_thickness_mm)
           raw_thickness = params_mm[:toe_kick_thickness_mm]
@@ -462,12 +585,17 @@ module AICabinets
           @back_thickness = length_mm(@back_thickness_mm)
           @top_thickness = length_mm(@top_thickness_mm)
           @bottom_thickness = length_mm(@bottom_thickness_mm)
+          @top_inset = length_mm(@top_inset_mm)
+          @bottom_inset = length_mm(@bottom_inset_mm)
+          @back_inset = length_mm(@back_inset_mm)
+          @top_stringer_width = length_mm(@top_stringer_width_mm)
           @shelf_thickness = length_mm(@shelf_thickness_mm)
 
-          @interior_depth_mm = @depth_mm - @back_thickness_mm
+          depth_available_mm = @depth_mm - @back_inset_mm - @back_thickness_mm
+          @interior_depth_mm = [depth_available_mm, 0.0].max
           @interior_depth = length_mm(@interior_depth_mm)
-          @interior_bottom_z_mm = @toe_kick_height_mm + @bottom_thickness_mm
-          @interior_top_z_mm = @height_mm - @top_thickness_mm
+          @interior_bottom_z_mm = @toe_kick_height_mm + @bottom_inset_mm + @bottom_thickness_mm
+          @interior_top_z_mm = @height_mm - @top_inset_mm - @top_thickness_mm
           @interior_clear_height_mm =
             [@interior_top_z_mm - @interior_bottom_z_mm, 0.0].max
 
@@ -605,6 +733,24 @@ module AICabinets
           numeric
         rescue ArgumentError, TypeError
           nil
+        end
+
+        def normalize_top_type(value)
+          candidate =
+            case value
+            when Symbol
+              value
+            when String
+              value.strip.downcase.to_sym
+            else
+              nil
+            end
+
+          return candidate if TOP_TYPES.include?(candidate)
+
+          :panel
+        rescue StandardError
+          :panel
         end
 
         def normalize_front(value)
