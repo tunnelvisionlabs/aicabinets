@@ -2,6 +2,9 @@
 
 require 'json'
 
+require 'aicabinets/defaults'
+require 'aicabinets/params_sanitizer'
+
 module AICabinets
   module UI
     module Dialogs
@@ -684,7 +687,10 @@ module AICabinets
           params_json = dict[params_key]
           return unless params_json.is_a?(String) && !params_json.empty?
 
-          JSON.parse(params_json, symbolize_names: true)
+          params = JSON.parse(params_json, symbolize_names: true)
+          defaults = AICabinets::Defaults.load_effective_mm
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: defaults)
+          params
         rescue JSON::ParserError => e
           warn("AI Cabinets: Unable to parse stored cabinet parameters: #{e.message}")
           nil

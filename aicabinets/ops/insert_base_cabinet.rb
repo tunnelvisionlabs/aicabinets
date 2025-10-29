@@ -4,6 +4,9 @@ require 'json'
 require 'digest'
 require 'sketchup.rb'
 
+require 'aicabinets/defaults'
+require 'aicabinets/params_sanitizer'
+
 Sketchup.require('aicabinets/generator/carcass')
 Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/tags')
@@ -163,6 +166,9 @@ module AICabinets
         end
 
         copy = deep_copy(params_mm)
+
+        defaults = AICabinets::Defaults.load_effective_mm
+        AICabinets::ParamsSanitizer.sanitize!(copy, global_defaults: defaults)
 
         thickness_value =
           if params_mm.key?(:toe_kick_thickness_mm)

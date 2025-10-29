@@ -117,6 +117,31 @@
               "items": {
                 "type": "number"
               }
+            },
+            "bays": {
+              "type": "array",
+              "description": "Per-bay settings that mirror global defaults unless customized.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "shelf_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Shelf count for the bay."
+                  },
+                  "door_mode": {
+                    "type": "string",
+                    "description": "Door configuration for the bay.",
+                    "enum": [
+                      "empty",
+                      "doors_left",
+                      "doors_right",
+                      "doors_double"
+                    ]
+                  }
+                }
+              }
             }
           }
         }

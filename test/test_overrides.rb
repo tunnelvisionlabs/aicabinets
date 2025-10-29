@@ -87,11 +87,12 @@ class OverridesTest < Minitest::Test
     assert_in_delta(543.211, cabinet_base['width_mm'], 0.001)
 
     partitions = cabinet_base.fetch('partitions')
-    assert_equal(%w[mode count positions_mm panel_thickness_mm], partitions.keys)
+    assert_equal(%w[mode count positions_mm panel_thickness_mm bays], partitions.keys)
     assert_equal('positions', partitions['mode'])
     assert_equal(2, partitions['count'])
     assert_equal([100.0, 250.123], partitions['positions_mm'])
     assert_nil(partitions['panel_thickness_mm'])
+    assert_equal([], partitions['bays'])
     assert_in_delta(
       params[:toe_kick_thickness_mm],
       cabinet_base['toe_kick_thickness_mm'],
@@ -127,6 +128,13 @@ class OverridesTest < Minitest::Test
     assert_equal(2, partitions[:count])
     assert_equal([150.0, 300.0], partitions[:positions_mm])
     assert_nil(partitions[:panel_thickness_mm])
+    assert_equal(3, partitions[:bays].length)
+    assert_equal(2, partitions[:bays].first[:shelf_count])
+    assert_equal('doors_double', partitions[:bays].first[:door_mode])
+    partitions[:bays][1..].each do |bay|
+      assert_equal(4, bay[:shelf_count])
+      assert_equal('doors_double', bay[:door_mode])
+    end
     assert_equal(600.0, effective[:depth_mm])
   end
 
