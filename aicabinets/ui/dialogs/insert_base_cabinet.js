@@ -310,21 +310,48 @@
       return;
     }
 
-    var self = this;
-    this.chipsContainer.innerHTML = '';
-    this.chipButtons = [];
+    var container = this.chipsContainer;
+    var existing = this.chipButtons ? this.chipButtons.slice() : [];
+    var desiredCount = this.bays.length;
+    var newButtons = [];
 
-    this.bays.forEach(function (_bay, index) {
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'bay-chip';
-      button.textContent = self.translate('bay_chip_label', { index: index + 1 });
+    for (var index = 0; index < desiredCount; index += 1) {
+      var button = existing[index];
+      if (!button || button.parentElement !== container) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'bay-chip';
+      }
+
+      var referenceNode = container.children[index] || null;
+      if (referenceNode !== button) {
+        container.insertBefore(button, referenceNode);
+      }
+
+      button.textContent = this.translate('bay_chip_label', { index: index + 1 });
       button.setAttribute('data-index', String(index));
-      button.setAttribute('aria-pressed', index === self.selectedIndex ? 'true' : 'false');
-      button.tabIndex = index === self.selectedIndex ? 0 : -1;
-      self.chipsContainer.appendChild(button);
-      self.chipButtons.push(button);
-    });
+      button.setAttribute('aria-pressed', index === this.selectedIndex ? 'true' : 'false');
+      button.tabIndex = index === this.selectedIndex ? 0 : -1;
+
+      newButtons.push(button);
+    }
+
+    for (var removeIndex = existing.length - 1; removeIndex >= desiredCount; removeIndex -= 1) {
+      var extra = existing[removeIndex];
+      if (extra && extra.parentElement === container) {
+        container.removeChild(extra);
+      }
+    }
+
+    while (container.children.length > desiredCount) {
+      var trailing = container.lastElementChild;
+      if (!trailing) {
+        break;
+      }
+      container.removeChild(trailing);
+    }
+
+    this.chipButtons = newButtons;
 
     this.updateActionsVisibility();
     this.announce(this.translate('bay_count_status', { count: this.bays.length }));
