@@ -5,7 +5,7 @@ require 'json'
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
 require 'aicabinets/ui/localization'
-require 'lib/cabinet'
+require 'aicabinets/door_mode_rules'
 
 module AICabinets
   module UI
@@ -212,7 +212,7 @@ module AICabinets
         # Queries the cabinet helper for double-door feasibility and resolves the
         # returned localization key into a user-facing string.
         def evaluate_double_validity(params, index)
-          result = AICabinets::Cabinet.double_door_validity(params_mm: params, bay_index: index)
+          result = AICabinets::DoorModeRules.double_door_validity(params_mm: params, bay_index: index)
           allowed = result.is_a?(Array) ? result[0] : false
           reason_value = result.is_a?(Array) ? result[1] : nil
           reason =
