@@ -1223,13 +1223,41 @@
     }
   };
 
+  FormController.prototype.deriveVisibilityFromMode = function deriveVisibilityFromMode(
+    mode
+  ) {
+    var normalized = '';
+    if (typeof mode === 'string') {
+      normalized = mode.trim().toLowerCase();
+    }
+
+    var showBays = normalized === 'even' || normalized === 'positions';
+    return {
+      show_bays: showBays,
+      show_global_front_layout: !showBays,
+      show_global_shelves: !showBays
+    };
+  };
+
   FormController.prototype.applyUiVisibility = function applyUiVisibility(flags) {
     var settings = flags && typeof flags === 'object' ? flags : {};
-    var showBays = settings.show_bays === true;
-    var showFront = settings.show_global_front_layout !== false;
-    var showShelves = settings.show_global_shelves !== false;
+    var derived = this.deriveVisibilityFromMode(this.values.partitions.mode);
+    var showBays =
+      typeof settings.show_bays === 'boolean' ? settings.show_bays : derived.show_bays;
+    var showFront =
+      typeof settings.show_global_front_layout === 'boolean'
+        ? settings.show_global_front_layout
+        : derived.show_global_front_layout;
+    var showShelves =
+      typeof settings.show_global_shelves === 'boolean'
+        ? settings.show_global_shelves
+        : derived.show_global_shelves;
 
-    this.currentUiVisibility = settings;
+    this.currentUiVisibility = {
+      show_bays: showBays,
+      show_global_front_layout: showFront,
+      show_global_shelves: showShelves
+    };
     this.toggleElementVisibility(this.baySection, showBays);
     this.toggleElementVisibility(this.globalFrontGroup, showFront);
     this.toggleElementVisibility(this.globalShelvesGroup, showShelves);
@@ -2161,6 +2189,7 @@
   FormController.prototype.handlePartitionModeChange = function handlePartitionModeChange(mode) {
     this.values.partitions.mode = mode;
     this.updatePartitionMode(mode);
+    this.applyUiVisibility(this.deriveVisibilityFromMode(mode));
     this.ensureBayLength();
     this.updateInsertButtonState();
     this.notifyPartitionModeChange(mode);

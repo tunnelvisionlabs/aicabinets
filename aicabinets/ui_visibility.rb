@@ -17,21 +17,10 @@ module AICabinets
     end
 
     def clamp_selected_index(index, bay_count)
-      length =
-        begin
-          Integer(bay_count)
-        rescue ArgumentError, TypeError
-          nil
-        end
-      length = 0 if length.nil? || length.negative?
+      length = sanitize_bay_count(bay_count)
       return 0 if length.zero?
 
-      numeric =
-        begin
-          Integer(index)
-        rescue ArgumentError, TypeError
-          0
-        end
+      numeric = sanitize_integer(index) || 0
 
       [[numeric, 0].max, length - 1].min
     end
@@ -53,22 +42,40 @@ module AICabinets
     def self.normalize_mode(value)
       return nil if value.nil?
 
-      mode =
-        case value
-        when Symbol
-          value.to_s
-        else
-          value.to_s
-        end
-      mode = mode.strip.downcase
+      mode = value.to_s.strip.downcase
       return nil if mode.empty?
 
-      return mode if VALID_MODES.include?(mode)
-
-      nil
+      VALID_MODES.include?(mode) ? mode : nil
     rescue StandardError
       nil
     end
     private_class_method :normalize_mode
+
+    def self.sanitize_bay_count(value)
+      number = sanitize_integer(value)
+      return 0 if number.nil? || number.negative?
+
+      number
+    end
+    private_class_method :sanitize_bay_count
+
+    def self.sanitize_integer(value)
+      case value
+      when Integer
+        value
+      when Numeric
+        value.finite? ? value.round : nil
+      when String
+        text = value.strip
+        return nil unless /\A[+-]?\d+\z/.match?(text)
+
+        text.to_i
+      else
+        nil
+      end
+    rescue StandardError
+      nil
+    end
+    private_class_method :sanitize_integer
   end
 end
