@@ -45,54 +45,26 @@ module AICabinets
       end
 
       def plan_layout(params)
-        count = params.shelf_count
-        return if count <= 0
-
-        usable_height_mm = params.interior_clear_height_mm
-        return if usable_height_mm <= EPSILON_MM
-
-        shelf_thickness_mm = params.shelf_thickness_mm
-        clear_height_mm = usable_height_mm
-
-        shelves_to_place = [count.to_i, 0].max
-        gap_mm = nil
-
-        while shelves_to_place.positive?
-          remaining_clear_mm = clear_height_mm - (shelf_thickness_mm * shelves_to_place)
-          if remaining_clear_mm <= EPSILON_MM
-            shelves_to_place -= 1
-            next
-          end
-
-          tentative_gap_mm = remaining_clear_mm / (shelves_to_place + 1)
-          if tentative_gap_mm >= MIN_VERTICAL_GAP_MM
-            gap_mm = tentative_gap_mm
-            break
-          end
-
-          shelves_to_place -= 1
-        end
-
-        return if shelves_to_place <= 0 || gap_mm.nil?
-
-        depth_mm = params.interior_depth_mm - FRONT_SETBACK_MM - REAR_CLEARANCE_MM
-        return if depth_mm <= MIN_DEPTH_MM
-
         bay_ranges = params.partition_bay_ranges_mm
         return unless bay_ranges.any?
 
-        top_positions_mm = []
-        current_bottom_mm = params.interior_bottom_z_mm + gap_mm
+        bay_settings = params.respond_to?(:bay_settings) ? params.bay_settings : []
+        return if bay_settings.empty?
 
-        shelves_to_place.times do
-          top_positions_mm << (current_bottom_mm + shelf_thickness_mm)
-          current_bottom_mm += shelf_thickness_mm + gap_mm
-        end
+        depth_mm = params.interior_depth_mm - FRONT_SETBACK_MM - REAR_CLEARANCE_MM
+        return if depth_mm <= MIN_DEPTH_MM
 
         placements = []
         bay_ranges.each_with_index do |(bay_start_mm, bay_end_mm), bay_index|
           bay_width_mm = bay_end_mm - bay_start_mm
           next if bay_width_mm <= MIN_BAY_WIDTH_MM
+
+          setting = bay_settings[bay_index]
+          shelf_count = setting&.shelf_count.to_i
+          next if shelf_count <= 0
+
+          top_positions_mm = plan_vertical_positions(params, shelf_count)
+          next if top_positions_mm.empty?
 
           name = if bay_ranges.length > 1
                    "Shelf (Bay #{bay_index + 1})"
@@ -107,7 +79,7 @@ module AICabinets
               depth_mm: depth_mm,
               top_z_mm: top_mm,
               x_start_mm: bay_start_mm,
-              thickness_mm: shelf_thickness_mm,
+              thickness_mm: params.shelf_thickness_mm,
               front_offset_mm: FRONT_SETBACK_MM
             )
           end
@@ -154,6 +126,47 @@ module AICabinets
         Ops::Units.to_length_mm(value)
       end
       private_class_method :length_mm
+
+      def plan_vertical_positions(params, requested_count)
+        shelves_to_place = [requested_count.to_i, 0].max
+        return [] unless shelves_to_place.positive?
+
+        usable_height_mm = params.interior_clear_height_mm
+        return [] if usable_height_mm <= EPSILON_MM
+
+        shelf_thickness_mm = params.shelf_thickness_mm
+        clear_height_mm = usable_height_mm
+        gap_mm = nil
+
+        while shelves_to_place.positive?
+          remaining_clear_mm = clear_height_mm - (shelf_thickness_mm * shelves_to_place)
+          if remaining_clear_mm <= EPSILON_MM
+            shelves_to_place -= 1
+            next
+          end
+
+          tentative_gap_mm = remaining_clear_mm / (shelves_to_place + 1)
+          if tentative_gap_mm >= MIN_VERTICAL_GAP_MM
+            gap_mm = tentative_gap_mm
+            break
+          end
+
+          shelves_to_place -= 1
+        end
+
+        return [] if shelves_to_place <= 0 || gap_mm.nil?
+
+        top_positions_mm = []
+        current_bottom_mm = params.interior_bottom_z_mm + gap_mm
+
+        shelves_to_place.times do
+          top_positions_mm << (current_bottom_mm + shelf_thickness_mm)
+          current_bottom_mm += shelf_thickness_mm + gap_mm
+        end
+
+        top_positions_mm
+      end
+      private_class_method :plan_vertical_positions
     end
   end
 end

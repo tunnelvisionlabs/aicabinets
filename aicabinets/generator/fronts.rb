@@ -2,6 +2,7 @@
 
 require 'sketchup.rb'
 
+Sketchup.require('aicabinets/geometry/bay_openings')
 Sketchup.require('aicabinets/ops/units')
 
 module AICabinets
@@ -29,8 +30,6 @@ module AICabinets
 
       def build(parent_entities:, params:)
         validate_parent!(parent_entities)
-        return [] unless params.respond_to?(:front_mode)
-
         placements = plan_layout(params)
         return [] if placements.empty?
 
@@ -57,89 +56,93 @@ module AICabinets
       end
 
       def plan_layout(params)
-        mode = params.front_mode
-        return [] unless FRONT_MODES.include?(mode)
-        return [] if mode == :empty
+        bay_ranges = params.partition_bay_ranges_mm
+        return [] unless bay_ranges.any?
 
-        thickness_mm = params.door_thickness_mm.to_f
-        unless thickness_mm > MIN_DIMENSION_MM
-          warn_skip('Skipped doors because door_thickness_mm was not positive.')
-          return []
-        end
+        bay_settings = params.respond_to?(:bay_settings) ? params.bay_settings : []
+        return [] if bay_settings.empty?
 
-        width_mm = params.width_mm.to_f
-        total_height_mm = params.height_mm.to_f
-        toe_kick_offset_mm = toe_kick_clearance_mm(params)
-        available_height_mm = total_height_mm - toe_kick_offset_mm
-        left_reveal_mm = params.door_edge_reveal_mm.to_f
-        right_reveal_mm = params.door_edge_reveal_mm.to_f
-        top_reveal_mm = params.door_top_reveal_mm.to_f
-        bottom_reveal_mm = params.door_bottom_reveal_mm.to_f
+        openings = Geometry::BayOpenings.compute(
+          bay_ranges_mm: bay_ranges,
+          edge_reveal_mm: params.door_edge_reveal_mm.to_f,
+          top_reveal_mm: params.door_top_reveal_mm.to_f,
+          bottom_reveal_mm: params.door_bottom_reveal_mm.to_f,
+          toe_kick_height_mm: params.toe_kick_height_mm.to_f,
+          toe_kick_depth_mm: params.toe_kick_depth_mm.to_f,
+          cabinet_height_mm: params.height_mm.to_f
+        )
+
         center_gap_mm = params.door_center_reveal_mm.to_f
+        bay_count = [bay_ranges.length, bay_settings.length].min
 
-        clear_width_mm = width_mm - left_reveal_mm - right_reveal_mm
-        if clear_width_mm <= MIN_DIMENSION_MM
-          warn_skip('Skipped doors because reveals consumed the cabinet width.')
-          return []
-        end
+        placements = []
+        openings.each do |opening|
+          setting = bay_settings[opening.index]
+          next unless setting
 
-        clear_height_mm = available_height_mm - top_reveal_mm - bottom_reveal_mm
-        if clear_height_mm <= MIN_DIMENSION_MM
-          warn_skip('Skipped doors because reveals consumed the cabinet height.')
-          return []
-        end
+          mode = normalize_bay_mode(setting.door_mode)
+          next unless mode
 
-        bottom_z_mm = toe_kick_offset_mm + bottom_reveal_mm
-
-        case mode
-        when :doors_left
-          [DoorPlacement.new(
-            name: 'Door (Hinge Left)',
-            x_start_mm: left_reveal_mm,
-            width_mm: clear_width_mm,
-            height_mm: clear_height_mm,
-            bottom_z_mm: bottom_z_mm
-          )]
-        when :doors_right
-          [DoorPlacement.new(
-            name: 'Door (Hinge Right)',
-            x_start_mm: left_reveal_mm,
-            width_mm: clear_width_mm,
-            height_mm: clear_height_mm,
-            bottom_z_mm: bottom_z_mm
-          )]
-        when :doors_double
-          usable_width_mm = clear_width_mm - center_gap_mm
-          if usable_width_mm <= MIN_DIMENSION_MM
-            warn_skip('Skipped double doors because the center gap exceeded the available width.')
-            return []
+          if opening.width_mm <= MIN_DIMENSION_MM
+            warn_skip("Skipped doors in bay #{opening.index + 1}; reveals consumed the bay width.")
+            next
           end
 
-          leaf_width_mm = usable_width_mm / 2.0
-          if leaf_width_mm <= MIN_DIMENSION_MM
-            warn_skip('Skipped double doors because each leaf would be too narrow.')
-            return []
+          if opening.height_mm <= MIN_DIMENSION_MM
+            warn_skip("Skipped doors in bay #{opening.index + 1}; reveals consumed the cabinet height.")
+            next
           end
 
-          [
-            DoorPlacement.new(
-              name: 'Door (Left)',
-              x_start_mm: left_reveal_mm,
-              width_mm: leaf_width_mm,
-              height_mm: clear_height_mm,
-              bottom_z_mm: bottom_z_mm
-            ),
-            DoorPlacement.new(
-              name: 'Door (Right)',
-              x_start_mm: left_reveal_mm + leaf_width_mm + center_gap_mm,
-              width_mm: leaf_width_mm,
-              height_mm: clear_height_mm,
-              bottom_z_mm: bottom_z_mm
+          case mode
+          when :doors_left
+            placements << DoorPlacement.new(
+              name: bay_name('Door (Hinge Left)', opening.index, bay_count),
+              x_start_mm: opening.left_mm,
+              width_mm: opening.width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
             )
-          ]
-        else
-          []
+          when :doors_right
+            placements << DoorPlacement.new(
+              name: bay_name('Door (Hinge Right)', opening.index, bay_count),
+              x_start_mm: opening.left_mm,
+              width_mm: opening.width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
+            )
+          when :doors_double
+            usable_width_mm = opening.width_mm - center_gap_mm
+            if usable_width_mm <= MIN_DIMENSION_MM
+              warn_skip("Skipped double doors in bay #{opening.index + 1}; center gap exceeded available width.")
+              next
+            end
+
+            leaf_width_mm = usable_width_mm / 2.0
+            if leaf_width_mm <= MIN_DIMENSION_MM
+              warn_skip("Skipped double doors in bay #{opening.index + 1}; each leaf would be too narrow.")
+              next
+            end
+
+            left_name = bay_name('Door (Left)', opening.index, bay_count)
+            right_name = bay_name('Door (Right)', opening.index, bay_count)
+            placements << DoorPlacement.new(
+              name: left_name,
+              x_start_mm: opening.left_mm,
+              width_mm: leaf_width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
+            )
+            placements << DoorPlacement.new(
+              name: right_name,
+              x_start_mm: opening.left_mm + leaf_width_mm + center_gap_mm,
+              width_mm: leaf_width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
+            )
+          end
         end
+
+        placements
       end
 
       def length_mm(value)
@@ -175,18 +178,6 @@ module AICabinets
       end
       private_class_method :build_single_door
 
-      def toe_kick_clearance_mm(params)
-        return 0.0 unless params.respond_to?(:toe_kick_height_mm)
-        return 0.0 unless params.respond_to?(:toe_kick_depth_mm)
-
-        height_mm = params.toe_kick_height_mm.to_f
-        depth_mm = params.toe_kick_depth_mm.to_f
-        return 0.0 unless height_mm.positive? && depth_mm.positive?
-
-        height_mm
-      end
-      private_class_method :toe_kick_clearance_mm
-
       def validate_parent!(parent_entities)
         unless parent_entities.is_a?(Sketchup::Entities)
           raise ArgumentError, 'parent_entities must be Sketchup::Entities'
@@ -198,6 +189,34 @@ module AICabinets
         warn("AI Cabinets: #{message}")
       end
       private_class_method :warn_skip
+
+      def normalize_bay_mode(value)
+        return nil if value.nil?
+
+        candidate =
+          case value
+          when Symbol
+            value
+          when String
+            value.strip.downcase.to_sym
+          end
+
+        return nil unless candidate
+        return nil if candidate == :none || candidate == :empty
+        return candidate if FRONT_MODES.include?(candidate)
+
+        nil
+      rescue StandardError
+        nil
+      end
+      private_class_method :normalize_bay_mode
+
+      def bay_name(base, bay_index, total_bays)
+        return base if total_bays <= 1
+
+        "#{base} (Bay #{bay_index + 1})"
+      end
+      private_class_method :bay_name
     end
   end
 end

@@ -521,6 +521,8 @@ module AICabinets
                     :door_top_reveal, :door_bottom_reveal,
                     :door_center_reveal
 
+        BaySetting = Struct.new(:shelf_count, :door_mode, keyword_init: true)
+
         def initialize(params_mm)
           @width_mm = params_mm[:width_mm].to_f
           @depth_mm = params_mm[:depth_mm].to_f
@@ -643,6 +645,7 @@ module AICabinets
               @partition_bay_ranges_mm = [[left, right]]
             end
           end
+          @bay_settings = build_bay_settings(params_mm[:partitions])
         end
 
         class << self
@@ -678,6 +681,10 @@ module AICabinets
 
         def partition_thickness
           @partition_thickness ||= length_mm(@partition_thickness_mm)
+        end
+
+        def bay_settings
+          @bay_settings.map(&:dup)
         end
 
         private
@@ -786,6 +793,72 @@ module AICabinets
 
         def interior_right_face_mm
           @width_mm - @panel_thickness_mm
+        end
+
+        def build_bay_settings(partitions)
+          ranges_count = @partition_bay_ranges_mm.length
+          return [] if ranges_count.zero?
+
+          bays_array = extract_bays_array(partitions)
+          template = bays_array.first || {}
+
+          Array.new(ranges_count) do |index|
+            source = bays_array[index] || template
+            shelf_count = coerce_non_negative_integer(source[:shelf_count] || source['shelf_count']) || 0
+            door_value = source[:door_mode] || source['door_mode']
+            BaySetting.new(
+              shelf_count: shelf_count,
+              door_mode: normalize_bay_door_mode(door_value)
+            )
+          end
+        end
+
+        def extract_bays_array(partitions)
+          return [] unless partitions.is_a?(Hash)
+
+          bays = partitions[:bays] || partitions['bays']
+          return [] unless bays.is_a?(Array)
+
+          bays
+        end
+
+        def normalize_bay_door_mode(value)
+          return nil if value.nil?
+
+          candidate =
+            case value
+            when Symbol
+              value
+            when String
+              value.strip.downcase.to_sym
+            end
+
+          return nil unless candidate
+          return nil if candidate == :none || candidate == :empty
+          return candidate if Fronts::FRONT_MODES.include?(candidate)
+
+          nil
+        rescue StandardError
+          nil
+        end
+
+        def coerce_non_negative_integer(value)
+          return nil if value.nil?
+
+          case value
+          when Integer
+            value >= 0 ? value : nil
+          when Numeric
+            integer = value.round
+            integer >= 0 ? integer : nil
+          when String
+            integer = Integer(value, 10)
+            integer >= 0 ? integer : nil
+          else
+            nil
+          end
+        rescue ArgumentError
+          nil
         end
 
         class PartitionLayout
