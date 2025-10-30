@@ -1143,6 +1143,7 @@
     this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
     this.placementNotice = '';
     this.selectedBayIndex = 0;
+    this.pendingSelectedBayIndex = null;
     this.bayTemplate = { shelf_count: 0, door_mode: null };
 
     this.initializeElements();
@@ -1364,6 +1365,7 @@
     }
 
     this.selectedBayIndex = clamped;
+    this.pendingSelectedBayIndex = clamped;
     invokeSketchUp('ui_select_bay', JSON.stringify({ index: clamped }));
   };
 
@@ -1528,14 +1530,23 @@
     }
 
     var bays = Array.isArray(state.bays) ? state.bays : [];
-    var selected = this.selectedBayIndex;
+    var bayTotal = bays.length > 0 ? bays.length : 1;
+    var pendingSelection = this.pendingSelectedBayIndex;
+    var nextSelected = this.selectedBayIndex;
     if (typeof state.selected_index === 'number' && isFinite(state.selected_index)) {
-      selected = Math.max(0, Math.round(state.selected_index));
-      this.selectedBayIndex = selected;
+      nextSelected = Math.max(0, Math.round(state.selected_index));
     }
 
-    this.setBayArray(bays, { selectedIndex: selected });
+    if (pendingSelection != null && isFinite(pendingSelection)) {
+      nextSelected = Math.max(0, Math.min(pendingSelection, bayTotal - 1));
+    } else {
+      nextSelected = Math.max(0, Math.min(nextSelected, bayTotal - 1));
+    }
+
+    this.selectedBayIndex = nextSelected;
+    this.setBayArray(bays, { selectedIndex: nextSelected });
     this.ensureBayLength();
+    this.pendingSelectedBayIndex = null;
 
     if (count == null) {
       var bayCount = this.values.partitions.bays ? this.values.partitions.bays.length : 0;
