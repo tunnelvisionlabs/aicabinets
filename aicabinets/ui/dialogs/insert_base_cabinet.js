@@ -147,6 +147,7 @@
 
     this.selectedIndex = 0;
     this.bays = [];
+    this.chipButtons = [];
     this.doubleValidity = [];
     this.template = { shelf_count: 0, door_mode: null };
     this.shelfLock = false;
@@ -293,6 +294,15 @@
         self.onCopyLeftToRight();
       });
     }
+
+    if (this.chipsContainer) {
+      this.chipsContainer.addEventListener('click', function (event) {
+        self.handleChipContainerClick(event);
+      });
+      this.chipsContainer.addEventListener('keydown', function (event) {
+        self.handleChipContainerKeyDown(event);
+      });
+    }
   };
 
   BayController.prototype.renderChips = function renderChips() {
@@ -300,30 +310,94 @@
       return;
     }
 
-    var self = this;
-    this.chipsContainer.innerHTML = '';
-    this.chipButtons = [];
+    var container = this.chipsContainer;
+    var existing = this.chipButtons ? this.chipButtons.slice() : [];
+    var desiredCount = this.bays.length;
+    var newButtons = [];
 
-    this.bays.forEach(function (_bay, index) {
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'bay-chip';
-      button.textContent = self.translate('bay_chip_label', { index: index + 1 });
+    for (var index = 0; index < desiredCount; index += 1) {
+      var button = existing[index];
+      if (!button || button.parentElement !== container) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'bay-chip';
+      }
+
+      var referenceNode = container.children[index] || null;
+      if (referenceNode !== button) {
+        container.insertBefore(button, referenceNode);
+      }
+
+      button.textContent = this.translate('bay_chip_label', { index: index + 1 });
       button.setAttribute('data-index', String(index));
-      button.setAttribute('aria-pressed', index === self.selectedIndex ? 'true' : 'false');
-      button.tabIndex = index === self.selectedIndex ? 0 : -1;
-      button.addEventListener('click', function () {
-        self.setSelectedIndex(index, { emit: true, focus: true });
-      });
-      button.addEventListener('keydown', function (event) {
-        self.handleChipKeyDown(event, index);
-      });
-      self.chipsContainer.appendChild(button);
-      self.chipButtons.push(button);
-    });
+      button.setAttribute('aria-pressed', index === this.selectedIndex ? 'true' : 'false');
+      button.tabIndex = index === this.selectedIndex ? 0 : -1;
+
+      newButtons.push(button);
+    }
+
+    for (var removeIndex = existing.length - 1; removeIndex >= desiredCount; removeIndex -= 1) {
+      var extra = existing[removeIndex];
+      if (extra && extra.parentElement === container) {
+        container.removeChild(extra);
+      }
+    }
+
+    while (container.children.length > desiredCount) {
+      var trailing = container.lastElementChild;
+      if (!trailing) {
+        break;
+      }
+      container.removeChild(trailing);
+    }
+
+    this.chipButtons = newButtons;
 
     this.updateActionsVisibility();
     this.announce(this.translate('bay_count_status', { count: this.bays.length }));
+  };
+
+  BayController.prototype.handleChipContainerClick = function handleChipContainerClick(event) {
+    var index = this.resolveChipIndex(event && event.target);
+    if (index == null) {
+      return;
+    }
+
+    event.preventDefault();
+    this.setSelectedIndex(index, { emit: true, focus: true });
+  };
+
+  BayController.prototype.handleChipContainerKeyDown = function handleChipContainerKeyDown(event) {
+    if (!event) {
+      return;
+    }
+
+    var index = this.resolveChipIndex(event.target);
+    if (index == null) {
+      return;
+    }
+
+    this.handleChipKeyDown(event, index);
+  };
+
+  BayController.prototype.resolveChipIndex = function resolveChipIndex(element) {
+    var current = element;
+    while (current && current !== this.chipsContainer) {
+      if (
+        current.tagName &&
+        current.tagName.toUpperCase() === 'BUTTON' &&
+        current.hasAttribute('data-index') &&
+        current.getAttribute('data-index') !== null
+      ) {
+        var value = parseInt(current.getAttribute('data-index'), 10);
+        if (isFinite(value)) {
+          return value;
+        }
+      }
+      current = current.parentElement;
+    }
+
+    return null;
   };
 
   BayController.prototype.handleChipKeyDown = function handleChipKeyDown(event, index) {
@@ -1076,6 +1150,13 @@
     this.scopeNote = this.scopeSection
       ? this.scopeSection.querySelector('[data-role="scope-note"]')
       : null;
+    this.globalFrontGroup = form.querySelector('[data-role="global-front-group"]');
+    this.globalShelvesGroup = form.querySelector('[data-role="global-shelves-group"]');
+    this.baySection = form.querySelector('[data-role="bay-section"]');
+    this.statusRegion = form.querySelector('[data-role="dialog-status"]');
+    this.currentUiVisibility = null;
+    this.lastSentPartitionMode = null;
+    this.lastSentPartitionCount = null;
     this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
     this.partitionsPositionsField = form.querySelector('[data-partitions-control="positions"]');
@@ -1090,6 +1171,7 @@
     this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
     this.placementNotice = '';
     this.selectedBayIndex = 0;
+    this.pendingSelectedBayIndex = null;
     this.bayTemplate = { shelf_count: 0, door_mode: null };
 
     this.initializeElements();
@@ -1151,6 +1233,79 @@
     }
   };
 
+  FormController.prototype.toggleElementVisibility = function toggleElementVisibility(
+    element,
+    shouldShow
+  ) {
+    if (!element) {
+      return;
+    }
+
+    if (shouldShow) {
+      element.classList.remove('is-hidden');
+      element.removeAttribute('hidden');
+      element.removeAttribute('aria-hidden');
+    } else {
+      element.classList.add('is-hidden');
+      element.setAttribute('hidden', '');
+      element.setAttribute('aria-hidden', 'true');
+    }
+  };
+
+  FormController.prototype.announce = function announce(message) {
+    if (!message) {
+      return;
+    }
+
+    if (this.statusRegion) {
+      this.statusRegion.textContent = message;
+    }
+  };
+
+  FormController.prototype.deriveVisibilityFromMode = function deriveVisibilityFromMode(
+    mode
+  ) {
+    var normalized = '';
+    if (typeof mode === 'string') {
+      normalized = mode.trim().toLowerCase();
+    }
+
+    var showBays = normalized === 'even' || normalized === 'positions';
+    return {
+      show_bays: showBays,
+      show_global_front_layout: !showBays,
+      show_global_shelves: !showBays
+    };
+  };
+
+  FormController.prototype.applyUiVisibility = function applyUiVisibility(flags) {
+    var settings = flags && typeof flags === 'object' ? flags : {};
+    var derived = this.deriveVisibilityFromMode(this.values.partitions.mode);
+    var showBays =
+      typeof settings.show_bays === 'boolean' ? settings.show_bays : derived.show_bays;
+    var showFront =
+      typeof settings.show_global_front_layout === 'boolean'
+        ? settings.show_global_front_layout
+        : derived.show_global_front_layout;
+    var showShelves =
+      typeof settings.show_global_shelves === 'boolean'
+        ? settings.show_global_shelves
+        : derived.show_global_shelves;
+
+    this.currentUiVisibility = {
+      show_bays: showBays,
+      show_global_front_layout: showFront,
+      show_global_shelves: showShelves
+    };
+    this.toggleElementVisibility(this.baySection, showBays);
+    this.toggleElementVisibility(this.globalFrontGroup, showFront);
+    this.toggleElementVisibility(this.globalShelvesGroup, showShelves);
+
+    if (this.bayController) {
+      this.bayController.setButtonsDisabled(!showBays);
+    }
+  };
+
   FormController.prototype.normalizeBay = function normalizeBay(bay) {
     var shelf = 0;
     var door = null;
@@ -1176,16 +1331,33 @@
       sanitized = [this.normalizeBay(this.bayTemplate)];
     }
 
+    var desiredLength = null;
+    if (options && typeof options.desiredLength === 'number' && isFinite(options.desiredLength)) {
+      desiredLength = Math.max(1, Math.round(options.desiredLength));
+    } else {
+      desiredLength = this.computeDesiredBayCount();
+    }
+
+    if (desiredLength > sanitized.length) {
+      var templateSource = sanitized.length ? sanitized[0] : this.bayTemplate;
+      while (sanitized.length < desiredLength) {
+        sanitized.push(cloneBay(templateSource));
+      }
+    }
+
+    var preferredIndex = this.selectedBayIndex;
+    if (options && typeof options.selectedIndex === 'number' && isFinite(options.selectedIndex)) {
+      preferredIndex = Math.max(0, Math.round(options.selectedIndex));
+    }
+    preferredIndex = Math.max(0, Math.min(preferredIndex, sanitized.length - 1));
+
     this.values.partitions.bays = sanitized;
     this.bayTemplate = cloneBay(sanitized[0]);
-    this.selectedBayIndex = Math.max(0, Math.min(this.selectedBayIndex, sanitized.length - 1));
+    this.selectedBayIndex = preferredIndex;
 
     if (this.bayController) {
       this.bayController.setBays(sanitized.map(cloneBay), {
-        selectedIndex:
-          options && typeof options.selectedIndex === 'number'
-            ? options.selectedIndex
-            : this.selectedBayIndex,
+        selectedIndex: preferredIndex,
         emit: options && options.emit === true
       });
     }
@@ -1242,7 +1414,14 @@
       return;
     }
 
-    this.selectedBayIndex = Math.max(0, Math.min(index, bays.length - 1));
+    var clamped = Math.max(0, Math.min(index, bays.length - 1));
+    if (clamped === this.selectedBayIndex) {
+      return;
+    }
+
+    this.selectedBayIndex = clamped;
+    this.pendingSelectedBayIndex = clamped;
+    invokeSketchUp('ui_select_bay', JSON.stringify({ index: clamped }));
   };
 
   FormController.prototype.handleBayShelfChange = function handleBayShelfChange(index, value) {
@@ -1324,6 +1503,35 @@
     this.announce(message);
   };
 
+  FormController.prototype.notifyPartitionModeChange = function notifyPartitionModeChange(mode) {
+    var normalized = typeof mode === 'string' ? mode : 'none';
+    if (!normalized) {
+      normalized = 'none';
+    }
+
+    if (this.lastSentPartitionMode === normalized) {
+      return;
+    }
+
+    this.lastSentPartitionMode = normalized;
+    invokeSketchUp('ui_set_partition_mode', JSON.stringify({ value: normalized }));
+  };
+
+  FormController.prototype.notifyPartitionCountChange = function notifyPartitionCountChange(value) {
+    var numeric = Number(value);
+    if (!isFinite(numeric)) {
+      return;
+    }
+
+    numeric = Math.max(0, Math.round(numeric));
+    if (this.lastSentPartitionCount === numeric) {
+      return;
+    }
+
+    this.lastSentPartitionCount = numeric;
+    invokeSketchUp('ui_set_partitions_count', JSON.stringify({ value: numeric }));
+  };
+
   FormController.prototype.sendBayShelfUpdate = function sendBayShelfUpdate(index, value) {
     var payload = { index: index, value: value };
     invokeSketchUp('ui_set_shelf_count', JSON.stringify(payload));
@@ -1357,8 +1565,18 @@
       return;
     }
 
+    if (state.partitions && typeof state.partitions.mode === 'string') {
+      var mode = state.partitions.mode;
+      this.values.partitions.mode = mode;
+      if (this.inputs.partitions_mode) {
+        this.inputs.partitions_mode.value = mode;
+      }
+      this.updatePartitionMode(mode);
+    }
+
+    var count = null;
     if (state.partitions && typeof state.partitions.count === 'number') {
-      var count = Math.max(0, Math.round(state.partitions.count));
+      count = Math.max(0, Math.round(state.partitions.count));
       this.values.partitions.count = count;
     }
 
@@ -1367,14 +1585,51 @@
     }
 
     var bays = Array.isArray(state.bays) ? state.bays : [];
-    var selected = this.selectedBayIndex;
+    var bayTotal = bays.length > 0 ? bays.length : 1;
+    var pendingSelection = this.pendingSelectedBayIndex;
+    var nextSelected = this.selectedBayIndex;
     if (typeof state.selected_index === 'number' && isFinite(state.selected_index)) {
-      selected = Math.max(0, Math.round(state.selected_index));
-      this.selectedBayIndex = selected;
+      nextSelected = Math.max(0, Math.round(state.selected_index));
     }
 
-    this.setBayArray(bays, { selectedIndex: selected });
+    if (pendingSelection != null && isFinite(pendingSelection)) {
+      nextSelected = Math.max(0, Math.min(pendingSelection, bayTotal - 1));
+    } else {
+      nextSelected = Math.max(0, Math.min(nextSelected, bayTotal - 1));
+    }
+
+    this.selectedBayIndex = nextSelected;
+    this.setBayArray(bays, { selectedIndex: nextSelected });
     this.ensureBayLength();
+    this.pendingSelectedBayIndex = null;
+
+    if (count == null) {
+      var bayCount = this.values.partitions.bays ? this.values.partitions.bays.length : 0;
+      count = Math.max(0, bayCount - 1);
+      this.values.partitions.count = count;
+    }
+
+    if (this.inputs.partitions_count) {
+      if (this.values.partitions.mode === 'even') {
+        this.inputs.partitions_count.value = String(count);
+      } else {
+        this.inputs.partitions_count.value = '';
+      }
+      this.inputs.partitions_count.removeAttribute('data-invalid');
+      this.touched.partitions_count = false;
+      this.setFieldError('partitions_count', null, true);
+    }
+
+    if (this.inputs.partitions_positions) {
+      if (this.values.partitions.mode === 'positions') {
+        this.reformatPartitionPositions();
+      } else {
+        this.inputs.partitions_positions.value = '';
+      }
+      this.inputs.partitions_positions.removeAttribute('data-invalid');
+      this.touched.partitions_positions = false;
+      this.setFieldError('partitions_positions', null, true);
+    }
 
     if (Array.isArray(state.can_double)) {
       state.can_double.forEach(
@@ -1386,6 +1641,15 @@
         }.bind(this)
       );
     }
+
+    if (state.ui && typeof state.ui === 'object') {
+      this.applyUiVisibility(state.ui);
+    } else if (this.currentUiVisibility) {
+      this.applyUiVisibility(this.currentUiVisibility);
+    }
+
+    this.lastSentPartitionMode = this.values.partitions.mode;
+    this.lastSentPartitionCount = count;
   };
 
   FormController.prototype.applyDoubleValidity = function applyDoubleValidity(index, allowed, reason) {
@@ -1982,14 +2246,19 @@
     } else if (name === 'partitions_count') {
       this.values.partitions.count = value;
       this.ensureBayLength();
+      if (value != null && isFinite(value)) {
+        this.notifyPartitionCountChange(value);
+      }
     }
   };
 
   FormController.prototype.handlePartitionModeChange = function handlePartitionModeChange(mode) {
     this.values.partitions.mode = mode;
     this.updatePartitionMode(mode);
+    this.applyUiVisibility(this.deriveVisibilityFromMode(mode));
     this.ensureBayLength();
     this.updateInsertButtonState();
+    this.notifyPartitionModeChange(mode);
   };
 
   FormController.prototype.updatePartitionMode = function updatePartitionMode(mode) {
@@ -2493,7 +2762,36 @@
     if (controller) {
       controller.applyBayStateInit(data);
     } else {
-      pendingBayState = data;
+      pendingBayState = pendingBayState ? Object.assign({}, pendingBayState, data) : data;
+    }
+  };
+
+  namespace.state_bays_changed = function state_bays_changed(payload) {
+    var data = parsePayload(payload);
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    if (controller) {
+      controller.applyBayStateInit(data);
+    } else {
+      pendingBayState = pendingBayState ? Object.assign({}, pendingBayState, data) : data;
+    }
+  };
+
+  namespace.state_update_visibility = function state_update_visibility(payload) {
+    var flags = parsePayload(payload);
+    if (!flags || typeof flags !== 'object') {
+      return;
+    }
+
+    if (controller) {
+      controller.applyUiVisibility(flags);
+    } else {
+      if (!pendingBayState) {
+        pendingBayState = {};
+      }
+      pendingBayState.ui = flags;
     }
   };
 

@@ -5,6 +5,7 @@ require 'json'
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
 require 'aicabinets/ui/localization'
+require 'aicabinets/ui_visibility'
 require 'aicabinets/door_mode_rules'
 
 module AICabinets
@@ -254,20 +255,38 @@ module AICabinets
           params = ensure_dialog_params
           return unless params.is_a?(Hash)
 
+          state = build_bay_state(params)
+          execute_state_callback(dialog, 'state_init', state)
+          execute_state_callback(dialog, 'state_update_visibility', state[:ui])
+        end
+        private_class_method :deliver_bay_state
+
+        def deliver_state_bays_changed(dialog, params)
+          state = build_bay_state(params)
+          execute_state_callback(dialog, 'state_bays_changed', state)
+          execute_state_callback(dialog, 'state_update_visibility', state[:ui])
+        end
+        private_class_method :deliver_state_bays_changed
+
+        def build_bay_state(params)
           partitions = fetch_partitions(params)
-          state = {
+          bays = fetch_bays_array(params).map { |bay| deep_copy_params(bay) }
+          selected = AICabinets::UiVisibility.clamp_selected_index(selected_bay_index, bays.length)
+          set_selected_bay_index(selected)
+
+          {
             partitions: {
+              mode: normalize_partition_mode(partitions[:mode] || partitions['mode']),
               count: partitions[:count] || partitions['count'] || 0,
               positions_mm: partitions[:positions_mm] || partitions['positions_mm'] || []
             },
-            bays: fetch_bays_array(params).map { |bay| deep_copy_params(bay) },
-            selected_index: selected_bay_index,
-            can_double: build_double_validity(params)
+            bays: bays,
+            selected_index: selected,
+            can_double: build_double_validity(params),
+            ui: AICabinets::UiVisibility.flags_for(params)
           }
-
-          execute_state_callback(dialog, 'state_init', state)
         end
-        private_class_method :deliver_bay_state
+        private_class_method :build_bay_state
 
         def deliver_state_update_bay(dialog, index, bay)
           execute_state_callback(dialog, 'state_update_bay', index, bay)
@@ -337,6 +356,17 @@ module AICabinets
         end
         private_class_method :extract_string
 
+        def normalize_partition_mode(value)
+          text = extract_string(value)
+          return 'none' if text.nil?
+
+          normalized = text.downcase
+          return normalized if VALID_PARTITION_MODES.include?(normalized)
+
+          'none'
+        end
+        private_class_method :normalize_partition_mode
+
         def handle_ui_init_ready(dialog)
           deliver_bay_state(dialog)
         end
@@ -349,11 +379,54 @@ module AICabinets
 
           params = ensure_dialog_params
           bays = fetch_bays_array(params)
-          max_index = [bays.length - 1, 0].max
-          clamped = [[index, 0].max, max_index].min
+          clamped = AICabinets::UiVisibility.clamp_selected_index(index, bays.length)
           set_selected_bay_index(clamped)
         end
         private_class_method :handle_ui_select_bay
+
+        def handle_ui_set_partition_mode(dialog, payload)
+          data = parse_payload(payload)
+          raw_value = extract_string(data[:value] || data['value'])
+          mode = normalize_partition_mode(raw_value)
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          partitions = fetch_partitions(params)
+          partitions[:mode] = mode
+          if mode == 'none'
+            partitions[:count] = 0
+            partitions[:positions_mm] = []
+          elsif mode == 'even'
+            partitions[:positions_mm] = []
+          end
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          deliver_state_bays_changed(dialog, updated_params)
+        end
+        private_class_method :handle_ui_set_partition_mode
+
+        def handle_ui_set_partitions_count(dialog, payload)
+          data = parse_payload(payload)
+          value = extract_integer(data[:value] || data['value'])
+          return if value.nil?
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          partitions = fetch_partitions(params)
+          partitions[:count] = value
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          deliver_state_bays_changed(dialog, updated_params)
+        end
+        private_class_method :handle_ui_set_partitions_count
 
         def handle_ui_set_shelf_count(dialog, payload)
           data = parse_payload(payload)
@@ -628,6 +701,14 @@ module AICabinets
 
           dialog.add_action_callback('ui_request_validity') do |_context, payload|
             handle_ui_request_validity(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_set_partition_mode') do |_context, payload|
+            handle_ui_set_partition_mode(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_set_partitions_count') do |_context, payload|
+            handle_ui_set_partitions_count(dialog, payload)
           end
         end
         private_class_method :attach_callbacks
