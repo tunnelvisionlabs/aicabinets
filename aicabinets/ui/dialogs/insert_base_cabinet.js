@@ -147,6 +147,7 @@
 
     this.selectedIndex = 0;
     this.bays = [];
+    this.chipButtons = [];
     this.doubleValidity = [];
     this.template = { shelf_count: 0, door_mode: null };
     this.shelfLock = false;
@@ -293,6 +294,15 @@
         self.onCopyLeftToRight();
       });
     }
+
+    if (this.chipsContainer) {
+      this.chipsContainer.addEventListener('click', function (event) {
+        self.handleChipContainerClick(event);
+      });
+      this.chipsContainer.addEventListener('keydown', function (event) {
+        self.handleChipContainerKeyDown(event);
+      });
+    }
   };
 
   BayController.prototype.renderChips = function renderChips() {
@@ -312,18 +322,55 @@
       button.setAttribute('data-index', String(index));
       button.setAttribute('aria-pressed', index === self.selectedIndex ? 'true' : 'false');
       button.tabIndex = index === self.selectedIndex ? 0 : -1;
-      button.addEventListener('click', function () {
-        self.setSelectedIndex(index, { emit: true, focus: true });
-      });
-      button.addEventListener('keydown', function (event) {
-        self.handleChipKeyDown(event, index);
-      });
       self.chipsContainer.appendChild(button);
       self.chipButtons.push(button);
     });
 
     this.updateActionsVisibility();
     this.announce(this.translate('bay_count_status', { count: this.bays.length }));
+  };
+
+  BayController.prototype.handleChipContainerClick = function handleChipContainerClick(event) {
+    var index = this.resolveChipIndex(event && event.target);
+    if (index == null) {
+      return;
+    }
+
+    event.preventDefault();
+    this.setSelectedIndex(index, { emit: true, focus: true });
+  };
+
+  BayController.prototype.handleChipContainerKeyDown = function handleChipContainerKeyDown(event) {
+    if (!event) {
+      return;
+    }
+
+    var index = this.resolveChipIndex(event.target);
+    if (index == null) {
+      return;
+    }
+
+    this.handleChipKeyDown(event, index);
+  };
+
+  BayController.prototype.resolveChipIndex = function resolveChipIndex(element) {
+    var current = element;
+    while (current && current !== this.chipsContainer) {
+      if (
+        current.tagName &&
+        current.tagName.toUpperCase() === 'BUTTON' &&
+        current.hasAttribute('data-index') &&
+        current.getAttribute('data-index') !== null
+      ) {
+        var value = parseInt(current.getAttribute('data-index'), 10);
+        if (isFinite(value)) {
+          return value;
+        }
+      }
+      current = current.parentElement;
+    }
+
+    return null;
   };
 
   BayController.prototype.handleChipKeyDown = function handleChipKeyDown(event, index) {
@@ -1076,6 +1123,12 @@
     this.scopeNote = this.scopeSection
       ? this.scopeSection.querySelector('[data-role="scope-note"]')
       : null;
+    this.globalFrontGroup = form.querySelector('[data-role="global-front-group"]');
+    this.globalShelvesGroup = form.querySelector('[data-role="global-shelves-group"]');
+    this.baySection = form.querySelector('[data-role="bay-section"]');
+    this.currentUiVisibility = null;
+    this.lastSentPartitionMode = null;
+    this.lastSentPartitionCount = null;
     this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
     this.partitionsPositionsField = form.querySelector('[data-partitions-control="positions"]');
@@ -1148,6 +1201,41 @@
 
     if (this.inputs.front) {
       this.values.front = this.inputs.front.value;
+    }
+  };
+
+  FormController.prototype.toggleElementVisibility = function toggleElementVisibility(
+    element,
+    shouldShow
+  ) {
+    if (!element) {
+      return;
+    }
+
+    if (shouldShow) {
+      element.classList.remove('is-hidden');
+      element.removeAttribute('hidden');
+      element.removeAttribute('aria-hidden');
+    } else {
+      element.classList.add('is-hidden');
+      element.setAttribute('hidden', '');
+      element.setAttribute('aria-hidden', 'true');
+    }
+  };
+
+  FormController.prototype.applyUiVisibility = function applyUiVisibility(flags) {
+    var settings = flags && typeof flags === 'object' ? flags : {};
+    var showBays = settings.show_bays === true;
+    var showFront = settings.show_global_front_layout !== false;
+    var showShelves = settings.show_global_shelves !== false;
+
+    this.currentUiVisibility = settings;
+    this.toggleElementVisibility(this.baySection, showBays);
+    this.toggleElementVisibility(this.globalFrontGroup, showFront);
+    this.toggleElementVisibility(this.globalShelvesGroup, showShelves);
+
+    if (this.bayController) {
+      this.bayController.setButtonsDisabled(!showBays);
     }
   };
 
@@ -1242,7 +1330,13 @@
       return;
     }
 
-    this.selectedBayIndex = Math.max(0, Math.min(index, bays.length - 1));
+    var clamped = Math.max(0, Math.min(index, bays.length - 1));
+    if (clamped === this.selectedBayIndex) {
+      return;
+    }
+
+    this.selectedBayIndex = clamped;
+    invokeSketchUp('ui_select_bay', JSON.stringify({ index: clamped }));
   };
 
   FormController.prototype.handleBayShelfChange = function handleBayShelfChange(index, value) {
@@ -1324,6 +1418,35 @@
     this.announce(message);
   };
 
+  FormController.prototype.notifyPartitionModeChange = function notifyPartitionModeChange(mode) {
+    var normalized = typeof mode === 'string' ? mode : 'none';
+    if (!normalized) {
+      normalized = 'none';
+    }
+
+    if (this.lastSentPartitionMode === normalized) {
+      return;
+    }
+
+    this.lastSentPartitionMode = normalized;
+    invokeSketchUp('ui_set_partition_mode', JSON.stringify({ value: normalized }));
+  };
+
+  FormController.prototype.notifyPartitionCountChange = function notifyPartitionCountChange(value) {
+    var numeric = Number(value);
+    if (!isFinite(numeric)) {
+      return;
+    }
+
+    numeric = Math.max(0, Math.round(numeric));
+    if (this.lastSentPartitionCount === numeric) {
+      return;
+    }
+
+    this.lastSentPartitionCount = numeric;
+    invokeSketchUp('ui_set_partitions_count', JSON.stringify({ value: numeric }));
+  };
+
   FormController.prototype.sendBayShelfUpdate = function sendBayShelfUpdate(index, value) {
     var payload = { index: index, value: value };
     invokeSketchUp('ui_set_shelf_count', JSON.stringify(payload));
@@ -1357,8 +1480,18 @@
       return;
     }
 
+    if (state.partitions && typeof state.partitions.mode === 'string') {
+      var mode = state.partitions.mode;
+      this.values.partitions.mode = mode;
+      if (this.inputs.partitions_mode) {
+        this.inputs.partitions_mode.value = mode;
+      }
+      this.updatePartitionMode(mode);
+    }
+
+    var count = null;
     if (state.partitions && typeof state.partitions.count === 'number') {
-      var count = Math.max(0, Math.round(state.partitions.count));
+      count = Math.max(0, Math.round(state.partitions.count));
       this.values.partitions.count = count;
     }
 
@@ -1376,6 +1509,34 @@
     this.setBayArray(bays, { selectedIndex: selected });
     this.ensureBayLength();
 
+    if (count == null) {
+      var bayCount = this.values.partitions.bays ? this.values.partitions.bays.length : 0;
+      count = Math.max(0, bayCount - 1);
+      this.values.partitions.count = count;
+    }
+
+    if (this.inputs.partitions_count) {
+      if (this.values.partitions.mode === 'even') {
+        this.inputs.partitions_count.value = String(count);
+      } else {
+        this.inputs.partitions_count.value = '';
+      }
+      this.inputs.partitions_count.removeAttribute('data-invalid');
+      this.touched.partitions_count = false;
+      this.setFieldError('partitions_count', null, true);
+    }
+
+    if (this.inputs.partitions_positions) {
+      if (this.values.partitions.mode === 'positions') {
+        this.reformatPartitionPositions();
+      } else {
+        this.inputs.partitions_positions.value = '';
+      }
+      this.inputs.partitions_positions.removeAttribute('data-invalid');
+      this.touched.partitions_positions = false;
+      this.setFieldError('partitions_positions', null, true);
+    }
+
     if (Array.isArray(state.can_double)) {
       state.can_double.forEach(
         function (entry, index) {
@@ -1386,6 +1547,15 @@
         }.bind(this)
       );
     }
+
+    if (state.ui && typeof state.ui === 'object') {
+      this.applyUiVisibility(state.ui);
+    } else if (this.currentUiVisibility) {
+      this.applyUiVisibility(this.currentUiVisibility);
+    }
+
+    this.lastSentPartitionMode = this.values.partitions.mode;
+    this.lastSentPartitionCount = count;
   };
 
   FormController.prototype.applyDoubleValidity = function applyDoubleValidity(index, allowed, reason) {
@@ -1982,6 +2152,9 @@
     } else if (name === 'partitions_count') {
       this.values.partitions.count = value;
       this.ensureBayLength();
+      if (value != null && isFinite(value)) {
+        this.notifyPartitionCountChange(value);
+      }
     }
   };
 
@@ -1990,6 +2163,7 @@
     this.updatePartitionMode(mode);
     this.ensureBayLength();
     this.updateInsertButtonState();
+    this.notifyPartitionModeChange(mode);
   };
 
   FormController.prototype.updatePartitionMode = function updatePartitionMode(mode) {
@@ -2493,7 +2667,36 @@
     if (controller) {
       controller.applyBayStateInit(data);
     } else {
-      pendingBayState = data;
+      pendingBayState = pendingBayState ? Object.assign({}, pendingBayState, data) : data;
+    }
+  };
+
+  namespace.state_bays_changed = function state_bays_changed(payload) {
+    var data = parsePayload(payload);
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    if (controller) {
+      controller.applyBayStateInit(data);
+    } else {
+      pendingBayState = pendingBayState ? Object.assign({}, pendingBayState, data) : data;
+    }
+  };
+
+  namespace.state_update_visibility = function state_update_visibility(payload) {
+    var flags = parsePayload(payload);
+    if (!flags || typeof flags !== 'object') {
+      return;
+    }
+
+    if (controller) {
+      controller.applyUiVisibility(flags);
+    } else {
+      if (!pendingBayState) {
+        pendingBayState = {};
+      }
+      pendingBayState.ui = flags;
     }
   };
 

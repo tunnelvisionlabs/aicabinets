@@ -555,6 +555,10 @@ body {
   display: none;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 @media (max-width: 640px) {
   body {
     padding: 12px;
