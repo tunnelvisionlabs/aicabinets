@@ -70,14 +70,22 @@ module AICabinets
         )
         return [] if openings.empty?
 
-        bay_settings = params.respond_to?(:bay_settings) ? Array(params.bay_settings) : []
+        use_index_accessor = params.respond_to?(:bay_setting_at)
+        bay_settings =
+          unless use_index_accessor
+            params.respond_to?(:bay_settings) ? Array(params.bay_settings) : []
+          end
         fallback_mode = normalize_bay_mode(params.respond_to?(:front_mode) ? params.front_mode : nil)
         center_gap_mm = params.door_center_reveal_mm.to_f
         total_bays = openings.length
 
         openings.each_with_object([]) do |opening, placements|
           mode =
-            if bay_settings.empty?
+            if use_index_accessor
+              setting = params.bay_setting_at(opening.index)
+              chosen = setting ? normalize_bay_mode(setting.door_mode) : nil
+              chosen || fallback_mode
+            elsif bay_settings.empty?
               fallback_mode
             else
               setting = bay_settings[opening.index]

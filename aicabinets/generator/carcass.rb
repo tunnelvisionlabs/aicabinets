@@ -645,7 +645,8 @@ module AICabinets
               @partition_bay_ranges_mm = [[left, right]]
             end
           end
-          @bay_settings = build_bay_settings(params_mm[:partitions])
+          @bay_configs = build_bay_configs(params_mm[:partitions])
+          @bay_settings = build_bay_settings(@bay_configs, @partition_bay_ranges_mm.length)
         end
 
         class << self
@@ -685,6 +686,15 @@ module AICabinets
 
         def bay_settings
           @bay_settings.map(&:dup)
+        end
+
+        def bay_setting_at(index)
+          return default_bay_setting.dup unless index.is_a?(Integer) && index >= 0
+
+          setting = @bay_settings[index]
+          return setting.dup if setting
+
+          default_bay_setting.dup
         end
 
         private
@@ -795,21 +805,33 @@ module AICabinets
           @width_mm - @panel_thickness_mm
         end
 
-        def build_bay_settings(partitions)
-          ranges_count = @partition_bay_ranges_mm.length
-          return [] if ranges_count.zero?
+        def build_bay_settings(configs, ranges_count)
+          return [] if ranges_count <= 0
 
-          bays_array = extract_bays_array(partitions)
-          template = bays_array.first || {}
+          template_setting = default_bay_setting
+          template_config = configs.first
 
           Array.new(ranges_count) do |index|
-            source = bays_array[index] || template
-            shelf_count = coerce_non_negative_integer(source[:shelf_count] || source['shelf_count']) || 0
-            door_value = source[:door_mode] || source['door_mode']
-            BaySetting.new(
-              shelf_count: shelf_count,
-              door_mode: normalize_bay_door_mode(door_value)
-            )
+            source = configs[index] || template_config
+            if source.nil? || source.empty?
+              template_setting.dup
+            else
+              shelf_value = source[:shelf_count]
+              door_value = source[:door_mode]
+
+              shelf_count = coerce_non_negative_integer(shelf_value)
+              shelf_count ||= template_setting.shelf_count
+
+              door_mode = normalize_bay_door_mode(door_value)
+              if door_mode.nil? && (template_config.nil? || template_config.empty?)
+                door_mode = template_setting.door_mode
+              end
+
+              BaySetting.new(
+                shelf_count: shelf_count,
+                door_mode: door_mode
+              )
+            end
           end
         end
 
@@ -820,6 +842,24 @@ module AICabinets
           return [] unless bays.is_a?(Array)
 
           bays
+        end
+
+        def build_bay_configs(partitions)
+          extract_bays_array(partitions).map do |bay|
+            next {} unless bay.is_a?(Hash)
+
+            {
+              shelf_count: bay[:shelf_count] || bay['shelf_count'],
+              door_mode: bay[:door_mode] || bay['door_mode']
+            }
+          end
+        end
+
+        def default_bay_setting
+          @default_bay_setting ||= BaySetting.new(
+            shelf_count: @shelf_count,
+            door_mode: normalize_bay_door_mode(@front_mode)
+          )
         end
 
         def normalize_bay_door_mode(value)

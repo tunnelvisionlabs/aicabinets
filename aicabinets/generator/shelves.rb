@@ -48,8 +48,11 @@ module AICabinets
         bay_ranges = params.partition_bay_ranges_mm
         return unless bay_ranges.any?
 
-        bay_settings = params.respond_to?(:bay_settings) ? params.bay_settings : []
-        return if bay_settings.empty?
+        use_index_accessor = params.respond_to?(:bay_setting_at)
+        bay_settings =
+          unless use_index_accessor
+            params.respond_to?(:bay_settings) ? params.bay_settings : []
+          end
 
         depth_mm = params.interior_depth_mm - FRONT_SETBACK_MM - REAR_CLEARANCE_MM
         return if depth_mm <= MIN_DEPTH_MM
@@ -59,7 +62,12 @@ module AICabinets
           bay_width_mm = bay_end_mm - bay_start_mm
           next if bay_width_mm <= MIN_BAY_WIDTH_MM
 
-          setting = bay_settings[bay_index]
+          setting =
+            if use_index_accessor
+              params.bay_setting_at(bay_index)
+            else
+              bay_settings[bay_index]
+            end
           shelf_count = setting&.shelf_count.to_i
           next if shelf_count <= 0
 
