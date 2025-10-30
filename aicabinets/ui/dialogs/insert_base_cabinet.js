@@ -49,6 +49,9 @@
   var pendingDefaults = null;
   var pendingConfiguration = null;
   var pendingPlacementEvents = [];
+  var pendingBayState = null;
+  var pendingBayValidity = [];
+  var pendingToasts = [];
 
   var UNIT_TO_MM = {
     inch: 25.4,
@@ -79,6 +82,550 @@
   var INTEGER_FIELDS = ['shelves', 'partitions_count'];
 
   var UI_PAYLOAD_VERSION = '1.0.0';
+
+  var stringsNamespace = uiRoot.Strings || {};
+
+  function formatTemplate(template, params) {
+    if (typeof template !== 'string') {
+      return template;
+    }
+
+    if (!params || typeof params !== 'object') {
+      return template;
+    }
+
+    return template.replace(/%\{(\w+)\}/g, function (_, key) {
+      if (Object.prototype.hasOwnProperty.call(params, key)) {
+        return String(params[key]);
+      }
+      return '%{' + key + '}';
+    });
+  }
+
+  function translate(key, params) {
+    if (stringsNamespace && typeof stringsNamespace.t === 'function') {
+      return stringsNamespace.t(key, params);
+    }
+
+    if (typeof key === 'string' && key.indexOf('%{') !== -1) {
+      return formatTemplate(key, params);
+    }
+
+    return key;
+  }
+
+  function parsePayload(value) {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (error) {
+        return null;
+      }
+    }
+
+    return value;
+  }
+
+  function BayController(options) {
+    options = options || {};
+
+    this.root = options.root || null;
+    this.onSelect = typeof options.onSelect === 'function' ? options.onSelect : function () {};
+    this.onShelfChange =
+      typeof options.onShelfChange === 'function' ? options.onShelfChange : function () {};
+    this.onDoorChange =
+      typeof options.onDoorChange === 'function' ? options.onDoorChange : function () {};
+    this.onApplyToAll =
+      typeof options.onApplyToAll === 'function' ? options.onApplyToAll : function () {};
+    this.onCopyLeftToRight =
+      typeof options.onCopyLeftToRight === 'function' ? options.onCopyLeftToRight : function () {};
+    this.onRequestValidity =
+      typeof options.onRequestValidity === 'function' ? options.onRequestValidity : function () {};
+    this.announceCallback =
+      typeof options.onAnnounce === 'function' ? options.onAnnounce : function () {};
+    this.translate = typeof options.translate === 'function' ? options.translate : translate;
+
+    this.selectedIndex = 0;
+    this.bays = [];
+    this.doubleValidity = [];
+    this.template = { shelf_count: 0, door_mode: null };
+    this.shelfLock = false;
+    this.doorLock = false;
+
+    this.cacheElements();
+    if (this.root) {
+      this.initializeText();
+      this.bindEvents();
+    }
+  }
+
+  BayController.prototype.cacheElements = function cacheElements() {
+    if (!this.root) {
+      this.selector = null;
+      this.chipsContainer = null;
+      this.shelfLabel = null;
+      this.stepper = null;
+      this.decreaseButton = null;
+      this.increaseButton = null;
+      this.shelfInput = null;
+      this.doorFieldset = null;
+      this.doorLegend = null;
+      this.doorInputs = [];
+      this.doubleDoorInput = null;
+      this.hint = null;
+      this.applyAllButton = null;
+      this.copyButton = null;
+      this.statusRegion = null;
+      return;
+    }
+
+    this.selector = this.root.querySelector('[data-role="bay-selector"]');
+    this.chipsContainer = this.root.querySelector('[data-role="bay-chips"]');
+    this.sectionTitle = this.root.closest('[data-role="bay-section"]')
+      ? this.root.closest('[data-role="bay-section"]').querySelector('[data-role="bay-section-title"]')
+      : null;
+    this.shelfRow = this.root.querySelector('[data-role="bay-shelf-row"]');
+    this.shelfLabel = this.root.querySelector('[data-role="bay-shelf-label"]');
+    this.stepper = this.root.querySelector('[data-role="bay-stepper"]');
+    this.decreaseButton = this.root.querySelector('[data-role="bay-stepper-decrease"]');
+    this.increaseButton = this.root.querySelector('[data-role="bay-stepper-increase"]');
+    this.shelfInput = this.root.querySelector('[data-role="bay-shelf-input"]');
+    this.doorFieldset = this.root.querySelector('[data-role="bay-door-fieldset"]');
+    this.doorLegend = this.root.querySelector('[data-role="bay-door-legend"]');
+    var doorOptions = this.root.querySelectorAll('[data-role="bay-door-option"]');
+    this.doorInputs = Array.prototype.slice.call(doorOptions || []);
+    this.doubleDoorInput = this.doorInputs.find(function (input) {
+      return input && input.value === 'doors_double';
+    }) || null;
+    this.doorLabelNone = this.root.querySelector('[data-role="bay-door-label-none"]');
+    this.doorLabelLeft = this.root.querySelector('[data-role="bay-door-label-left"]');
+    this.doorLabelRight = this.root.querySelector('[data-role="bay-door-label-right"]');
+    this.doorLabelDouble = this.root.querySelector('[data-role="bay-door-label-double"]');
+    this.hint = this.root.querySelector('[data-role="bay-double-hint"]');
+    this.applyAllButton = this.root.querySelector('[data-role="bay-apply-all"]');
+    this.copyButton = this.root.querySelector('[data-role="bay-copy-lr"]');
+    this.statusRegion = this.root.querySelector('[data-role="bay-status"]');
+  };
+
+  BayController.prototype.initializeText = function initializeText() {
+    if (!this.root) {
+      return;
+    }
+
+    if (this.sectionTitle) {
+      this.sectionTitle.textContent = this.translate('bay_section_title');
+    }
+    if (this.selector) {
+      this.selector.setAttribute('aria-label', this.translate('bay_selector_label'));
+    }
+    if (this.shelfLabel) {
+      this.shelfLabel.textContent = this.translate('shelf_stepper_label');
+    }
+    if (this.decreaseButton) {
+      this.decreaseButton.setAttribute('aria-label', this.translate('shelf_stepper_decrease'));
+      this.decreaseButton.textContent = '−';
+    }
+    if (this.increaseButton) {
+      this.increaseButton.setAttribute('aria-label', this.translate('shelf_stepper_increase'));
+      this.increaseButton.textContent = '+';
+    }
+    if (this.shelfInput) {
+      this.shelfInput.setAttribute('aria-label', this.translate('shelf_input_aria'));
+    }
+    if (this.doorLegend) {
+      this.doorLegend.textContent = this.translate('door_mode_group_label');
+    }
+    if (this.doorLabelNone) {
+      this.doorLabelNone.textContent = this.translate('door_mode_none');
+    }
+    if (this.doorLabelLeft) {
+      this.doorLabelLeft.textContent = this.translate('door_mode_left');
+    }
+    if (this.doorLabelRight) {
+      this.doorLabelRight.textContent = this.translate('door_mode_right');
+    }
+    if (this.doorLabelDouble) {
+      this.doorLabelDouble.textContent = this.translate('door_mode_double');
+    }
+    if (this.applyAllButton) {
+      this.applyAllButton.textContent = this.translate('apply_to_all_label');
+    }
+    if (this.copyButton) {
+      this.copyButton.textContent = this.translate('copy_left_to_right_label');
+    }
+    if (this.statusRegion) {
+      this.statusRegion.setAttribute('aria-label', this.translate('live_region_title'));
+    }
+  };
+
+  BayController.prototype.bindEvents = function bindEvents() {
+    var self = this;
+    if (this.decreaseButton) {
+      this.decreaseButton.addEventListener('click', function () {
+        self.adjustShelf(-1);
+      });
+    }
+    if (this.increaseButton) {
+      this.increaseButton.addEventListener('click', function () {
+        self.adjustShelf(1);
+      });
+    }
+    if (this.shelfInput) {
+      this.shelfInput.addEventListener('input', function () {
+        self.handleShelfInput();
+      });
+      this.shelfInput.addEventListener('blur', function () {
+        self.handleShelfBlur();
+      });
+    }
+    this.doorInputs.forEach(function (input) {
+      input.addEventListener('change', function () {
+        self.handleDoorChange(input.value);
+      });
+    });
+    if (this.applyAllButton) {
+      this.applyAllButton.addEventListener('click', function () {
+        self.onApplyToAll(self.selectedIndex);
+      });
+    }
+    if (this.copyButton) {
+      this.copyButton.addEventListener('click', function () {
+        self.onCopyLeftToRight();
+      });
+    }
+  };
+
+  BayController.prototype.renderChips = function renderChips() {
+    if (!this.chipsContainer) {
+      return;
+    }
+
+    var self = this;
+    this.chipsContainer.innerHTML = '';
+    this.chipButtons = [];
+
+    this.bays.forEach(function (_bay, index) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'bay-chip';
+      button.textContent = self.translate('bay_chip_label', { index: index + 1 });
+      button.setAttribute('data-index', String(index));
+      button.setAttribute('aria-pressed', index === self.selectedIndex ? 'true' : 'false');
+      button.tabIndex = index === self.selectedIndex ? 0 : -1;
+      button.addEventListener('click', function () {
+        self.setSelectedIndex(index, { emit: true, focus: true });
+      });
+      button.addEventListener('keydown', function (event) {
+        self.handleChipKeyDown(event, index);
+      });
+      self.chipsContainer.appendChild(button);
+      self.chipButtons.push(button);
+    });
+
+    this.updateActionsVisibility();
+    this.announce(this.translate('bay_count_status', { count: this.bays.length }));
+  };
+
+  BayController.prototype.handleChipKeyDown = function handleChipKeyDown(event, index) {
+    if (!event) {
+      return;
+    }
+
+    var key = event.key || event.keyCode;
+    var handled = false;
+    if (key === 'ArrowRight' || key === 'Right' || key === 39) {
+      this.focusChip(index + 1);
+      handled = true;
+    } else if (key === 'ArrowLeft' || key === 'Left' || key === 37) {
+      this.focusChip(index - 1);
+      handled = true;
+    } else if (key === 'Home' || key === 36) {
+      this.focusChip(0);
+      handled = true;
+    } else if (key === 'End' || key === 35) {
+      this.focusChip(this.bays.length - 1);
+      handled = true;
+    }
+
+    if (handled) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
+  BayController.prototype.focusChip = function focusChip(index) {
+    if (!this.chipButtons || !this.chipButtons.length) {
+      return;
+    }
+
+    var clamped = Math.max(0, Math.min(index, this.chipButtons.length - 1));
+    var button = this.chipButtons[clamped];
+    if (!button) {
+      return;
+    }
+
+    this.setSelectedIndex(clamped, { emit: true, focus: true });
+  };
+
+  BayController.prototype.setSelectedIndex = function setSelectedIndex(index, options) {
+    if (index == null || index < 0 || index >= this.bays.length) {
+      return;
+    }
+
+    options = options || {};
+    var previous = this.selectedIndex;
+    this.selectedIndex = index;
+
+    if (this.chipButtons) {
+      this.chipButtons.forEach(function (button, buttonIndex) {
+        var pressed = buttonIndex === index ? 'true' : 'false';
+        button.setAttribute('aria-pressed', pressed);
+        button.tabIndex = buttonIndex === index ? 0 : -1;
+      });
+      if (options.focus && this.chipButtons[index] && typeof this.chipButtons[index].focus === 'function') {
+        this.chipButtons[index].focus();
+      }
+    }
+
+    this.updateShelfControls();
+    this.updateDoorControls();
+
+    this.announce(
+      this.translate('bay_selection_status', { index: index + 1, total: this.bays.length })
+    );
+
+    if (options.emit && index !== previous) {
+      this.onSelect(index);
+    }
+
+    this.requestValidity();
+  };
+
+  BayController.prototype.updateShelfControls = function updateShelfControls() {
+    if (!this.shelfInput) {
+      return;
+    }
+
+    var bay = this.bays[this.selectedIndex] || { shelf_count: 0 };
+    var value = typeof bay.shelf_count === 'number' ? bay.shelf_count : 0;
+    this.shelfLock = true;
+    this.shelfInput.value = String(value);
+    this.shelfLock = false;
+  };
+
+  BayController.prototype.updateDoorControls = function updateDoorControls() {
+    var bay = this.bays[this.selectedIndex] || { door_mode: null };
+    var mode = bay.door_mode;
+    if (mode == null || mode === '') {
+      mode = 'none';
+    }
+
+    this.doorLock = true;
+    this.doorInputs.forEach(function (input) {
+      if (!input) {
+        return;
+      }
+      input.checked = input.value === mode;
+    });
+    this.doorLock = false;
+    this.applyDoubleValidityState();
+  };
+
+  BayController.prototype.setBays = function setBays(bays, options) {
+    options = options || {};
+    this.bays = Array.isArray(bays) ? bays.slice() : [];
+    this.template = this.bays.length ? cloneBay(this.bays[0]) : { shelf_count: 0, door_mode: null };
+    var desiredIndex = options.selectedIndex != null ? options.selectedIndex : this.selectedIndex;
+    desiredIndex = Math.max(0, Math.min(desiredIndex, this.bays.length - 1));
+    this.selectedIndex = desiredIndex;
+    this.renderChips();
+    this.setSelectedIndex(desiredIndex, { emit: options.emit === true });
+  };
+
+  function cloneBay(bay) {
+    if (!bay || typeof bay !== 'object') {
+      return { shelf_count: 0, door_mode: null };
+    }
+
+    return {
+      shelf_count: typeof bay.shelf_count === 'number' ? bay.shelf_count : 0,
+      door_mode: bay.door_mode == null ? null : bay.door_mode
+    };
+  }
+
+  BayController.prototype.setBayValue = function setBayValue(index, bay) {
+    if (index < 0 || index >= this.bays.length) {
+      return;
+    }
+
+    this.bays[index] = cloneBay(bay);
+    if (index === this.selectedIndex) {
+      this.updateShelfControls();
+      this.updateDoorControls();
+    }
+  };
+
+  BayController.prototype.adjustShelf = function adjustShelf(delta) {
+    var bay = this.bays[this.selectedIndex] || { shelf_count: 0 };
+    var current = typeof bay.shelf_count === 'number' ? bay.shelf_count : 0;
+    var next = Math.max(0, current + delta);
+    if (next === current) {
+      return;
+    }
+
+    if (this.shelfInput) {
+      this.shelfInput.value = String(next);
+    }
+    this.onShelfChange(this.selectedIndex, next);
+    this.announce(
+      this.translate('shelves_value_status', {
+        count: next
+      })
+    );
+  };
+
+  BayController.prototype.handleShelfInput = function handleShelfInput() {
+    if (this.shelfLock) {
+      return;
+    }
+
+    if (!this.shelfInput) {
+      return;
+    }
+
+    var value = parseInt(this.shelfInput.value, 10);
+    if (!isFinite(value) || value < 0) {
+      return;
+    }
+    this.onShelfChange(this.selectedIndex, value);
+  };
+
+  BayController.prototype.handleShelfBlur = function handleShelfBlur() {
+    if (!this.shelfInput) {
+      return;
+    }
+
+    var value = parseInt(this.shelfInput.value, 10);
+    if (!isFinite(value) || value < 0) {
+      value = 0;
+    }
+    this.shelfInput.value = String(value);
+    this.onShelfChange(this.selectedIndex, value);
+  };
+
+  BayController.prototype.handleDoorChange = function handleDoorChange(value) {
+    if (this.doorLock) {
+      return;
+    }
+
+    this.onDoorChange(this.selectedIndex, value);
+    var statusKey;
+    switch (value) {
+      case 'doors_left':
+        statusKey = 'door_mode_status_left';
+        break;
+      case 'doors_right':
+        statusKey = 'door_mode_status_right';
+        break;
+      case 'doors_double':
+        statusKey = 'door_mode_status_double';
+        break;
+      default:
+        statusKey = 'door_mode_status_none';
+        break;
+    }
+    this.announce(this.translate(statusKey));
+  };
+
+  BayController.prototype.applyDoubleValidityState = function applyDoubleValidityState() {
+    if (!this.doubleDoorInput) {
+      return;
+    }
+
+    var validity = this.doubleValidity[this.selectedIndex];
+    if (!validity) {
+      this.doubleDoorInput.disabled = false;
+      this.clearHint();
+      return;
+    }
+
+    if (validity.allowed) {
+      this.doubleDoorInput.disabled = false;
+      this.clearHint();
+      return;
+    }
+
+    this.doubleDoorInput.disabled = true;
+    var current = this.bays[this.selectedIndex] || {};
+    if (current.door_mode === 'doors_double') {
+      this.handleDoorChange('none');
+    }
+    this.showHint(validity.reason || this.translate('door_mode_double_disabled_hint'));
+  };
+
+  BayController.prototype.setDoubleValidity = function setDoubleValidity(index, allowed, reason) {
+    this.doubleValidity[index] = { allowed: !!allowed, reason: reason || null };
+    if (index === this.selectedIndex) {
+      this.applyDoubleValidityState();
+    }
+  };
+
+  BayController.prototype.showHint = function showHint(message) {
+    if (!this.hint) {
+      return;
+    }
+    this.hint.textContent = message;
+    this.hint.hidden = !message;
+  };
+
+  BayController.prototype.clearHint = function clearHint() {
+    if (!this.hint) {
+      return;
+    }
+    this.hint.textContent = '';
+    this.hint.hidden = true;
+  };
+
+  BayController.prototype.requestValidity = function requestValidity() {
+    this.onRequestValidity(this.selectedIndex);
+  };
+
+  BayController.prototype.updateActionsVisibility = function updateActionsVisibility() {
+    if (this.copyButton) {
+      this.copyButton.hidden = this.bays.length < 2;
+    }
+  };
+
+  BayController.prototype.announce = function announce(message) {
+    if (!message) {
+      return;
+    }
+    if (this.statusRegion) {
+      this.statusRegion.textContent = message;
+    }
+    this.announceCallback(message);
+  };
+
+  BayController.prototype.setButtonsDisabled = function setButtonsDisabled(disabled) {
+    if (this.decreaseButton) {
+      this.decreaseButton.disabled = disabled;
+    }
+    if (this.increaseButton) {
+      this.increaseButton.disabled = disabled;
+    }
+    if (this.shelfInput) {
+      this.shelfInput.disabled = disabled;
+    }
+    this.doorInputs.forEach(function (input) {
+      input.disabled = disabled;
+    });
+    if (this.applyAllButton) {
+      this.applyAllButton.disabled = disabled;
+    }
+    if (this.copyButton) {
+      this.copyButton.disabled = disabled || this.bays.length < 2;
+    }
+  };
 
   var MODE_COPY = {
     insert: {
@@ -490,7 +1037,8 @@
       partitions: {
         mode: 'none',
         count: 0,
-        positions_mm: []
+        positions_mm: [],
+        bays: []
       }
     };
     this.values.lengths.toe_kick_thickness = null;
@@ -541,12 +1089,25 @@
     this.selectionProvided = false;
     this.primaryActionLabel = MODE_COPY.insert.primaryLabel;
     this.placementNotice = '';
+    this.selectedBayIndex = 0;
+    this.bayTemplate = { shelf_count: 0, door_mode: null };
 
     this.initializeElements();
     this.bindEvents();
     this.updatePartitionMode('none');
     this.updateInsertButtonState();
     this.setSecondaryAction('cancel', this.secondaryDefaultLabel);
+
+    this.bayController = new BayController({
+      root: form.querySelector('[data-role="bay-controls"]'),
+      onSelect: this.handleBaySelection.bind(this),
+      onShelfChange: this.handleBayShelfChange.bind(this),
+      onDoorChange: this.handleBayDoorChange.bind(this),
+      onApplyToAll: this.handleApplyBayToAll.bind(this),
+      onCopyLeftToRight: this.handleCopyLeftToRight.bind(this),
+      onRequestValidity: this.handleRequestBayValidity.bind(this),
+      onAnnounce: this.handleBayAnnouncement.bind(this)
+    });
   }
 
   FormController.prototype.initializeElements = function initializeElements() {
@@ -588,6 +1149,259 @@
     if (this.inputs.front) {
       this.values.front = this.inputs.front.value;
     }
+  };
+
+  FormController.prototype.normalizeBay = function normalizeBay(bay) {
+    var shelf = 0;
+    var door = null;
+    if (bay && typeof bay === 'object') {
+      if (typeof bay.shelf_count === 'number' && isFinite(bay.shelf_count)) {
+        shelf = Math.max(0, Math.round(bay.shelf_count));
+      }
+      if (typeof bay.door_mode === 'string' && bay.door_mode.trim()) {
+        door = bay.door_mode.trim();
+      } else if (bay.door_mode === null) {
+        door = null;
+      }
+    }
+
+    return { shelf_count: shelf, door_mode: door };
+  };
+
+  FormController.prototype.setBayArray = function setBayArray(bays, options) {
+    var sanitized = Array.isArray(bays)
+      ? bays.map(this.normalizeBay, this)
+      : [this.normalizeBay(this.bayTemplate)];
+    if (!sanitized.length) {
+      sanitized = [this.normalizeBay(this.bayTemplate)];
+    }
+
+    this.values.partitions.bays = sanitized;
+    this.bayTemplate = cloneBay(sanitized[0]);
+    this.selectedBayIndex = Math.max(0, Math.min(this.selectedBayIndex, sanitized.length - 1));
+
+    if (this.bayController) {
+      this.bayController.setBays(sanitized.map(cloneBay), {
+        selectedIndex:
+          options && typeof options.selectedIndex === 'number'
+            ? options.selectedIndex
+            : this.selectedBayIndex,
+        emit: options && options.emit === true
+      });
+    }
+  };
+
+  FormController.prototype.computeDesiredBayCount = function computeDesiredBayCount() {
+    var mode = this.values.partitions.mode;
+    if (mode === 'even') {
+      if (typeof this.values.partitions.count === 'number') {
+        return Math.max(1, this.values.partitions.count + 1);
+      }
+      return Math.max(1, this.values.partitions.bays.length || 1);
+    }
+
+    if (mode === 'positions') {
+      var positions = this.values.partitions.positions_mm || [];
+      return Math.max(1, positions.length + 1);
+    }
+
+    return 1;
+  };
+
+  FormController.prototype.ensureBayLength = function ensureBayLength() {
+    var desired = this.computeDesiredBayCount();
+    var bays = this.values.partitions.bays || [];
+    if (desired < 1) {
+      desired = 1;
+    }
+
+    if (bays.length > desired) {
+      bays = bays.slice(0, desired);
+    } else if (bays.length < desired) {
+      while (bays.length < desired) {
+        bays.push(cloneBay(this.bayTemplate));
+      }
+    }
+
+    this.values.partitions.bays = bays;
+    this.selectedBayIndex = Math.max(0, Math.min(this.selectedBayIndex, bays.length - 1));
+    if (this.bayController) {
+      this.bayController.setBays(bays.map(cloneBay), {
+        selectedIndex: this.selectedBayIndex
+      });
+    }
+  };
+
+  FormController.prototype.handleBaySelection = function handleBaySelection(index) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    var bays = this.values.partitions.bays || [];
+    if (!bays.length) {
+      return;
+    }
+
+    this.selectedBayIndex = Math.max(0, Math.min(index, bays.length - 1));
+  };
+
+  FormController.prototype.handleBayShelfChange = function handleBayShelfChange(index, value) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    var bays = this.values.partitions.bays || [];
+    if (!bays[index]) {
+      this.ensureBayLength();
+      bays = this.values.partitions.bays || [];
+    }
+
+    if (!bays[index]) {
+      bays[index] = cloneBay(this.bayTemplate);
+    }
+
+    var numeric = Math.max(0, Math.round(Number(value) || 0));
+    bays[index].shelf_count = numeric;
+    this.bayTemplate.shelf_count = bays[0] ? bays[0].shelf_count : numeric;
+    if (this.bayController) {
+      this.bayController.setBayValue(index, bays[index]);
+    }
+    this.updateInsertButtonState();
+    this.sendBayShelfUpdate(index, numeric);
+  };
+
+  FormController.prototype.handleBayDoorChange = function handleBayDoorChange(index, value) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    var bays = this.values.partitions.bays || [];
+    if (!bays[index]) {
+      this.ensureBayLength();
+      bays = this.values.partitions.bays || [];
+    }
+
+    if (!bays[index]) {
+      bays[index] = cloneBay(this.bayTemplate);
+    }
+
+    var normalized = value === 'none' ? null : value;
+    bays[index].door_mode = normalized;
+    if (index === 0) {
+      this.bayTemplate.door_mode = normalized;
+    }
+    if (this.bayController) {
+      this.bayController.setBayValue(index, bays[index]);
+    }
+    this.updateInsertButtonState();
+    this.sendBayDoorUpdate(index, normalized);
+  };
+
+  FormController.prototype.handleApplyBayToAll = function handleApplyBayToAll(index) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    invokeSketchUp('ui_apply_to_all', JSON.stringify({ index: index }));
+  };
+
+  FormController.prototype.handleCopyLeftToRight = function handleCopyLeftToRight() {
+    invokeSketchUp('ui_copy_left_to_right');
+  };
+
+  FormController.prototype.handleRequestBayValidity = function handleRequestBayValidity(index) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    invokeSketchUp('ui_request_validity', JSON.stringify({ index: index }));
+  };
+
+  FormController.prototype.handleBayAnnouncement = function handleBayAnnouncement(message) {
+    if (!message) {
+      return;
+    }
+    this.announce(message);
+  };
+
+  FormController.prototype.sendBayShelfUpdate = function sendBayShelfUpdate(index, value) {
+    var payload = { index: index, value: value };
+    invokeSketchUp('ui_set_shelf_count', JSON.stringify(payload));
+  };
+
+  FormController.prototype.sendBayDoorUpdate = function sendBayDoorUpdate(index, value) {
+    var payload = { index: index, value: value };
+    invokeSketchUp('ui_set_door_mode', JSON.stringify(payload));
+  };
+
+  FormController.prototype.updateBayFromSketchUp = function updateBayFromSketchUp(index, bay) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    var bays = this.values.partitions.bays || [];
+    while (bays.length <= index) {
+      bays.push(cloneBay(this.bayTemplate));
+    }
+
+    bays[index] = this.normalizeBay(bay);
+    this.values.partitions.bays = bays;
+    if (this.bayController) {
+      this.bayController.setBayValue(index, bays[index]);
+    }
+    this.updateInsertButtonState();
+  };
+
+  FormController.prototype.applyBayStateInit = function applyBayStateInit(state) {
+    if (!state || typeof state !== 'object') {
+      return;
+    }
+
+    if (state.partitions && typeof state.partitions.count === 'number') {
+      var count = Math.max(0, Math.round(state.partitions.count));
+      this.values.partitions.count = count;
+    }
+
+    if (state.partitions && Array.isArray(state.partitions.positions_mm)) {
+      this.values.partitions.positions_mm = state.partitions.positions_mm.slice();
+    }
+
+    var bays = Array.isArray(state.bays) ? state.bays : [];
+    var selected = this.selectedBayIndex;
+    if (typeof state.selected_index === 'number' && isFinite(state.selected_index)) {
+      selected = Math.max(0, Math.round(state.selected_index));
+      this.selectedBayIndex = selected;
+    }
+
+    this.setBayArray(bays, { selectedIndex: selected });
+    this.ensureBayLength();
+
+    if (Array.isArray(state.can_double)) {
+      state.can_double.forEach(
+        function (entry, index) {
+          if (!entry || typeof entry !== 'object') {
+            return;
+          }
+          this.applyDoubleValidity(index, entry.allowed, entry.reason);
+        }.bind(this)
+      );
+    }
+  };
+
+  FormController.prototype.applyDoubleValidity = function applyDoubleValidity(index, allowed, reason) {
+    if (this.bayController) {
+      this.bayController.setDoubleValidity(index, !!allowed, reason || null);
+    }
+  };
+
+  FormController.prototype.showToast = function showToast(message) {
+    if (!message) {
+      return;
+    }
+    if (this.bayController) {
+      this.bayController.announce(message);
+    }
+    this.setBanner('success', message, { autoHide: true });
   };
 
   FormController.prototype.bindEvents = function bindEvents() {
@@ -794,9 +1608,16 @@
         }
       }
 
+      var baysArray = Array.isArray(partitions.bays) ? partitions.bays : [];
+      this.setBayArray(baysArray, { selectedIndex: 0 });
+
       this.setFieldError('partitions_positions', null, true);
       this.touched.partitions_positions = false;
+    } else {
+      this.setBayArray([], { selectedIndex: 0 });
     }
+
+    this.ensureBayLength();
 
     this.updateInsertButtonState();
   };
@@ -1160,12 +1981,14 @@
       this.values.shelves = value;
     } else if (name === 'partitions_count') {
       this.values.partitions.count = value;
+      this.ensureBayLength();
     }
   };
 
   FormController.prototype.handlePartitionModeChange = function handlePartitionModeChange(mode) {
     this.values.partitions.mode = mode;
     this.updatePartitionMode(mode);
+    this.ensureBayLength();
     this.updateInsertButtonState();
   };
 
@@ -1218,6 +2041,7 @@
       this.values.partitions.positions_mm = result.values_mm;
       this.setFieldError('partitions_positions', null, false);
       input.removeAttribute('data-invalid');
+      this.ensureBayLength();
     } else {
       this.values.partitions.positions_mm = [];
       if (this.touched.partitions_positions) {
@@ -1246,6 +2070,7 @@
       input.value = formatted.join(', ');
       this.setFieldError('partitions_positions', null, true);
       input.removeAttribute('data-invalid');
+      this.ensureBayLength();
     } else {
       this.values.partitions.positions_mm = [];
       this.setFieldError('partitions_positions', result.error, true);
@@ -1461,6 +2286,9 @@
 
   FormController.prototype.toggleFormDisabled = function toggleFormDisabled(disabled) {
     if (!this.interactiveElements || !this.interactiveElements.length) {
+      if (this.bayController) {
+        this.bayController.setButtonsDisabled(disabled);
+      }
       return;
     }
 
@@ -1475,6 +2303,10 @@
         element.disabled = false;
       }
     });
+
+    if (this.bayController) {
+      this.bayController.setButtonsDisabled(disabled);
+    }
   };
 
   FormController.prototype.buildPayload = function buildPayload() {
@@ -1496,7 +2328,16 @@
       front: this.values.front,
       shelves: this.values.shelves,
       partitions: {
-        mode: partitions.mode
+        mode: partitions.mode,
+        bays: (partitions.bays || []).map(
+          function (bay) {
+            var normalized = this.normalizeBay(bay);
+            return {
+              shelf_count: normalized.shelf_count,
+              door_mode: normalized.door_mode
+            };
+          }.bind(this)
+        )
       }
     };
 
@@ -1640,6 +2481,52 @@
       controller.applyDefaults(defaults);
     } else {
       pendingDefaults = defaults;
+    }
+  };
+
+  namespace.state_init = function state_init(payload) {
+    var data = parsePayload(payload);
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    if (controller) {
+      controller.applyBayStateInit(data);
+    } else {
+      pendingBayState = data;
+    }
+  };
+
+  namespace.state_update_bay = function state_update_bay(index, bayPayload) {
+    var bay = parsePayload(bayPayload);
+    if (controller) {
+      controller.updateBayFromSketchUp(index, bay);
+      return;
+    }
+
+    if (!pendingBayState) {
+      pendingBayState = { bays: [] };
+    }
+    if (!Array.isArray(pendingBayState.bays)) {
+      pendingBayState.bays = [];
+    }
+    pendingBayState.bays[index] = bay;
+  };
+
+  namespace.state_set_double_validity = function state_set_double_validity(index, allowed, reason) {
+    if (controller) {
+      controller.applyDoubleValidity(index, allowed, reason);
+      return;
+    }
+
+    pendingBayValidity.push({ index: index, allowed: allowed, reason: reason });
+  };
+
+  namespace.toast = function toast(message) {
+    if (controller) {
+      controller.showToast(message);
+    } else if (message) {
+      pendingToasts.push(message);
     }
   };
 
@@ -1892,8 +2779,28 @@
       pendingPlacementEvents = [];
     }
 
+    if (pendingBayState) {
+      controller.applyBayStateInit(pendingBayState);
+      pendingBayState = null;
+    }
+
+    if (pendingBayValidity.length) {
+      pendingBayValidity.forEach(function (entry) {
+        controller.applyDoubleValidity(entry.index, entry.allowed, entry.reason);
+      });
+      pendingBayValidity = [];
+    }
+
+    if (pendingToasts.length) {
+      pendingToasts.forEach(function (message) {
+        controller.showToast(message);
+      });
+      pendingToasts = [];
+    }
+
     invokeSketchUp('dialog_ready');
     invokeSketchUp('request_defaults');
+    invokeSketchUp('ui_init_ready');
   }
 
   document.addEventListener('DOMContentLoaded', initialize);

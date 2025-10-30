@@ -15,7 +15,9 @@ module AICabinets
         placement_failed: 'Unable to place cabinet at the picked location.',
         placement_indicator: 'Placing cabinet… click in model.',
         placement_activation_failed: 'Unable to activate cabinet placement.',
-        placement_invalid_point: 'Pick a point in the model to place the cabinet.'
+        placement_invalid_point: 'Pick a point in the model to place the cabinet.',
+        door_mode_double_disabled_hint: 'Bay too narrow for double doors.',
+        bay_double_skip_notice: 'Skipped %{count} bays; too narrow for double doors.'
       }.freeze
 
       # Returns the localized string for the provided key.
