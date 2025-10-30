@@ -1126,6 +1126,7 @@
     this.globalFrontGroup = form.querySelector('[data-role="global-front-group"]');
     this.globalShelvesGroup = form.querySelector('[data-role="global-shelves-group"]');
     this.baySection = form.querySelector('[data-role="bay-section"]');
+    this.statusRegion = form.querySelector('[data-role="dialog-status"]');
     this.currentUiVisibility = null;
     this.lastSentPartitionMode = null;
     this.lastSentPartitionCount = null;
@@ -1224,6 +1225,16 @@
     }
   };
 
+  FormController.prototype.announce = function announce(message) {
+    if (!message) {
+      return;
+    }
+
+    if (this.statusRegion) {
+      this.statusRegion.textContent = message;
+    }
+  };
+
   FormController.prototype.deriveVisibilityFromMode = function deriveVisibilityFromMode(
     mode
   ) {
@@ -1293,16 +1304,33 @@
       sanitized = [this.normalizeBay(this.bayTemplate)];
     }
 
+    var desiredLength = null;
+    if (options && typeof options.desiredLength === 'number' && isFinite(options.desiredLength)) {
+      desiredLength = Math.max(1, Math.round(options.desiredLength));
+    } else {
+      desiredLength = this.computeDesiredBayCount();
+    }
+
+    if (desiredLength > sanitized.length) {
+      var templateSource = sanitized.length ? sanitized[0] : this.bayTemplate;
+      while (sanitized.length < desiredLength) {
+        sanitized.push(cloneBay(templateSource));
+      }
+    }
+
+    var preferredIndex = this.selectedBayIndex;
+    if (options && typeof options.selectedIndex === 'number' && isFinite(options.selectedIndex)) {
+      preferredIndex = Math.max(0, Math.round(options.selectedIndex));
+    }
+    preferredIndex = Math.max(0, Math.min(preferredIndex, sanitized.length - 1));
+
     this.values.partitions.bays = sanitized;
     this.bayTemplate = cloneBay(sanitized[0]);
-    this.selectedBayIndex = Math.max(0, Math.min(this.selectedBayIndex, sanitized.length - 1));
+    this.selectedBayIndex = preferredIndex;
 
     if (this.bayController) {
       this.bayController.setBays(sanitized.map(cloneBay), {
-        selectedIndex:
-          options && typeof options.selectedIndex === 'number'
-            ? options.selectedIndex
-            : this.selectedBayIndex,
+        selectedIndex: preferredIndex,
         emit: options && options.emit === true
       });
     }
