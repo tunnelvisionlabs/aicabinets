@@ -842,6 +842,25 @@ module AICabinets
           nil
         end
 
+        def parse_non_negative_integer_string(value)
+          text = value.to_s.strip
+          return nil if text.empty?
+
+          integer = Integer(text, 10)
+          return integer if integer >= 0
+
+          nil
+        rescue ArgumentError
+          begin
+            float = Float(text)
+          rescue ArgumentError
+            return nil
+          end
+
+          integer = float.round
+          integer >= 0 ? integer : nil
+        end
+
         def coerce_non_negative_integer(value)
           return nil if value.nil?
 
@@ -852,8 +871,7 @@ module AICabinets
             integer = value.round
             integer >= 0 ? integer : nil
           when String
-            integer = Integer(value, 10)
-            integer >= 0 ? integer : nil
+            parse_non_negative_integer_string(value)
           else
             nil
           end
