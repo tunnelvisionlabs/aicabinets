@@ -1091,6 +1091,10 @@ module AICabinets
           end
         end
       end
+
+      unless Builder.const_defined?(:ParameterSet, false)
+        Builder::ParameterSet = ParameterSet
+      end
     end
   end
 end

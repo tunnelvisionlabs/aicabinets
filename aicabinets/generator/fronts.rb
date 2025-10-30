@@ -59,9 +59,6 @@ module AICabinets
         bay_ranges = params.partition_bay_ranges_mm
         return [] unless bay_ranges.any?
 
-        bay_settings = params.respond_to?(:bay_settings) ? params.bay_settings : []
-        return [] if bay_settings.empty?
-
         openings = Geometry::BayOpenings.compute(
           bay_ranges_mm: bay_ranges,
           edge_reveal_mm: params.door_edge_reveal_mm.to_f,
@@ -71,16 +68,23 @@ module AICabinets
           toe_kick_depth_mm: params.toe_kick_depth_mm.to_f,
           cabinet_height_mm: params.height_mm.to_f
         )
+        return [] if openings.empty?
 
+        bay_settings = params.respond_to?(:bay_settings) ? Array(params.bay_settings) : []
+        fallback_mode = normalize_bay_mode(params.respond_to?(:front_mode) ? params.front_mode : nil)
         center_gap_mm = params.door_center_reveal_mm.to_f
-        bay_count = [bay_ranges.length, bay_settings.length].min
+        total_bays = openings.length
 
-        placements = []
-        openings.each do |opening|
-          setting = bay_settings[opening.index]
-          next unless setting
+        openings.each_with_object([]) do |opening, placements|
+          mode =
+            if bay_settings.empty?
+              fallback_mode
+            else
+              setting = bay_settings[opening.index]
+              chosen = setting ? normalize_bay_mode(setting.door_mode) : nil
+              chosen || fallback_mode
+            end
 
-          mode = normalize_bay_mode(setting.door_mode)
           next unless mode
 
           if opening.width_mm <= MIN_DIMENSION_MM
@@ -93,56 +97,15 @@ module AICabinets
             next
           end
 
-          case mode
-          when :doors_left
-            placements << DoorPlacement.new(
-              name: bay_name('Door (Hinge Left)', opening.index, bay_count),
-              x_start_mm: opening.left_mm,
-              width_mm: opening.width_mm,
-              height_mm: opening.height_mm,
-              bottom_z_mm: opening.bottom_mm
+          placements.concat(
+            placements_for_opening(
+              opening,
+              mode: mode,
+              total_bays: total_bays,
+              center_gap_mm: center_gap_mm
             )
-          when :doors_right
-            placements << DoorPlacement.new(
-              name: bay_name('Door (Hinge Right)', opening.index, bay_count),
-              x_start_mm: opening.left_mm,
-              width_mm: opening.width_mm,
-              height_mm: opening.height_mm,
-              bottom_z_mm: opening.bottom_mm
-            )
-          when :doors_double
-            usable_width_mm = opening.width_mm - center_gap_mm
-            if usable_width_mm <= MIN_DIMENSION_MM
-              warn_skip("Skipped double doors in bay #{opening.index + 1}; center gap exceeded available width.")
-              next
-            end
-
-            leaf_width_mm = usable_width_mm / 2.0
-            if leaf_width_mm <= MIN_DIMENSION_MM
-              warn_skip("Skipped double doors in bay #{opening.index + 1}; each leaf would be too narrow.")
-              next
-            end
-
-            left_name = bay_name('Door (Left)', opening.index, bay_count)
-            right_name = bay_name('Door (Right)', opening.index, bay_count)
-            placements << DoorPlacement.new(
-              name: left_name,
-              x_start_mm: opening.left_mm,
-              width_mm: leaf_width_mm,
-              height_mm: opening.height_mm,
-              bottom_z_mm: opening.bottom_mm
-            )
-            placements << DoorPlacement.new(
-              name: right_name,
-              x_start_mm: opening.left_mm + leaf_width_mm + center_gap_mm,
-              width_mm: leaf_width_mm,
-              height_mm: opening.height_mm,
-              bottom_z_mm: opening.bottom_mm
-            )
-          end
+          )
         end
-
-        placements
       end
 
       def length_mm(value)
@@ -210,6 +173,63 @@ module AICabinets
         nil
       end
       private_class_method :normalize_bay_mode
+
+      def placements_for_opening(opening, mode:, total_bays:, center_gap_mm:)
+        case mode
+        when :doors_left
+          [
+            DoorPlacement.new(
+              name: bay_name('Door (Hinge Left)', opening.index, total_bays),
+              x_start_mm: opening.left_mm,
+              width_mm: opening.width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
+            )
+          ]
+        when :doors_right
+          [
+            DoorPlacement.new(
+              name: bay_name('Door (Hinge Right)', opening.index, total_bays),
+              x_start_mm: opening.left_mm,
+              width_mm: opening.width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
+            )
+          ]
+        when :doors_double
+          usable_width_mm = opening.width_mm - center_gap_mm.to_f
+          if usable_width_mm <= MIN_DIMENSION_MM
+            warn_skip("Skipped double doors in bay #{opening.index + 1}; center gap exceeded available width.")
+            return []
+          end
+
+          leaf_width_mm = usable_width_mm / 2.0
+          if leaf_width_mm <= MIN_DIMENSION_MM
+            warn_skip("Skipped double doors in bay #{opening.index + 1}; each leaf would be too narrow.")
+            return []
+          end
+
+          [
+            DoorPlacement.new(
+              name: bay_name('Door (Left)', opening.index, total_bays),
+              x_start_mm: opening.left_mm,
+              width_mm: leaf_width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
+            ),
+            DoorPlacement.new(
+              name: bay_name('Door (Right)', opening.index, total_bays),
+              x_start_mm: opening.left_mm + leaf_width_mm + center_gap_mm.to_f,
+              width_mm: leaf_width_mm,
+              height_mm: opening.height_mm,
+              bottom_z_mm: opening.bottom_mm
+            )
+          ]
+        else
+          []
+        end
+      end
+      private_class_method :placements_for_opening
 
       def bay_name(base, bay_index, total_bays)
         return base if total_bays <= 1
