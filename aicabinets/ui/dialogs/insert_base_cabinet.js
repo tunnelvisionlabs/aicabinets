@@ -153,50 +153,6 @@
     return numeric;
   }
 
-  function escapeHtml(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function buildBayChipsMarkup(count, selectedIndex, translate) {
-    var total = Number(count);
-    if (!isFinite(total) || total < 1) {
-      total = 1;
-    } else {
-      total = Math.round(total);
-      if (total < 1) {
-        total = 1;
-      }
-    }
-
-    var active = clampSelectedIndex(selectedIndex, total);
-    var html = '';
-
-    for (var index = 0; index < total; index += 1) {
-      var label = translate
-        ? translate('bay_chip_label', { index: index + 1 })
-        : 'Bay ' + (index + 1);
-      var pressed = index === active ? 'true' : 'false';
-      var tabIndex = index === active ? '0' : '-1';
-      html +=
-        '<button type="button" class="bay-chip" data-index="' +
-        String(index) +
-        '" aria-pressed="' +
-        pressed +
-        '" tabindex="' +
-        tabIndex +
-        '">' +
-        escapeHtml(label) +
-        '</button>';
-    }
-
-    return { markup: html, selectedIndex: active };
-  }
-
   function BayController(options) {
     options = options || {};
 
@@ -381,11 +337,59 @@
       return;
     }
 
-    var result = buildBayChipsMarkup(this.bays.length, this.selectedIndex, this.translate);
-    this.selectedIndex = result.selectedIndex;
-    this.chipsContainer.innerHTML = result.markup;
-    var buttons = this.chipsContainer.querySelectorAll('button[data-index]');
-    this.chipButtons = Array.prototype.slice.call(buttons);
+    var container = this.chipsContainer;
+    var existing = this.chipButtons ? this.chipButtons.slice() : [];
+    var desiredCount = this.bays.length;
+    var clampedIndex = clampSelectedIndex(this.selectedIndex, desiredCount);
+    if (clampedIndex !== this.selectedIndex) {
+      this.selectedIndex = clampedIndex;
+    }
+
+    var newButtons = [];
+
+    for (var index = 0; index < desiredCount; index += 1) {
+      var button = existing[index];
+      if (!button || button.parentElement !== container) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'bay-chip';
+      }
+
+      // Update the existing nodes in place so delegated handlers remain intact;
+      // replacing the innerHTML here has caused listeners to disappear before
+      // SketchUp invokes them.
+      var referenceNode = container.children[index] || null;
+      if (referenceNode !== button) {
+        container.insertBefore(button, referenceNode);
+      }
+
+      var label = this.translate('bay_chip_label', { index: index + 1 });
+      if (button.textContent !== label) {
+        button.textContent = label;
+      }
+      button.setAttribute('data-index', String(index));
+      button.setAttribute('aria-pressed', index === this.selectedIndex ? 'true' : 'false');
+      button.tabIndex = index === this.selectedIndex ? 0 : -1;
+
+      newButtons.push(button);
+    }
+
+    for (var removeIndex = existing.length - 1; removeIndex >= desiredCount; removeIndex -= 1) {
+      var extra = existing[removeIndex];
+      if (extra && extra.parentElement === container) {
+        container.removeChild(extra);
+      }
+    }
+
+    while (container.children.length > desiredCount) {
+      var trailing = container.lastElementChild;
+      if (!trailing) {
+        break;
+      }
+      container.removeChild(trailing);
+    }
+
+    this.chipButtons = newButtons;
 
     this.updateActionsVisibility();
     this.announce(this.translate('bay_count_status', { count: this.bays.length }));
