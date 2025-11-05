@@ -491,6 +491,43 @@ module AICabinets
         end
         private_class_method :handle_ui_set_partitions_count
 
+        def handle_ui_partitions_changed(dialog, payload)
+          data = parse_payload(payload)
+          return unless data.is_a?(Hash)
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          partitions = fetch_partitions(params)
+          if data.key?(:count) || data.key?('count')
+            value = data[:count] || data['count']
+            count = extract_integer(value)
+            partitions[:count] = count unless count.nil?
+          end
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          bays = fetch_bays_array(updated_params)
+          length = bays.length
+
+          requested =
+            data[:selected_bay_index] ||
+            data['selected_bay_index'] ||
+            data[:selected_index] ||
+            data['selected_index']
+
+          selected = extract_integer(requested)
+          selected = selected_bay_index if selected.nil?
+
+          clamped = AICabinets::UiVisibility.clamp_selected_index(selected, length)
+          set_selected_bay_index(clamped)
+
+          deliver_state_bays_changed(dialog, updated_params)
+        end
+        private_class_method :handle_ui_partitions_changed
+
         def handle_ui_set_partitions_layout(dialog, payload)
           data = parse_payload(payload)
           raw_value = extract_string(data[:value] || data['value'])
@@ -800,6 +837,9 @@ module AICabinets
 
           dialog.add_action_callback('ui_set_partitions_count') do |_context, payload|
             handle_ui_set_partitions_count(dialog, payload)
+          end
+          dialog.add_action_callback('ui_partitions_changed') do |_context, payload|
+            handle_ui_partitions_changed(dialog, payload)
           end
         end
         private_class_method :attach_callbacks
