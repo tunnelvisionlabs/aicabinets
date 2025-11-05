@@ -2,12 +2,11 @@
 
 module AICabinets
   module UiVisibility
-    VALID_MODES = %w[none even positions].freeze
+    VALID_PARTITION_MODES = %w[none vertical horizontal].freeze
 
     def flags_for(params)
-      partitions = extract_partitions(params)
-      mode = normalize_mode(partitions[:mode])
-      show_global = mode.nil? || mode == 'none'
+      mode = normalize_mode(fetch_partition_mode(params))
+      show_global = mode == 'none'
 
       {
         show_bays: !show_global,
@@ -27,27 +26,22 @@ module AICabinets
 
     module_function :flags_for, :clamp_selected_index
 
-    def self.extract_partitions(params)
-      return {} unless params.is_a?(Hash)
+    def self.fetch_partition_mode(params)
+      return nil unless params.is_a?(Hash)
 
-      container = params[:partitions] || params['partitions']
-      return {} unless container.is_a?(Hash)
-
-      container.each_with_object({}) do |(key, value), memo|
-        memo[key.is_a?(String) ? key.to_sym : key] = value
-      end
+      params[:partition_mode] || params['partition_mode']
     end
-    private_class_method :extract_partitions
+    private_class_method :fetch_partition_mode
 
     def self.normalize_mode(value)
-      return nil if value.nil?
+      return 'none' if value.nil?
 
       mode = value.to_s.strip.downcase
-      return nil if mode.empty?
+      return 'none' if mode.empty?
 
-      VALID_MODES.include?(mode) ? mode : nil
+      VALID_PARTITION_MODES.include?(mode) ? mode : 'none'
     rescue StandardError
-      nil
+      'none'
     end
     private_class_method :normalize_mode
 

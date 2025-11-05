@@ -72,37 +72,48 @@ body {
   display: none;
 }
 
+.segmented-control {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
 .scope-toggle__group {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.scope-toggle {
+.scope-toggle,
+.segmented-control {
   margin: 0;
   padding: 0;
   border: 0;
   min-width: 0;
 }
 
-.scope-toggle__legend {
+.scope-toggle__legend,
+.segmented-control__legend {
   margin: 0 0 4px;
   font-size: 1.05rem;
   font-weight: 600;
 }
 
-.scope-toggle__options {
+.scope-toggle__options,
+.segmented-control__options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.scope-toggle__option {
+.scope-toggle__option,
+.segmented-control__option {
   position: relative;
   flex: 1 1 160px;
 }
 
-.scope-toggle__option input[type='radio'] {
+.scope-toggle__option input[type='radio'],
+.segmented-control__option input[type='radio'] {
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -113,7 +124,8 @@ body {
   clip-path: inset(50%);
 }
 
-.scope-toggle__option span {
+.scope-toggle__option span,
+.segmented-control__option span {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -128,15 +140,18 @@ body {
     box-shadow 0.15s ease;
 }
 
-.scope-toggle__option span:hover {
+.scope-toggle__option span:hover,
+.segmented-control__option span:hover {
   background-color: rgba(30, 136, 229, 0.12);
 }
 
-.scope-toggle__option input[type='radio']:focus-visible + span {
+.scope-toggle__option input[type='radio']:focus-visible + span,
+.segmented-control__option input[type='radio']:focus-visible + span {
   box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.35);
 }
 
-.scope-toggle__option input[type='radio']:checked + span {
+.scope-toggle__option input[type='radio']:checked + span,
+.segmented-control__option input[type='radio']:checked + span {
   background-color: #1e88e5;
   color: #ffffff;
   border-color: #1e88e5;

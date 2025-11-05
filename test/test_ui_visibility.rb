@@ -16,7 +16,7 @@ class UiVisibilityTest < Minitest::Test
   end
 
   def test_flags_for_none_mode
-    params = { partitions: { mode: 'none' } }
+    params = { partition_mode: 'none', partitions: { mode: 'even' } }
 
     flags = AICabinets::UiVisibility.flags_for(params)
 
@@ -25,8 +25,18 @@ class UiVisibilityTest < Minitest::Test
     assert_equal(true, flags[:show_global_shelves])
   end
 
-  def test_flags_for_partitioned_mode
-    params = { partitions: { mode: 'even' } }
+  def test_flags_for_partitioned_mode_vertical
+    params = { partition_mode: 'vertical', partitions: { mode: 'even' } }
+
+    flags = AICabinets::UiVisibility.flags_for(params)
+
+    assert_equal(true, flags[:show_bays])
+    assert_equal(false, flags[:show_global_front_layout])
+    assert_equal(false, flags[:show_global_shelves])
+  end
+
+  def test_flags_for_partitioned_mode_horizontal
+    params = { partition_mode: 'horizontal', partitions: { mode: 'positions' } }
 
     flags = AICabinets::UiVisibility.flags_for(params)
 
@@ -36,7 +46,17 @@ class UiVisibilityTest < Minitest::Test
   end
 
   def test_flags_for_unknown_mode_defaults_to_none
-    params = { partitions: { mode: 'unexpected' } }
+    params = { partition_mode: 'unexpected', partitions: { mode: 'even' } }
+
+    flags = AICabinets::UiVisibility.flags_for(params)
+
+    assert_equal(false, flags[:show_bays])
+    assert_equal(true, flags[:show_global_front_layout])
+    assert_equal(true, flags[:show_global_shelves])
+  end
+
+  def test_flags_ignores_partition_layout_when_mode_none
+    params = { partition_mode: 'none', partitions: { mode: 'positions' } }
 
     flags = AICabinets::UiVisibility.flags_for(params)
 

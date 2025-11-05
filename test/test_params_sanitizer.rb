@@ -9,6 +9,7 @@ require 'aicabinets/params_sanitizer'
 class ParamsSanitizerTest < Minitest::Test
   def setup
     @defaults = {
+      partition_mode: 'none',
       shelves: 4,
       front: 'doors_right',
       partitions: {
@@ -140,5 +141,21 @@ class ParamsSanitizerTest < Minitest::Test
 
     bay = result[:partitions][:bays].first
     assert_nil(bay[:door_mode])
+  end
+
+  def test_partition_mode_defaults_to_none
+    params = { partition_mode: 'diagonal' }
+
+    result = AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: @defaults)
+
+    assert_equal('none', result[:partition_mode])
+  end
+
+  def test_partition_mode_respects_valid_values
+    params = { partition_mode: 'vertical' }
+
+    result = AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: @defaults)
+
+    assert_equal('vertical', result[:partition_mode])
   end
 end

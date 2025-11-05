@@ -1108,6 +1108,7 @@
       lengths: {},
       front: 'empty',
       shelves: 0,
+      partition_mode: 'none',
       partitions: {
         mode: 'none',
         count: 0,
@@ -1115,6 +1116,7 @@
         bays: []
       }
     };
+    this.partitionLayoutByMode = { vertical: 'even', horizontal: 'even' };
     this.values.lengths.toe_kick_thickness = null;
 
     this.isPlacing = false;
@@ -1152,10 +1154,16 @@
       : null;
     this.globalFrontGroup = form.querySelector('[data-role="global-front-group"]');
     this.globalShelvesGroup = form.querySelector('[data-role="global-shelves-group"]');
+    this.partitionModeFieldset = form.querySelector('[data-role="partition-mode-group"]');
+    this.partitionModeInputs = Array.prototype.slice.call(
+      form.querySelectorAll('input[name="partition_mode"]')
+    );
+    this.partitionControls = form.querySelector('[data-role="partition-controls"]');
     this.baySection = form.querySelector('[data-role="bay-section"]');
     this.statusRegion = form.querySelector('[data-role="dialog-status"]');
     this.currentUiVisibility = null;
     this.lastSentPartitionMode = null;
+    this.lastSentPartitionsLayout = null;
     this.lastSentPartitionCount = null;
     this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
@@ -1176,7 +1184,20 @@
 
     this.initializeElements();
     this.bindEvents();
-    this.updatePartitionMode('none');
+    this.setPartitionsLayout('none', {
+      notify: false,
+      resetValues: false,
+      ensureLength: false,
+      updateInsertButton: false,
+      force: true
+    });
+    this.setPartitionMode('none', {
+      notify: false,
+      resetSelection: false,
+      restoreLayout: false,
+      ensureLength: false,
+      updateInsertButton: false
+    });
     this.updateInsertButtonState();
     this.setSecondaryAction('cancel', this.secondaryDefaultLabel);
 
@@ -1262,25 +1283,26 @@
     }
   };
 
-  FormController.prototype.deriveVisibilityFromMode = function deriveVisibilityFromMode(
-    mode
-  ) {
-    var normalized = '';
-    if (typeof mode === 'string') {
-      normalized = mode.trim().toLowerCase();
-    }
+  FormController.prototype.deriveVisibilityFromPartitionMode =
+    function deriveVisibilityFromPartitionMode(mode) {
+      var normalized = this.normalizePartitionMode(mode);
+      var showPartitions = normalized !== 'none';
 
-    var showBays = normalized === 'even' || normalized === 'positions';
-    return {
-      show_bays: showBays,
-      show_global_front_layout: !showBays,
-      show_global_shelves: !showBays
+      return {
+        show_bays: showPartitions,
+        show_partition_controls: showPartitions,
+        show_global_front_layout: !showPartitions,
+        show_global_shelves: !showPartitions
+      };
     };
-  };
 
   FormController.prototype.applyUiVisibility = function applyUiVisibility(flags) {
     var settings = flags && typeof flags === 'object' ? flags : {};
-    var derived = this.deriveVisibilityFromMode(this.values.partitions.mode);
+    var derived = this.deriveVisibilityFromPartitionMode(this.values.partition_mode);
+    var showPartitionControls =
+      typeof settings.show_partition_controls === 'boolean'
+        ? settings.show_partition_controls
+        : derived.show_partition_controls;
     var showBays =
       typeof settings.show_bays === 'boolean' ? settings.show_bays : derived.show_bays;
     var showFront =
@@ -1292,17 +1314,21 @@
         ? settings.show_global_shelves
         : derived.show_global_shelves;
 
+    var effectiveShowBays = showPartitionControls && showBays;
+
     this.currentUiVisibility = {
-      show_bays: showBays,
+      show_partition_controls: showPartitionControls,
+      show_bays: effectiveShowBays,
       show_global_front_layout: showFront,
       show_global_shelves: showShelves
     };
-    this.toggleElementVisibility(this.baySection, showBays);
+    this.toggleElementVisibility(this.partitionControls, showPartitionControls);
+    this.toggleElementVisibility(this.baySection, effectiveShowBays);
     this.toggleElementVisibility(this.globalFrontGroup, showFront);
     this.toggleElementVisibility(this.globalShelvesGroup, showShelves);
 
     if (this.bayController) {
-      this.bayController.setButtonsDisabled(!showBays);
+      this.bayController.setButtonsDisabled(!effectiveShowBays);
     }
   };
 
@@ -1321,6 +1347,32 @@
     }
 
     return { shelf_count: shelf, door_mode: door };
+  };
+
+  FormController.prototype.normalizePartitionMode = function normalizePartitionMode(mode) {
+    if (typeof mode !== 'string') {
+      return 'none';
+    }
+
+    var text = mode.trim().toLowerCase();
+    if (text === 'vertical' || text === 'horizontal') {
+      return text;
+    }
+
+    return 'none';
+  };
+
+  FormController.prototype.normalizePartitionsLayout = function normalizePartitionsLayout(mode) {
+    if (typeof mode !== 'string') {
+      return 'none';
+    }
+
+    var text = mode.trim().toLowerCase();
+    if (text === 'even' || text === 'positions') {
+      return text;
+    }
+
+    return 'none';
   };
 
   FormController.prototype.setBayArray = function setBayArray(bays, options) {
@@ -1504,17 +1556,23 @@
   };
 
   FormController.prototype.notifyPartitionModeChange = function notifyPartitionModeChange(mode) {
-    var normalized = typeof mode === 'string' ? mode : 'none';
-    if (!normalized) {
-      normalized = 'none';
-    }
-
+    var normalized = this.normalizePartitionMode(mode);
     if (this.lastSentPartitionMode === normalized) {
       return;
     }
 
     this.lastSentPartitionMode = normalized;
     invokeSketchUp('ui_set_partition_mode', JSON.stringify({ value: normalized }));
+  };
+
+  FormController.prototype.notifyPartitionsLayoutChange = function notifyPartitionsLayoutChange(mode) {
+    var normalized = this.normalizePartitionsLayout(mode);
+    if (this.lastSentPartitionsLayout === normalized) {
+      return;
+    }
+
+    this.lastSentPartitionsLayout = normalized;
+    invokeSketchUp('ui_set_partitions_layout', JSON.stringify({ value: normalized }));
   };
 
   FormController.prototype.notifyPartitionCountChange = function notifyPartitionCountChange(value) {
@@ -1565,13 +1623,18 @@
       return;
     }
 
+    var statePartitionMode = this.normalizePartitionMode(state.partition_mode);
     if (state.partitions && typeof state.partitions.mode === 'string') {
-      var mode = state.partitions.mode;
-      this.values.partitions.mode = mode;
-      if (this.inputs.partitions_mode) {
-        this.inputs.partitions_mode.value = mode;
+      var layoutMode = this.normalizePartitionsLayout(state.partitions.mode);
+      this.values.partitions.mode = layoutMode;
+      if (layoutMode !== 'none') {
+        if (statePartitionMode === 'vertical' || statePartitionMode === 'horizontal') {
+          this.partitionLayoutByMode[statePartitionMode] = layoutMode;
+        }
       }
-      this.updatePartitionMode(mode);
+      if (this.inputs.partitions_mode) {
+        this.inputs.partitions_mode.value = layoutMode;
+      }
     }
 
     var count = null;
@@ -1631,6 +1694,21 @@
       this.setFieldError('partitions_positions', null, true);
     }
 
+    this.setPartitionsLayout(this.values.partitions.mode, {
+      notify: false,
+      resetValues: false,
+      ensureLength: false,
+      updateInsertButton: false,
+      force: true
+    });
+    this.setPartitionMode(statePartitionMode, {
+      notify: false,
+      resetSelection: false,
+      restoreLayout: false,
+      ensureLength: false,
+      updateInsertButton: false
+    });
+
     if (Array.isArray(state.can_double)) {
       state.can_double.forEach(
         function (entry, index) {
@@ -1648,7 +1726,7 @@
       this.applyUiVisibility(this.currentUiVisibility);
     }
 
-    this.lastSentPartitionMode = this.values.partitions.mode;
+    this.lastSentPartitionMode = this.values.partition_mode;
     this.lastSentPartitionCount = count;
   };
 
@@ -1712,10 +1790,20 @@
 
     if (this.inputs.partitions_mode) {
       this.inputs.partitions_mode.addEventListener('change', function (event) {
-        self.handlePartitionModeChange(event.target.value);
+        self.handlePartitionsLayoutChange(event.target.value);
         self.touched.partitions_mode = true;
         self.setFieldError('partitions_mode', null, true);
         event.target.removeAttribute('data-invalid');
+      });
+    }
+
+    if (this.partitionModeInputs.length) {
+      this.partitionModeInputs.forEach(function (input) {
+        input.addEventListener('change', function (event) {
+          if (event.target.checked) {
+            self.setPartitionMode(event.target.value);
+          }
+        });
       });
     }
 
@@ -1816,16 +1904,14 @@
       }
     }
 
+    var defaultPartitionMode = this.normalizePartitionMode(defaults.partition_mode);
     if (defaults.partitions && typeof defaults.partitions === 'object') {
       var partitions = defaults.partitions;
-      var mode = typeof partitions.mode === 'string' ? partitions.mode : null;
+      var layoutMode = this.normalizePartitionsLayout(partitions.mode);
 
-      if (mode) {
-        if (this.inputs.partitions_mode) {
-          this.inputs.partitions_mode.value = mode;
-        }
-        this.values.partitions.mode = mode;
-        this.updatePartitionMode(mode);
+      if (layoutMode !== 'none') {
+        this.partitionLayoutByMode.vertical = layoutMode;
+        this.partitionLayoutByMode.horizontal = layoutMode;
       }
 
       var count = partitions.count;
@@ -1833,14 +1919,14 @@
         count = Number(count);
       }
       if (!isFinite(count)) {
-        count = mode === 'even' ? null : 0;
+        count = layoutMode === 'even' ? null : 0;
       } else {
         count = Math.max(0, Math.round(count));
       }
 
       this.values.partitions.count = count;
       if (this.inputs.partitions_count) {
-        if (mode === 'even' && count != null) {
+        if (layoutMode === 'even' && count != null) {
           this.inputs.partitions_count.value = String(count);
         } else {
           this.inputs.partitions_count.value = '';
@@ -1853,7 +1939,7 @@
       var positions = Array.isArray(partitions.positions_mm)
         ? partitions.positions_mm.slice()
         : [];
-      if (mode === 'positions') {
+      if (layoutMode === 'positions') {
         this.values.partitions.positions_mm = positions;
         if (this.inputs.partitions_positions) {
           if (positions.length) {
@@ -1880,6 +1966,30 @@
     } else {
       this.setBayArray([], { selectedIndex: 0 });
     }
+
+    this.setPartitionsLayout(
+      this.normalizePartitionsLayout(
+        defaults.partitions && typeof defaults.partitions === 'object'
+          ? defaults.partitions.mode
+          : 'none'
+      ),
+      {
+        notify: false,
+        resetValues: false,
+        ensureLength: false,
+        updateInsertButton: false,
+        force: true
+      }
+    );
+    this.setPartitionMode(defaultPartitionMode, {
+      notify: false,
+      resetSelection: false,
+      restoreLayout: false,
+      ensureLength: false,
+      updateInsertButton: false
+    });
+    this.touched.partitions_mode = false;
+    this.setFieldError('partitions_mode', null, true);
 
     this.ensureBayLength();
 
@@ -2246,22 +2356,136 @@
     } else if (name === 'partitions_count') {
       this.values.partitions.count = value;
       this.ensureBayLength();
-      if (value != null && isFinite(value)) {
+      if (this.values.partition_mode !== 'none' && value != null && isFinite(value)) {
         this.notifyPartitionCountChange(value);
       }
     }
   };
 
-  FormController.prototype.handlePartitionModeChange = function handlePartitionModeChange(mode) {
-    this.values.partitions.mode = mode;
-    this.updatePartitionMode(mode);
-    this.applyUiVisibility(this.deriveVisibilityFromMode(mode));
+  FormController.prototype.resetBaySelection = function resetBaySelection() {
     this.ensureBayLength();
-    this.updateInsertButtonState();
-    this.notifyPartitionModeChange(mode);
+    this.selectedBayIndex = 0;
+    this.pendingSelectedBayIndex = 0;
+    if (this.bayController) {
+      this.bayController.setSelectedIndex(0, { emit: false });
+    }
+    invokeSketchUp('ui_select_bay', JSON.stringify({ index: 0 }));
   };
 
-  FormController.prototype.updatePartitionMode = function updatePartitionMode(mode) {
+  FormController.prototype.setPartitionMode = function setPartitionMode(mode, options) {
+    options = options || {};
+    var normalized = this.normalizePartitionMode(mode);
+    var previous = this.values.partition_mode;
+
+    this.values.partition_mode = normalized;
+    if (this.partitionModeInputs) {
+      this.partitionModeInputs.forEach(function (input) {
+        input.checked = input.value === normalized;
+      });
+    }
+
+    if (normalized === 'none') {
+      if (options.restoreLayout !== false) {
+        this.setPartitionsLayout('none', {
+          notify: options.notifyLayout === true,
+          resetValues: false,
+          ensureLength: options.ensureLength,
+          updateInsertButton: options.updateInsertButton,
+          force: true
+        });
+      }
+    } else if (options.restoreLayout !== false) {
+      var cached = this.partitionLayoutByMode[normalized];
+      if (!cached || cached === 'none') {
+        cached = 'even';
+      }
+      this.setPartitionsLayout(cached, {
+        notify: options.notifyLayout !== false,
+        resetValues: options.resetLayoutValues !== false,
+        ensureLength: options.ensureLength,
+        updateInsertButton: options.updateInsertButton,
+        force: true
+      });
+    }
+
+    var shouldReset = options.resetSelection;
+    if (shouldReset == null) {
+      shouldReset = previous !== normalized;
+    }
+    if (shouldReset) {
+      this.resetBaySelection();
+    }
+
+    this.applyUiVisibility(this.deriveVisibilityFromPartitionMode(normalized));
+
+    if (options.notify !== false) {
+      this.notifyPartitionModeChange(normalized);
+    }
+  };
+
+  FormController.prototype.setPartitionsLayout = function setPartitionsLayout(mode, options) {
+    options = options || {};
+    var normalized = this.normalizePartitionsLayout(mode);
+    var previous = this.values.partitions.mode;
+    if (normalized === previous && options.force !== true) {
+      return;
+    }
+
+    this.values.partitions.mode = normalized;
+    if (this.inputs.partitions_mode) {
+      this.inputs.partitions_mode.value = normalized;
+    }
+    this.updatePartitionsLayoutUI(normalized);
+
+    if (options.resetValues !== false) {
+      if (normalized === 'even') {
+        this.values.partitions.count = null;
+        if (this.inputs.partitions_count) {
+          this.inputs.partitions_count.value = '';
+          this.inputs.partitions_count.removeAttribute('data-invalid');
+        }
+        this.setFieldError('partitions_count', null, true);
+        this.touched.partitions_count = false;
+      } else if (normalized !== 'positions') {
+        this.values.partitions.count = 0;
+        if (this.inputs.partitions_count) {
+          this.inputs.partitions_count.value = '';
+          this.inputs.partitions_count.removeAttribute('data-invalid');
+        }
+        this.setFieldError('partitions_count', null, true);
+        this.touched.partitions_count = false;
+      }
+
+      if (normalized !== 'positions') {
+        this.values.partitions.positions_mm = [];
+        if (this.inputs.partitions_positions) {
+          this.inputs.partitions_positions.value = '';
+          this.inputs.partitions_positions.removeAttribute('data-invalid');
+        }
+        this.setFieldError('partitions_positions', null, true);
+        this.touched.partitions_positions = false;
+      }
+    }
+
+    if (this.values.partition_mode === 'vertical' || this.values.partition_mode === 'horizontal') {
+      if (normalized !== 'none') {
+        this.partitionLayoutByMode[this.values.partition_mode] = normalized;
+      }
+    }
+
+    if (options.ensureLength !== false) {
+      this.ensureBayLength();
+    }
+    if (options.updateInsertButton !== false) {
+      this.updateInsertButtonState();
+    }
+
+    if (options.notify !== false) {
+      this.notifyPartitionsLayoutChange(normalized);
+    }
+  };
+
+  FormController.prototype.updatePartitionsLayoutUI = function updatePartitionsLayoutUI(mode) {
     if (this.partitionsEvenField) {
       this.partitionsEvenField.classList.toggle('is-hidden', mode !== 'even');
     }
@@ -2269,34 +2493,10 @@
     if (this.partitionsPositionsField) {
       this.partitionsPositionsField.classList.toggle('is-hidden', mode !== 'positions');
     }
+  };
 
-    if (mode === 'even') {
-      this.values.partitions.count = null;
-      if (this.inputs.partitions_count) {
-        this.inputs.partitions_count.value = '';
-        this.inputs.partitions_count.removeAttribute('data-invalid');
-      }
-      this.setFieldError('partitions_count', null, true);
-      this.touched.partitions_count = false;
-    } else {
-      this.values.partitions.count = 0;
-      if (this.inputs.partitions_count) {
-        this.inputs.partitions_count.value = '';
-        this.inputs.partitions_count.removeAttribute('data-invalid');
-      }
-      this.setFieldError('partitions_count', null, true);
-      this.touched.partitions_count = false;
-    }
-
-    if (mode !== 'positions') {
-      this.values.partitions.positions_mm = [];
-      if (this.inputs.partitions_positions) {
-        this.inputs.partitions_positions.value = '';
-        this.inputs.partitions_positions.removeAttribute('data-invalid');
-      }
-      this.setFieldError('partitions_positions', null, true);
-      this.touched.partitions_positions = false;
-    }
+  FormController.prototype.handlePartitionsLayoutChange = function handlePartitionsLayoutChange(mode) {
+    this.setPartitionsLayout(mode);
   };
 
   FormController.prototype.handlePartitionsPositionsInput = function handlePartitionsPositionsInput() {
@@ -2596,6 +2796,7 @@
           : lengths.panel_thickness,
       front: this.values.front,
       shelves: this.values.shelves,
+      partition_mode: this.values.partition_mode,
       partitions: {
         mode: partitions.mode,
         bays: (partitions.bays || []).map(
@@ -2616,6 +2817,12 @@
     } else if (partitions.mode === 'positions') {
       payload.partitions.positions_mm = partitions.positions_mm.slice();
     } else {
+      payload.partitions.count = 0;
+      payload.partitions.positions_mm = [];
+    }
+
+    if (payload.partition_mode === 'none') {
+      payload.partitions.mode = 'none';
       payload.partitions.count = 0;
       payload.partitions.positions_mm = [];
     }

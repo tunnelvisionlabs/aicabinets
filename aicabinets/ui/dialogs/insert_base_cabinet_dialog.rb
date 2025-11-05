@@ -23,7 +23,9 @@ module AICabinets
         HTML_FILENAME = 'insert_base_cabinet.html'
         MAX_LENGTH_MM = 100_000.0
         VALID_FRONT_VALUES = %w[empty doors_left doors_right doors_double].freeze
-        VALID_PARTITION_MODES = %w[none even positions].freeze
+        VALID_PARTITION_MODES = %w[none vertical horizontal].freeze
+        VALID_PARTITION_LAYOUTS = %w[none even positions].freeze
+        DEFAULT_PARTITION_LAYOUT = 'even'
         LENGTH_FIELD_NAMES = {
           width_mm: 'Width',
           depth_mm: 'Depth',
@@ -49,7 +51,8 @@ module AICabinets
           end
         end
         private_constant :PayloadError
-        private_constant :MAX_LENGTH_MM, :VALID_FRONT_VALUES, :VALID_PARTITION_MODES, :LENGTH_FIELD_NAMES
+        private_constant :MAX_LENGTH_MM, :VALID_FRONT_VALUES, :VALID_PARTITION_MODES,
+                        :VALID_PARTITION_LAYOUTS, :DEFAULT_PARTITION_LAYOUT, :LENGTH_FIELD_NAMES
 
         # Shows the Insert Base Cabinet dialog, creating it if necessary.
         # Subsequent invocations focus the existing dialog to avoid duplicates.
@@ -179,6 +182,45 @@ module AICabinets
         end
         private_class_method :fetch_partitions
 
+        def fetch_partition_mode(params)
+          return 'none' unless params.is_a?(Hash)
+
+          value = params[:partition_mode] || params['partition_mode']
+          normalize_partition_mode(value)
+        end
+        private_class_method :fetch_partition_mode
+
+        def partition_layout_cache
+          dialog_state[:partition_layout_cache] ||= {}
+        end
+        private_class_method :partition_layout_cache
+
+        def cache_layout_for(mode, layout)
+          return unless %w[vertical horizontal].include?(mode)
+
+          normalized = normalize_partition_layout_mode(layout)
+          return if normalized == 'none'
+
+          partition_layout_cache[mode.to_sym] = normalized
+        end
+        private_class_method :cache_layout_for
+
+        def cached_layout_for(mode)
+          value = partition_layout_cache[mode.to_sym]
+          normalized = normalize_partition_layout_mode(value)
+          normalized == 'none' ? nil : normalized
+        end
+        private_class_method :cached_layout_for
+
+        def default_partition_layout
+          defaults = dialog_defaults
+          partitions = fetch_partitions(defaults)
+          candidate = partitions[:mode] || partitions['mode']
+          normalized = normalize_partition_layout_mode(candidate)
+          normalized == 'none' ? DEFAULT_PARTITION_LAYOUT : normalized
+        end
+        private_class_method :default_partition_layout
+
         def fetch_bays_array(params)
           partitions = fetch_partitions(params)
           bays = partitions[:bays] || partitions['bays']
@@ -269,14 +311,18 @@ module AICabinets
         private_class_method :deliver_state_bays_changed
 
         def build_bay_state(params)
+          partition_mode = fetch_partition_mode(params)
           partitions = fetch_partitions(params)
+          layout_mode = normalize_partition_layout_mode(partitions[:mode] || partitions['mode'])
+          cache_layout_for(partition_mode, layout_mode)
           bays = fetch_bays_array(params).map { |bay| deep_copy_params(bay) }
           selected = AICabinets::UiVisibility.clamp_selected_index(selected_bay_index, bays.length)
           set_selected_bay_index(selected)
 
           {
+            partition_mode: partition_mode,
             partitions: {
-              mode: normalize_partition_mode(partitions[:mode] || partitions['mode']),
+              mode: layout_mode,
               count: partitions[:count] || partitions['count'] || 0,
               positions_mm: partitions[:positions_mm] || partitions['positions_mm'] || []
             },
@@ -356,6 +402,17 @@ module AICabinets
         end
         private_class_method :extract_string
 
+        def normalize_partition_layout_mode(value)
+          text = extract_string(value)
+          return 'none' if text.nil?
+
+          normalized = text.downcase
+          return normalized if VALID_PARTITION_LAYOUTS.include?(normalized)
+
+          'none'
+        end
+        private_class_method :normalize_partition_layout_mode
+
         def normalize_partition_mode(value)
           text = extract_string(value)
           return 'none' if text.nil?
@@ -363,6 +420,7 @@ module AICabinets
           normalized = text.downcase
           return normalized if VALID_PARTITION_MODES.include?(normalized)
 
+          warn("AI Cabinets: Unknown partition_mode '#{value}'; falling back to none.")
           'none'
         end
         private_class_method :normalize_partition_mode
@@ -392,15 +450,20 @@ module AICabinets
           params = ensure_dialog_params
           return unless params.is_a?(Hash)
 
+          previous_mode = fetch_partition_mode(params)
           partitions = fetch_partitions(params)
-          partitions[:mode] = mode
-          if mode == 'none'
-            partitions[:count] = 0
-            partitions[:positions_mm] = []
-          elsif mode == 'even'
-            partitions[:positions_mm] = []
+          cache_layout_for(previous_mode, partitions[:mode] || partitions['mode'])
+
+          params[:partition_mode] = mode
+
+          if %w[vertical horizontal].include?(mode)
+            restored = cached_layout_for(mode) || normalize_partition_layout_mode(partitions[:mode] || partitions['mode'])
+            restored = default_partition_layout if restored == 'none'
+            partitions[:mode] = restored
+            cache_layout_for(mode, restored)
           end
 
+          set_selected_bay_index(0)
           AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
           store_dialog_params(params)
 
@@ -427,6 +490,30 @@ module AICabinets
           deliver_state_bays_changed(dialog, updated_params)
         end
         private_class_method :handle_ui_set_partitions_count
+
+        def handle_ui_set_partitions_layout(dialog, payload)
+          data = parse_payload(payload)
+          raw_value = extract_string(data[:value] || data['value'])
+          mode = normalize_partition_layout_mode(raw_value)
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          partitions = fetch_partitions(params)
+          partitions[:mode] = mode
+
+          partition_mode = fetch_partition_mode(params)
+          cache_layout_for(partition_mode, mode)
+
+          partitions[:positions_mm] = [] if mode == 'even'
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          deliver_state_bays_changed(dialog, updated_params)
+        end
+        private_class_method :handle_ui_set_partitions_layout
 
         def handle_ui_set_shelf_count(dialog, payload)
           data = parse_payload(payload)
@@ -707,6 +794,10 @@ module AICabinets
             handle_ui_set_partition_mode(dialog, payload)
           end
 
+          dialog.add_action_callback('ui_set_partitions_layout') do |_context, payload|
+            handle_ui_set_partitions_layout(dialog, payload)
+          end
+
           dialog.add_action_callback('ui_set_partitions_count') do |_context, payload|
             handle_ui_set_partitions_count(dialog, payload)
           end
@@ -898,6 +989,8 @@ module AICabinets
         private_class_method :parse_submit_params
 
         def build_typed_params(raw)
+          partition_mode = normalize_partition_mode(raw[:partition_mode])
+
           params = {
             width_mm: coerce_length_field(raw, :width_mm),
             depth_mm: coerce_length_field(raw, :depth_mm),
@@ -909,6 +1002,14 @@ module AICabinets
             shelves: validate_shelves_value(raw),
             partitions: validate_partitions_value(raw[:partitions])
           }
+
+          params[:partition_mode] = partition_mode
+
+          if partition_mode == 'none'
+            params[:partitions][:mode] = 'none'
+            params[:partitions][:count] = 0
+            params[:partitions][:positions_mm] = []
+          end
 
           params[:toe_kick_thickness_mm] =
             if raw.key?(:toe_kick_thickness_mm)
@@ -993,11 +1094,13 @@ module AICabinets
             raise PayloadError.new('invalid_type', 'Partitions payload must be an object.', 'partitions')
           end
 
-          mode = raw[:mode]
-          unless mode.is_a?(String) && VALID_PARTITION_MODES.include?(mode)
+          mode_value = extract_string(raw[:mode])
+          normalized_source = mode_value&.downcase
+          unless normalized_source && VALID_PARTITION_LAYOUTS.include?(normalized_source)
             raise PayloadError.new('invalid_type', 'Partition mode is invalid.', 'partitions.mode')
           end
 
+          mode = normalize_partition_layout_mode(mode_value)
           typed = { mode: mode, count: 0, positions_mm: [] }
 
           case mode
