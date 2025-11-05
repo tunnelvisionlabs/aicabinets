@@ -126,6 +126,77 @@
     return value;
   }
 
+  function clampSelectedIndex(index, bayCount) {
+    var length = Number(bayCount);
+    if (!isFinite(length) || length < 1) {
+      length = 1;
+    } else {
+      length = Math.round(length);
+      if (length < 1) {
+        length = 1;
+      }
+    }
+
+    var numeric = Number(index);
+    if (!isFinite(numeric)) {
+      numeric = 0;
+    }
+
+    numeric = Math.round(numeric);
+    if (numeric < 0) {
+      numeric = 0;
+    }
+    if (numeric >= length) {
+      numeric = length - 1;
+    }
+
+    return numeric;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function buildBayChipsMarkup(count, selectedIndex, translate) {
+    var total = Number(count);
+    if (!isFinite(total) || total < 1) {
+      total = 1;
+    } else {
+      total = Math.round(total);
+      if (total < 1) {
+        total = 1;
+      }
+    }
+
+    var active = clampSelectedIndex(selectedIndex, total);
+    var html = '';
+
+    for (var index = 0; index < total; index += 1) {
+      var label = translate
+        ? translate('bay_chip_label', { index: index + 1 })
+        : 'Bay ' + (index + 1);
+      var pressed = index === active ? 'true' : 'false';
+      var tabIndex = index === active ? '0' : '-1';
+      html +=
+        '<button type="button" class="bay-chip" data-index="' +
+        String(index) +
+        '" aria-pressed="' +
+        pressed +
+        '" tabindex="' +
+        tabIndex +
+        '">' +
+        escapeHtml(label) +
+        '</button>';
+    }
+
+    return { markup: html, selectedIndex: active };
+  }
+
   function BayController(options) {
     options = options || {};
 
@@ -310,55 +381,23 @@
       return;
     }
 
-    var container = this.chipsContainer;
-    var existing = this.chipButtons ? this.chipButtons.slice() : [];
-    var desiredCount = this.bays.length;
-    var newButtons = [];
-
-    for (var index = 0; index < desiredCount; index += 1) {
-      var button = existing[index];
-      if (!button || button.parentElement !== container) {
-        button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'bay-chip';
-      }
-
-      var referenceNode = container.children[index] || null;
-      if (referenceNode !== button) {
-        container.insertBefore(button, referenceNode);
-      }
-
-      button.textContent = this.translate('bay_chip_label', { index: index + 1 });
-      button.setAttribute('data-index', String(index));
-      button.setAttribute('aria-pressed', index === this.selectedIndex ? 'true' : 'false');
-      button.tabIndex = index === this.selectedIndex ? 0 : -1;
-
-      newButtons.push(button);
-    }
-
-    for (var removeIndex = existing.length - 1; removeIndex >= desiredCount; removeIndex -= 1) {
-      var extra = existing[removeIndex];
-      if (extra && extra.parentElement === container) {
-        container.removeChild(extra);
-      }
-    }
-
-    while (container.children.length > desiredCount) {
-      var trailing = container.lastElementChild;
-      if (!trailing) {
-        break;
-      }
-      container.removeChild(trailing);
-    }
-
-    this.chipButtons = newButtons;
+    var result = buildBayChipsMarkup(this.bays.length, this.selectedIndex, this.translate);
+    this.selectedIndex = result.selectedIndex;
+    this.chipsContainer.innerHTML = result.markup;
+    var buttons = this.chipsContainer.querySelectorAll('button[data-index]');
+    this.chipButtons = Array.prototype.slice.call(buttons);
 
     this.updateActionsVisibility();
     this.announce(this.translate('bay_count_status', { count: this.bays.length }));
   };
 
   BayController.prototype.handleChipContainerClick = function handleChipContainerClick(event) {
-    var index = this.resolveChipIndex(event && event.target);
+    if (!event) {
+      return;
+    }
+
+    var target = event.target && event.target.closest('[data-index]');
+    var index = this.resolveChipIndex(target);
     if (index == null) {
       return;
     }
@@ -372,7 +411,8 @@
       return;
     }
 
-    var index = this.resolveChipIndex(event.target);
+    var target = event.target && event.target.closest('[data-index]');
+    var index = this.resolveChipIndex(target);
     if (index == null) {
       return;
     }
@@ -432,32 +472,36 @@
       return;
     }
 
-    var clamped = Math.max(0, Math.min(index, this.chipButtons.length - 1));
-    var button = this.chipButtons[clamped];
-    if (!button) {
-      return;
-    }
-
+    var clamped = clampSelectedIndex(index, this.chipButtons.length);
     this.setSelectedIndex(clamped, { emit: true, focus: true });
   };
 
   BayController.prototype.setSelectedIndex = function setSelectedIndex(index, options) {
-    if (index == null || index < 0 || index >= this.bays.length) {
+    if (!this.bays || !this.bays.length) {
       return;
     }
 
+    var clamped = clampSelectedIndex(index, this.bays.length);
+
     options = options || {};
     var previous = this.selectedIndex;
-    this.selectedIndex = index;
+    this.selectedIndex = clamped;
 
     if (this.chipButtons) {
       this.chipButtons.forEach(function (button, buttonIndex) {
-        var pressed = buttonIndex === index ? 'true' : 'false';
+        if (!button) {
+          return;
+        }
+        var pressed = buttonIndex === clamped ? 'true' : 'false';
         button.setAttribute('aria-pressed', pressed);
-        button.tabIndex = buttonIndex === index ? 0 : -1;
+        button.tabIndex = buttonIndex === clamped ? 0 : -1;
       });
-      if (options.focus && this.chipButtons[index] && typeof this.chipButtons[index].focus === 'function') {
-        this.chipButtons[index].focus();
+      if (
+        options.focus &&
+        this.chipButtons[clamped] &&
+        typeof this.chipButtons[clamped].focus === 'function'
+      ) {
+        this.chipButtons[clamped].focus();
       }
     }
 
@@ -465,11 +509,11 @@
     this.updateDoorControls();
 
     this.announce(
-      this.translate('bay_selection_status', { index: index + 1, total: this.bays.length })
+      this.translate('bay_selection_status', { index: clamped + 1, total: this.bays.length })
     );
 
-    if (options.emit && index !== previous) {
-      this.onSelect(index);
+    if (options.emit && clamped !== previous) {
+      this.onSelect(clamped);
     }
 
     this.requestValidity();
@@ -510,10 +554,13 @@
     this.bays = Array.isArray(bays) ? bays.slice() : [];
     this.template = this.bays.length ? cloneBay(this.bays[0]) : { shelf_count: 0, door_mode: null };
     var desiredIndex = options.selectedIndex != null ? options.selectedIndex : this.selectedIndex;
-    desiredIndex = Math.max(0, Math.min(desiredIndex, this.bays.length - 1));
+    desiredIndex = clampSelectedIndex(desiredIndex, this.bays.length);
     this.selectedIndex = desiredIndex;
     this.renderChips();
-    this.setSelectedIndex(desiredIndex, { emit: options.emit === true });
+    this.setSelectedIndex(desiredIndex, {
+      emit: options.emit === true,
+      focus: options.focus === true
+    });
   };
 
   function cloneBay(bay) {
@@ -1164,7 +1211,7 @@
     this.currentUiVisibility = null;
     this.lastSentPartitionMode = null;
     this.lastSentPartitionsLayout = null;
-    this.lastSentPartitionCount = null;
+    this.lastSentPartitionsState = null;
     this.bannerElement = document.querySelector('[data-role="form-banner"]');
     this.partitionsEvenField = form.querySelector('[data-partitions-control="even"]');
     this.partitionsPositionsField = form.querySelector('[data-partitions-control="positions"]');
@@ -1399,9 +1446,9 @@
 
     var preferredIndex = this.selectedBayIndex;
     if (options && typeof options.selectedIndex === 'number' && isFinite(options.selectedIndex)) {
-      preferredIndex = Math.max(0, Math.round(options.selectedIndex));
+      preferredIndex = options.selectedIndex;
     }
-    preferredIndex = Math.max(0, Math.min(preferredIndex, sanitized.length - 1));
+    preferredIndex = clampSelectedIndex(preferredIndex, sanitized.length);
 
     this.values.partitions.bays = sanitized;
     this.bayTemplate = cloneBay(sanitized[0]);
@@ -1448,7 +1495,7 @@
     }
 
     this.values.partitions.bays = bays;
-    this.selectedBayIndex = Math.max(0, Math.min(this.selectedBayIndex, bays.length - 1));
+    this.selectedBayIndex = clampSelectedIndex(this.selectedBayIndex, bays.length);
     if (this.bayController) {
       this.bayController.setBays(bays.map(cloneBay), {
         selectedIndex: this.selectedBayIndex
@@ -1466,7 +1513,7 @@
       return;
     }
 
-    var clamped = Math.max(0, Math.min(index, bays.length - 1));
+    var clamped = clampSelectedIndex(index, bays.length);
     if (clamped === this.selectedBayIndex) {
       return;
     }
@@ -1582,12 +1629,40 @@
     }
 
     numeric = Math.max(0, Math.round(numeric));
-    if (this.lastSentPartitionCount === numeric) {
+    var bays = this.values.partitions.bays || [];
+    var selectedIndex = clampSelectedIndex(this.selectedBayIndex, bays.length);
+    this.selectedBayIndex = selectedIndex;
+    this.pendingSelectedBayIndex = selectedIndex;
+
+    this.sendPartitionsState(numeric, selectedIndex);
+  };
+
+  FormController.prototype.sendPartitionsState = function sendPartitionsState(count, selectedIndex) {
+    if (this.values.partition_mode === 'none') {
       return;
     }
 
-    this.lastSentPartitionCount = numeric;
-    invokeSketchUp('ui_set_partitions_count', JSON.stringify({ value: numeric }));
+    var numericCount = Number(count);
+    if (!isFinite(numericCount)) {
+      numericCount = 0;
+    }
+    numericCount = Math.max(0, Math.round(numericCount));
+
+    var bayCount = this.values.partitions.bays ? this.values.partitions.bays.length : 0;
+    var clampedIndex = clampSelectedIndex(selectedIndex, bayCount);
+
+    var previous = this.lastSentPartitionsState;
+    if (
+      previous &&
+      previous.count === numericCount &&
+      previous.selected_index === clampedIndex
+    ) {
+      return;
+    }
+
+    this.lastSentPartitionsState = { count: numericCount, selected_index: clampedIndex };
+    var payload = { count: numericCount, selected_index: clampedIndex };
+    invokeSketchUp('ui_partitions_changed', JSON.stringify(payload));
   };
 
   FormController.prototype.sendBayShelfUpdate = function sendBayShelfUpdate(index, value) {
@@ -1652,14 +1727,14 @@
     var pendingSelection = this.pendingSelectedBayIndex;
     var nextSelected = this.selectedBayIndex;
     if (typeof state.selected_index === 'number' && isFinite(state.selected_index)) {
-      nextSelected = Math.max(0, Math.round(state.selected_index));
+      nextSelected = state.selected_index;
     }
 
     if (pendingSelection != null && isFinite(pendingSelection)) {
-      nextSelected = Math.max(0, Math.min(pendingSelection, bayTotal - 1));
-    } else {
-      nextSelected = Math.max(0, Math.min(nextSelected, bayTotal - 1));
+      nextSelected = pendingSelection;
     }
+
+    nextSelected = clampSelectedIndex(nextSelected, bayTotal);
 
     this.selectedBayIndex = nextSelected;
     this.setBayArray(bays, { selectedIndex: nextSelected });
@@ -1727,7 +1802,10 @@
     }
 
     this.lastSentPartitionMode = this.values.partition_mode;
-    this.lastSentPartitionCount = count;
+    this.lastSentPartitionsState = {
+      count: count,
+      selected_index: this.selectedBayIndex
+    };
   };
 
   FormController.prototype.applyDoubleValidity = function applyDoubleValidity(index, allowed, reason) {
