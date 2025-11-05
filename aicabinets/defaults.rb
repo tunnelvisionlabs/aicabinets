@@ -20,11 +20,20 @@ module AICabinets
     FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
     PARTITION_LAYOUT_MODES = %w[none even positions].freeze
     PARTITION_MODE_OPTIONS = %w[none vertical horizontal].freeze
+    BAY_MODES = %w[fronts_shelves subpartitions].freeze
     MAX_PARTITION_COUNT = 20
 
     BAY_FALLBACK = {
+      mode: 'fronts_shelves',
       shelf_count: 0,
-      door_mode: 'doors_double'
+      door_mode: 'doors_double',
+      fronts_shelves_state: {
+        shelf_count: 0,
+        door_mode: 'doors_double'
+      }.freeze,
+      subpartitions_state: {
+        count: 0
+      }.freeze
     }.freeze
 
     PARTITIONS_FALLBACK = {
@@ -253,7 +262,35 @@ module AICabinets
           return nil
         end
 
-        entry = {}
+        entry = deep_dup(BAY_FALLBACK)
+        entry[:fronts_shelves_state] = deep_dup(entry[:fronts_shelves_state])
+        entry[:subpartitions_state] = deep_dup(entry[:subpartitions_state])
+
+        mode_value = element['mode'] || element[:mode]
+        sanitized_mode = sanitize_override_bay_mode(
+          "overrides.partitions.bays[#{index}].mode",
+          mode_value
+        )
+        entry[:mode] = sanitized_mode if sanitized_mode
+
+        nested_fronts = element['fronts_shelves_state'] || element[:fronts_shelves_state]
+        if nested_fronts.is_a?(Hash)
+          nested_shelf = sanitize_override_integer(
+            "overrides.partitions.bays[#{index}].fronts_shelves_state.shelf_count",
+            nested_fronts['shelf_count'] || nested_fronts[:shelf_count],
+            min: 0,
+            max: MAX_PARTITION_COUNT
+          )
+          entry[:fronts_shelves_state][:shelf_count] = nested_shelf unless nested_shelf.nil?
+
+          if nested_fronts.key?('door_mode') || nested_fronts.key?(:door_mode)
+            nested_door = sanitize_override_door(
+              "overrides.partitions.bays[#{index}].fronts_shelves_state.door_mode",
+              nested_fronts['door_mode'] || nested_fronts[:door_mode]
+            )
+            entry[:fronts_shelves_state][:door_mode] = nested_door
+          end
+        end
 
         shelf = sanitize_override_integer(
           "overrides.partitions.bays[#{index}].shelf_count",
@@ -261,14 +298,30 @@ module AICabinets
           min: 0,
           max: MAX_PARTITION_COUNT
         )
-        entry[:shelf_count] = shelf if shelf
+        entry[:fronts_shelves_state][:shelf_count] = shelf unless shelf.nil?
+        entry[:shelf_count] = entry[:fronts_shelves_state][:shelf_count]
 
-        door = sanitize_override_enum(
-          "overrides.partitions.bays[#{index}].door_mode",
-          element['door_mode'] || element[:door_mode],
-          FRONT_OPTIONS
-        )
-        entry[:door_mode] = door if door
+        if element.key?('door_mode') || element.key?(:door_mode)
+          door = sanitize_override_door(
+            "overrides.partitions.bays[#{index}].door_mode",
+            element['door_mode'] || element[:door_mode]
+          )
+          entry[:fronts_shelves_state][:door_mode] = door
+          entry[:door_mode] = door
+        else
+          entry[:door_mode] = entry[:fronts_shelves_state][:door_mode]
+        end
+
+        sub_state = element['subpartitions_state'] || element[:subpartitions_state]
+        if sub_state.is_a?(Hash)
+          sub_count = sanitize_override_integer(
+            "overrides.partitions.bays[#{index}].subpartitions_state.count",
+            sub_state['count'] || sub_state[:count],
+            min: 0,
+            max: MAX_PARTITION_COUNT
+          )
+          entry[:subpartitions_state][:count] = sub_count unless sub_count.nil?
+        end
 
         entry
       end
@@ -299,6 +352,31 @@ module AICabinets
       result
     end
     private_class_method :sanitize_override_positions
+
+    def sanitize_override_bay_mode(label, value)
+      return nil unless value.respond_to?(:to_s)
+
+      text = value.to_s.strip.downcase
+      return nil if text.empty?
+
+      if BAY_MODES.include?(text)
+        text
+      else
+        warn("AI Cabinets: #{label} must be one of #{BAY_MODES.join(', ')}; ignoring override.")
+        nil
+      end
+    end
+    private_class_method :sanitize_override_bay_mode
+
+    def sanitize_override_door(label, value)
+      return nil if value.nil?
+
+      text = value.to_s.strip
+      return nil if text.empty? || text.casecmp('none').zero?
+
+      sanitize_override_enum(label, text, FRONT_OPTIONS)
+    end
+    private_class_method :sanitize_override_door
 
     def sanitize_override_numeric(label, value)
       numeric = parse_numeric(value)
@@ -458,27 +536,100 @@ module AICabinets
           return []
         end
 
-        entry = {}
-        entry[:shelf_count] = sanitize_integer_field(
+        entry = deep_dup(BAY_FALLBACK)
+        entry[:fronts_shelves_state] = deep_dup(entry[:fronts_shelves_state])
+        entry[:subpartitions_state] = deep_dup(entry[:subpartitions_state])
+
+        entry[:mode] = sanitize_defaults_bay_mode(element['mode'], entry[:mode], index)
+
+        nested_fronts = element['fronts_shelves_state']
+        if nested_fronts.is_a?(Hash)
+          nested_shelf = sanitize_integer_field(
+            "cabinet_base.partitions.bays[#{index}].fronts_shelves_state.shelf_count",
+            nested_fronts['shelf_count'],
+            entry[:fronts_shelves_state][:shelf_count],
+            min: 0,
+            max: MAX_PARTITION_COUNT
+          )
+          entry[:fronts_shelves_state][:shelf_count] = nested_shelf
+
+          if nested_fronts.key?('door_mode')
+            entry[:fronts_shelves_state][:door_mode] = sanitize_defaults_door_mode(
+              "cabinet_base.partitions.bays[#{index}].fronts_shelves_state.door_mode",
+              nested_fronts['door_mode'],
+              entry[:fronts_shelves_state][:door_mode]
+            )
+          end
+        end
+
+        shelf_value = sanitize_integer_field(
           "cabinet_base.partitions.bays[#{index}].shelf_count",
           element['shelf_count'],
-          BAY_FALLBACK[:shelf_count],
+          entry[:fronts_shelves_state][:shelf_count],
           min: 0,
           max: MAX_PARTITION_COUNT
         )
-        door = sanitize_enum_field(
-          "cabinet_base.partitions.bays[#{index}].door_mode",
-          element['door_mode'],
-          FRONT_OPTIONS,
-          BAY_FALLBACK[:door_mode]
-        )
-        entry[:door_mode] = door if door
+        entry[:fronts_shelves_state][:shelf_count] = shelf_value
+        entry[:shelf_count] = shelf_value
+
+        if element.key?('door_mode')
+          door_value = sanitize_defaults_door_mode(
+            "cabinet_base.partitions.bays[#{index}].door_mode",
+            element['door_mode'],
+            entry[:fronts_shelves_state][:door_mode]
+          )
+          entry[:fronts_shelves_state][:door_mode] = door_value
+          entry[:door_mode] = door_value
+        else
+          entry[:door_mode] = entry[:fronts_shelves_state][:door_mode]
+        end
+
+        sub_state = element['subpartitions_state']
+        if sub_state.is_a?(Hash)
+          sub_count = sanitize_integer_field(
+            "cabinet_base.partitions.bays[#{index}].subpartitions_state.count",
+            sub_state['count'],
+            entry[:subpartitions_state][:count],
+            min: 0,
+            max: MAX_PARTITION_COUNT
+          )
+          entry[:subpartitions_state][:count] = sub_count
+        end
+
         entry
       end
     rescue StandardError
       []
     end
     private_class_method :sanitize_partitions_bays
+
+    def sanitize_defaults_bay_mode(value, fallback, index)
+      return fallback unless value.respond_to?(:to_s)
+
+      text = value.to_s.strip.downcase
+      return fallback if text.empty?
+
+      if BAY_MODES.include?(text)
+        text
+      else
+        warn(
+          "AI Cabinets: defaults cabinet_base.partitions.bays[#{index}].mode must be one of #{BAY_MODES.join(', ')}; " \
+          "using #{fallback}."
+        )
+        fallback
+      end
+    end
+    private_class_method :sanitize_defaults_bay_mode
+
+    def sanitize_defaults_door_mode(label, value, fallback)
+      return fallback if value.nil?
+
+      text = value.to_s.strip
+      return nil if text.empty? || text.casecmp('none').zero?
+
+      sanitize_enum_field(label, text, FRONT_OPTIONS, fallback)
+    end
+    private_class_method :sanitize_defaults_door_mode
 
     def sanitize_positions(raw)
       unless raw.is_a?(Array)
@@ -696,6 +847,38 @@ module AICabinets
         door = bay[:door_mode] || bay['door_mode']
         result['door_mode'] = door.to_s if door
 
+        mode = bay[:mode] || bay['mode']
+        result['mode'] = mode.to_s if mode
+
+        fronts = bay[:fronts_shelves_state] || bay['fronts_shelves_state']
+        if fronts.is_a?(Hash)
+          fronts_result = {}
+
+          begin
+            fronts_result['shelf_count'] = Integer(fronts[:shelf_count] || fronts['shelf_count'])
+          rescue ArgumentError, TypeError
+            # ignore malformed shelf count; sanitizer will supply defaults
+          end
+
+          door_value = fronts[:door_mode] || fronts['door_mode']
+          fronts_result['door_mode'] = door_value.to_s if door_value
+
+          result['fronts_shelves_state'] = fronts_result unless fronts_result.empty?
+        end
+
+        sub = bay[:subpartitions_state] || bay['subpartitions_state']
+        if sub.is_a?(Hash)
+          sub_result = {}
+
+          begin
+            sub_result['count'] = Integer(sub[:count] || sub['count'])
+          rescue ArgumentError, TypeError
+            # ignore malformed subpartition count; sanitizer will supply defaults
+          end
+
+          result['subpartitions_state'] = sub_result unless sub_result.empty?
+        end
+
         result
       end
     end
@@ -768,9 +951,20 @@ module AICabinets
 
     def canonicalize_bay(value)
       bay = value.is_a?(Hash) ? value : {}
+      fronts = bay[:fronts_shelves_state] || bay['fronts_shelves_state'] || {}
+      sub = bay[:subpartitions_state] || bay['subpartitions_state'] || {}
+
       {
+        mode: bay[:mode] || bay['mode'],
         shelf_count: bay[:shelf_count] || bay['shelf_count'],
-        door_mode: bay[:door_mode] || bay['door_mode']
+        door_mode: bay[:door_mode] || bay['door_mode'],
+        fronts_shelves_state: {
+          shelf_count: fronts[:shelf_count] || fronts['shelf_count'],
+          door_mode: fronts[:door_mode] || fronts['door_mode']
+        },
+        subpartitions_state: {
+          count: sub[:count] || sub['count']
+        }
       }
     end
     private_class_method :canonicalize_bay
