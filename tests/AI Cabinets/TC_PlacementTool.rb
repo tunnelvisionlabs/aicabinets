@@ -14,6 +14,7 @@ class TC_PlacementTool < TestUp::TestCase
     toe_kick_height_mm: 100.0,
     toe_kick_depth_mm: 75.0,
     toe_kick_thickness_mm: 18.0,
+    partition_mode: 'none',
     front: 'empty',
     shelves: 2,
     partitions: { mode: 'none', count: 0, positions_mm: [] }

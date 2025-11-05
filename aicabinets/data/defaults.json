@@ -8,6 +8,7 @@
     "toe_kick_height_mm": 100,
     "toe_kick_depth_mm": 50,
     "toe_kick_thickness_mm": 18,
+    "partition_mode": "none",
     "front": "doors_double",
     "shelves": 2,
     "partitions": {

@@ -17,6 +17,7 @@ class TC_ToeKickGeometry < TestUp::TestCase
     back_thickness_mm: 6.0,
     top_thickness_mm: 19.0,
     bottom_thickness_mm: 19.0,
+    partition_mode: 'none',
     front: :doors_double,
     door_reveal_mm: 2.0,
     top_reveal_mm: 2.0,

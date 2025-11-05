@@ -18,7 +18,8 @@ module AICabinets
     NORMALIZATION_PRECISION = 3 # store mm values with 0.001 mm precision
 
     FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
-    PARTITION_MODES = %w[none even positions].freeze
+    PARTITION_LAYOUT_MODES = %w[none even positions].freeze
+    PARTITION_MODE_OPTIONS = %w[none vertical horizontal].freeze
     MAX_PARTITION_COUNT = 20
 
     BAY_FALLBACK = {
@@ -43,6 +44,7 @@ module AICabinets
       toe_kick_depth_mm: 50.0,
       toe_kick_thickness_mm: 18.0,
       front: 'doors_double',
+      partition_mode: 'none',
       shelves: 2,
       partitions: PARTITIONS_FALLBACK
     }.freeze
@@ -175,6 +177,9 @@ module AICabinets
         value = raw[key] || raw[key.to_sym]
 
         case key
+        when 'partition_mode'
+          mode = sanitize_override_enum('overrides.partition_mode', value, PARTITION_MODE_OPTIONS)
+          sanitized[:partition_mode] = mode if mode
         when 'partitions'
           partitions = sanitize_overrides_partitions(value)
           sanitized[:partitions] = partitions if partitions && !partitions.empty?
@@ -211,7 +216,7 @@ module AICabinets
 
         case key
         when 'mode'
-          mode = sanitize_override_enum('overrides.partitions.mode', value, PARTITION_MODES)
+          mode = sanitize_override_enum('overrides.partitions.mode', value, PARTITION_LAYOUT_MODES)
           sanitized[:mode] = mode if mode
         when 'count'
           count = sanitize_override_integer('overrides.partitions.count', value, min: 0, max: MAX_PARTITION_COUNT)
@@ -386,6 +391,8 @@ module AICabinets
           case key
           when :front
             sanitize_enum_field(label, raw[key.to_s], FRONT_OPTIONS, fallback)
+          when :partition_mode
+            sanitize_enum_field(label, raw[key.to_s], PARTITION_MODE_OPTIONS, fallback)
           when :shelves
             sanitize_integer_field(label, raw[key.to_s], fallback, min: 0, max: 20)
           when :partitions
@@ -410,7 +417,7 @@ module AICabinets
       mode = sanitize_enum_field(
         'cabinet_base.partitions.mode',
         raw['mode'],
-        PARTITION_MODES,
+        PARTITION_LAYOUT_MODES,
         PARTITIONS_FALLBACK[:mode]
       )
       sanitized[:mode] = mode
@@ -637,7 +644,7 @@ module AICabinets
           case key
           when :partitions
             build_overrides_partitions(value)
-          when :front
+          when :front, :partition_mode
             value.to_s
           when :shelves
             value.to_i
@@ -714,6 +721,16 @@ module AICabinets
         result[key] =
           if key == :partitions
             canonicalize_partitions(value)
+          elsif key == :partition_mode
+            normalized =
+              if value.is_a?(String)
+                candidate = value.strip.downcase
+                PARTITION_MODE_OPTIONS.include?(candidate) ? candidate : nil
+              elsif value.is_a?(Symbol)
+                candidate = value.to_s
+                PARTITION_MODE_OPTIONS.include?(candidate) ? candidate : nil
+              end
+            normalized || FALLBACK_MM[:partition_mode]
           else
             deep_dup(value)
           end
@@ -744,7 +761,7 @@ module AICabinets
       end
 
       result[:positions_mm] = result[:positions_mm].map { |value| value.to_f }
-      result[:mode] = PARTITIONS_FALLBACK[:mode] unless PARTITION_MODES.include?(result[:mode])
+      result[:mode] = PARTITIONS_FALLBACK[:mode] unless PARTITION_LAYOUT_MODES.include?(result[:mode])
       result
     end
     private_class_method :canonicalize_partitions

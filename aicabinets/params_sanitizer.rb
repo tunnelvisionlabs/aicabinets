@@ -7,6 +7,9 @@ module AICabinets
     FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
     DEFAULT_DOOR_MODE = 'doors_double'
     DEFAULT_SHELF_COUNT = 0
+    PARTITION_MODES = %w[none vertical horizontal].freeze
+    DEFAULT_PARTITION_MODE = 'none'
+
     DEFAULT_PARTITIONS = {
       mode: 'none',
       count: 0,
@@ -19,6 +22,8 @@ module AICabinets
       return params_mm unless params_mm.is_a?(Hash)
 
       defaults = defaults_source(global_defaults) || params_mm
+      params_mm[:partition_mode] = sanitize_partition_mode(params_mm, defaults)
+      params_mm.delete('partition_mode')
       partitions = sanitize_partitions_container(params_mm, defaults)
       partitions[:bays] = sanitize_bays_array(partitions[:bays], partitions[:count], defaults)
       params_mm[:partitions] = partitions
@@ -136,6 +141,16 @@ module AICabinets
     end
     private_class_method :fetch_value
 
+    def sanitize_partition_mode(params_mm, defaults)
+      raw = fetch_value(params_mm, :partition_mode)
+      candidate = normalize_partition_mode(raw)
+      return candidate if candidate
+
+      fallback = fetch_value(defaults, :partition_mode)
+      normalize_partition_mode(fallback) || DEFAULT_PARTITION_MODE
+    end
+    private_class_method :sanitize_partition_mode
+
     def default_partitions(defaults)
       value = fetch_value(defaults, :partitions)
       return DEFAULT_PARTITIONS unless value.is_a?(Hash)
@@ -150,6 +165,27 @@ module AICabinets
       nil
     end
     private_class_method :defaults_source
+
+    def normalize_partition_mode(value)
+      return nil if value.nil?
+
+      mode =
+        case value
+        when Symbol
+          value.to_s
+        when String
+          value.strip.downcase
+        else
+          nil
+        end
+
+      return nil if mode.nil? || mode.empty?
+
+      PARTITION_MODES.include?(mode) ? mode : nil
+    rescue StandardError
+      nil
+    end
+    private_class_method :normalize_partition_mode
 
     def coerce_non_negative_integer(value)
       return nil if value.nil?

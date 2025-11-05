@@ -155,6 +155,25 @@
 
           <section class="form__section">
             <h2 class="form__section-title">Configuration</h2>
+
+            <fieldset class="segmented-control" data-role="partition-mode-group">
+              <legend class="segmented-control__legend">Partition mode</legend>
+              <div class="segmented-control__options">
+                <label class="segmented-control__option">
+                  <input type="radio" name="partition_mode" value="none" checked />
+                  <span>None</span>
+                </label>
+                <label class="segmented-control__option">
+                  <input type="radio" name="partition_mode" value="vertical" />
+                  <span>Vertical (start left)</span>
+                </label>
+                <label class="segmented-control__option">
+                  <input type="radio" name="partition_mode" value="horizontal" />
+                  <span>Horizontal (start top)</span>
+                </label>
+              </div>
+            </fieldset>
+
             <div class="form__grid form__grid--columns">
               <div class="form-field" data-field="front" data-role="global-front-group">
                 <label for="field-front">Front layout</label>
@@ -182,51 +201,49 @@
                 <p class="field-error" data-error-for="shelves" aria-live="polite"></p>
               </div>
             </div>
-          </section>
+            <div class="form__grid form__grid--columns" data-role="partition-controls">
+              <div class="form-field" data-field="partitions_mode">
+                <label for="field-partitions-mode">Partition layout</label>
+                <select id="field-partitions-mode" name="partitions_mode">
+                  <option value="none">None</option>
+                  <option value="even">Even spacing</option>
+                  <option value="positions">Specific positions</option>
+                </select>
+                <p class="field-help">
+                  Add partitions to divide the interior. Choose even spacing or provide explicit positions.
+                </p>
+                <p class="field-error" data-error-for="partitions_mode" aria-live="polite"></p>
+              </div>
 
-          <section class="form__section">
-            <h2 class="form__section-title">Partitions</h2>
-            <div class="form-field" data-field="partitions_mode">
-              <label for="field-partitions-mode">Partition mode</label>
-              <select id="field-partitions-mode" name="partitions_mode">
-                <option value="none">None</option>
-                <option value="even">Even spacing</option>
-                <option value="positions">Specific positions</option>
-              </select>
-              <p class="field-help">
-                Add vertical partitions to divide the interior. Choose even spacing or provide explicit positions.
-              </p>
-              <p class="field-error" data-error-for="partitions_mode" aria-live="polite"></p>
-            </div>
+              <div class="form-field is-hidden" data-field="partitions_count" data-partitions-control="even">
+                <label for="field-partitions-count">Partition count</label>
+                <input
+                  type="number"
+                  id="field-partitions-count"
+                  name="partitions_count"
+                  inputmode="numeric"
+                  min="0"
+                  step="1"
+                />
+                <p class="field-help">Number of evenly spaced partitions.</p>
+                <p class="field-error" data-error-for="partitions_count" aria-live="polite"></p>
+              </div>
 
-            <div class="form-field is-hidden" data-field="partitions_count" data-partitions-control="even">
-              <label for="field-partitions-count">Partition count</label>
-              <input
-                type="number"
-                id="field-partitions-count"
-                name="partitions_count"
-                inputmode="numeric"
-                min="0"
-                step="1"
-              />
-              <p class="field-help">Number of evenly spaced partitions.</p>
-              <p class="field-error" data-error-for="partitions_count" aria-live="polite"></p>
-            </div>
-
-            <div class="form-field is-hidden" data-field="partitions_positions" data-partitions-control="positions">
-              <label for="field-partitions-positions">Partition positions</label>
-              <input
-                type="text"
-                id="field-partitions-positions"
-                name="partitions_positions"
-                autocomplete="off"
-                inputmode="decimal"
-                placeholder="e.g., 100mm, 250mm, 400mm"
-              />
-              <p class="field-help">
-                Comma-separated distances from the left interior wall. Values must increase and use allowed units.
-              </p>
-              <p class="field-error" data-error-for="partitions_positions" aria-live="polite"></p>
+              <div class="form-field is-hidden" data-field="partitions_positions" data-partitions-control="positions">
+                <label for="field-partitions-positions">Partition positions</label>
+                <input
+                  type="text"
+                  id="field-partitions-positions"
+                  name="partitions_positions"
+                  autocomplete="off"
+                  inputmode="decimal"
+                  placeholder="e.g., 100mm, 250mm, 400mm"
+                />
+                <p class="field-help">
+                  Comma-separated distances from the starting edge. Values must increase and use allowed units.
+                </p>
+                <p class="field-error" data-error-for="partitions_positions" aria-live="polite"></p>
+              </div>
             </div>
           </section>
 
