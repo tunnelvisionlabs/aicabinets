@@ -20,8 +20,12 @@ module AICabinets
     FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
     PARTITION_LAYOUT_MODES = %w[none even positions].freeze
     PARTITION_MODE_OPTIONS = %w[none vertical horizontal].freeze
+    ORIENTATION_OPTIONS = %w[vertical horizontal].freeze
     BAY_MODES = %w[fronts_shelves subpartitions].freeze
     MAX_PARTITION_COUNT = 20
+
+    DEFAULT_PARTITION_ORIENTATION = 'vertical'
+    DEFAULT_SUBPARTITION_ORIENTATION = 'horizontal'
 
     BAY_FALLBACK = {
       mode: 'fronts_shelves',
@@ -33,12 +37,18 @@ module AICabinets
       }.freeze,
       subpartitions_state: {
         count: 0
+      }.freeze,
+      subpartitions: {
+        count: 0,
+        orientation: DEFAULT_SUBPARTITION_ORIENTATION,
+        bays: [].freeze
       }.freeze
     }.freeze
 
     PARTITIONS_FALLBACK = {
       mode: 'none',
       count: 0,
+      orientation: DEFAULT_PARTITION_ORIENTATION,
       positions_mm: [].freeze,
       panel_thickness_mm: nil,
       bays: [BAY_FALLBACK].freeze
@@ -230,6 +240,9 @@ module AICabinets
         when 'count'
           count = sanitize_override_integer('overrides.partitions.count', value, min: 0, max: MAX_PARTITION_COUNT)
           sanitized[:count] = count if count
+        when 'orientation'
+          orientation = sanitize_override_enum('overrides.partitions.orientation', value, ORIENTATION_OPTIONS)
+          sanitized[:orientation] = orientation if orientation
         when 'positions_mm'
           positions = sanitize_override_positions(value)
           sanitized[:positions_mm] = positions if positions
@@ -265,6 +278,7 @@ module AICabinets
         entry = deep_dup(BAY_FALLBACK)
         entry[:fronts_shelves_state] = deep_dup(entry[:fronts_shelves_state])
         entry[:subpartitions_state] = deep_dup(entry[:subpartitions_state])
+        entry[:subpartitions] = deep_dup(entry[:subpartitions])
 
         mode_value = element['mode'] || element[:mode]
         sanitized_mode = sanitize_override_bay_mode(
@@ -321,6 +335,39 @@ module AICabinets
             max: MAX_PARTITION_COUNT
           )
           entry[:subpartitions_state][:count] = sub_count unless sub_count.nil?
+        end
+
+        sub_container = element['subpartitions'] || element[:subpartitions]
+        if sub_container.is_a?(Hash)
+          sub_count = sanitize_override_integer(
+            "overrides.partitions.bays[#{index}].subpartitions.count",
+            sub_container['count'] || sub_container[:count],
+            min: 0,
+            max: MAX_PARTITION_COUNT
+          )
+          entry[:subpartitions][:count] = sub_count unless sub_count.nil?
+
+          orientation = sanitize_override_enum(
+            "overrides.partitions.bays[#{index}].subpartitions.orientation",
+            sub_container['orientation'] || sub_container[:orientation],
+            ORIENTATION_OPTIONS
+          )
+          entry[:subpartitions][:orientation] = orientation if orientation
+
+          bays_value = sub_container['bays'] || sub_container[:bays]
+          entry[:subpartitions][:bays] =
+            if bays_value.is_a?(Array)
+              bays_value.each_with_index.map do |sub_element, sub_index|
+                unless sub_element.is_a?(Hash)
+                  warn("AI Cabinets: overrides.partitions.bays[#{index}].subpartitions.bays[#{sub_index}] must be an object; ignoring entry.")
+                  next
+                end
+
+                deep_dup(sub_element)
+              end.compact
+            else
+              []
+            end
         end
 
         entry
@@ -508,6 +555,13 @@ module AICabinets
         max: MAX_PARTITION_COUNT
       )
 
+      sanitized[:orientation] = sanitize_enum_field(
+        'cabinet_base.partitions.orientation',
+        raw['orientation'],
+        ORIENTATION_OPTIONS,
+        PARTITIONS_FALLBACK[:orientation]
+      )
+
       sanitized[:panel_thickness_mm] = sanitize_optional_numeric_field(
         'cabinet_base.partitions.panel_thickness_mm',
         raw['panel_thickness_mm'],
@@ -594,6 +648,39 @@ module AICabinets
             max: MAX_PARTITION_COUNT
           )
           entry[:subpartitions_state][:count] = sub_count
+        end
+
+        sub_container = element['subpartitions']
+        if sub_container.is_a?(Hash)
+          entry[:subpartitions][:count] = sanitize_integer_field(
+            "cabinet_base.partitions.bays[#{index}].subpartitions.count",
+            sub_container['count'],
+            entry[:subpartitions][:count],
+            min: 0,
+            max: MAX_PARTITION_COUNT
+          )
+
+          entry[:subpartitions][:orientation] = sanitize_enum_field(
+            "cabinet_base.partitions.bays[#{index}].subpartitions.orientation",
+            sub_container['orientation'],
+            ORIENTATION_OPTIONS,
+            entry[:subpartitions][:orientation]
+          )
+
+          bays_value = sub_container['bays']
+          entry[:subpartitions][:bays] =
+            if bays_value.is_a?(Array)
+              bays_value.each_with_index.map do |sub_element, sub_index|
+                unless sub_element.is_a?(Hash)
+                  warn("AI Cabinets: defaults cabinet_base.partitions.bays[#{index}].subpartitions.bays[#{sub_index}] must be an object; ignoring entry.")
+                  next
+                end
+
+                deep_dup(sub_element)
+              end.compact
+            else
+              []
+            end
         end
 
         entry
@@ -879,6 +966,29 @@ module AICabinets
           result['subpartitions_state'] = sub_result unless sub_result.empty?
         end
 
+        sub_container = bay[:subpartitions] || bay['subpartitions']
+        if sub_container.is_a?(Hash)
+          nested = {}
+
+          begin
+            nested['count'] = Integer(sub_container[:count] || sub_container['count'])
+          rescue ArgumentError, TypeError
+            # ignore malformed count; sanitizer will supply defaults
+          end
+
+          orientation = sub_container[:orientation] || sub_container['orientation']
+          nested['orientation'] = orientation.to_s if orientation
+
+          bays_value = sub_container[:bays] || sub_container['bays']
+          if bays_value.is_a?(Array) && !bays_value.empty?
+            nested['bays'] = bays_value.map do |entry|
+              entry.is_a?(Hash) ? deep_dup(entry) : entry
+            end
+          end
+
+          result['subpartitions'] = nested unless nested.empty?
+        end
+
         result
       end
     end
@@ -931,20 +1041,23 @@ module AICabinets
         result[key] =
           case key
           when :positions_mm
-            current.is_a?(Array) ? current.map { |value| value.to_f } : PARTITIONS_FALLBACK[:positions_mm].dup
+            current.is_a?(Array) ? current.map { |entry| entry.to_f } : PARTITIONS_FALLBACK[:positions_mm].dup
           when :bays
             if current.is_a?(Array)
-              current.map { |value| canonicalize_bay(value) }
+              current.map { |entry| canonicalize_bay(entry) }
             else
-              PARTITIONS_FALLBACK[:bays].map { |value| canonicalize_bay(value) }
+              PARTITIONS_FALLBACK[:bays].map { |entry| canonicalize_bay(entry) }
             end
+          when :orientation
+            normalize_orientation_value(current, DEFAULT_PARTITION_ORIENTATION)
           else
             deep_dup(current)
           end
       end
 
-      result[:positions_mm] = result[:positions_mm].map { |value| value.to_f }
+      result[:positions_mm] = result[:positions_mm].map { |entry| entry.to_f }
       result[:mode] = PARTITIONS_FALLBACK[:mode] unless PARTITION_LAYOUT_MODES.include?(result[:mode])
+      result[:orientation] = DEFAULT_PARTITION_ORIENTATION unless ORIENTATION_OPTIONS.include?(result[:orientation])
       result
     end
     private_class_method :canonicalize_partitions
@@ -953,6 +1066,7 @@ module AICabinets
       bay = value.is_a?(Hash) ? value : {}
       fronts = bay[:fronts_shelves_state] || bay['fronts_shelves_state'] || {}
       sub = bay[:subpartitions_state] || bay['subpartitions_state'] || {}
+      sub_container = bay[:subpartitions] || bay['subpartitions'] || {}
 
       {
         mode: bay[:mode] || bay['mode'],
@@ -964,10 +1078,57 @@ module AICabinets
         },
         subpartitions_state: {
           count: sub[:count] || sub['count']
-        }
+        },
+        subpartitions: canonicalize_subpartitions(sub_container)
       }
     end
     private_class_method :canonicalize_bay
+
+    def canonicalize_subpartitions(value)
+      raw = value.is_a?(Hash) ? value : {}
+
+      count_value = raw[:count] || raw['count']
+      count = count_value.is_a?(Numeric) ? count_value.to_i : count_value
+
+      orientation = normalize_orientation_value(raw[:orientation] || raw['orientation'], DEFAULT_SUBPARTITION_ORIENTATION)
+
+      bays_source = raw[:bays] || raw['bays']
+      bays =
+        if bays_source.is_a?(Array)
+          bays_source.map { |entry| canonicalize_nested_bay(entry) }
+        else
+          []
+        end
+
+      {
+        count: count,
+        orientation: orientation,
+        bays: bays
+      }
+    end
+    private_class_method :canonicalize_subpartitions
+
+    def canonicalize_nested_bay(value)
+      bay = canonicalize_bay(value)
+      bay.delete(:subpartitions)
+      bay
+    end
+    private_class_method :canonicalize_nested_bay
+
+    def normalize_orientation_value(value, fallback)
+      text =
+        case value
+        when String
+          value.strip.downcase
+        when Symbol
+          value.to_s.downcase
+        end
+
+      return fallback unless text && !text.empty?
+
+      ORIENTATION_OPTIONS.include?(text) ? text : fallback
+    end
+    private_class_method :normalize_orientation_value
 
     def parse_numeric(value)
       case value

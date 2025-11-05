@@ -73,7 +73,7 @@ AI Cabinets ships read-only defaults at `aicabinets/data/defaults.json` within t
 
 Effective settings are produced by merging the shipped defaults with the user overrides, applying override values last so they take precedence when keys overlap.
 
-When defaults load, a sanitizer ensures every cabinet definition includes a `partitions.bays` array with `count + 1` entries. New bays inherit the current global defaults (for example, `shelf_count` and `door_mode`) so legacy models without bay data migrate deterministically.
+When defaults load, a sanitizer ensures every cabinet definition includes a `partitions` container with a resolved `orientation`, a `bays` array sized to `count + 1`, and per-bay defaults (for example, `shelf_count` and `door_mode`). Nested `subpartitions` inherit the perpendicular orientation, clone sane defaults when missing, and keep unknown keys intact so legacy models migrate deterministically.
 
 All serialized length values are stored in millimeters and use the `_mm` suffix in JSON. No other unit system is written to disk.
 
@@ -95,11 +95,13 @@ After installing the extension, launch its placeholder action from **Extensions 
 
 Generated base cabinets accept a `partitions` payload to divide the interior into bays.
 
+- `partition_mode` drives the top-level orientation (`vertical` or `horizontal`). When `partition_mode` is `none`, the sanitizer forces `partitions.count` to `0` and `bays` to a single entry.
 - `mode` determines how partitions are created:
   - `none` omits partitions.
   - `even` spaces `count` partitions so the resulting `count + 1` bays have nearly equal clear widths.
 - `positions` places partitions at explicit offsets measured in millimeters from the cabinet’s left outside face to each partition’s left face.
 - `bays` stores per-bay settings such as `shelf_count` and `door_mode`. Its length always matches `count + 1`, and missing or partial entries are filled from the active defaults.
+- Each bay may define a `subpartitions` container with its own `count`, `orientation`, and nested `bays`. The sanitizer forces nested orientations to stay perpendicular to the parent partitions and fills missing bays to `count + 1`.
 - Partitions use the carcass panel thickness (or an explicit `panel_thickness_mm` value when provided) and span the interior height (top of the bottom panel to the underside of the top or stringers) and depth (front face to the back panel).
 - Invalid or overlapping requests are ignored, and the generator logs warnings when positions are clamped to the cabinet interior or discarded because they violate minimum bay widths.
 
