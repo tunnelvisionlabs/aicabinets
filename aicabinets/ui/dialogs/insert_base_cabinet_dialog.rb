@@ -7,6 +7,7 @@ require 'aicabinets/params_sanitizer'
 require 'aicabinets/ui/localization'
 require 'aicabinets/ui_visibility'
 require 'aicabinets/door_mode_rules'
+require 'aicabinets/preview'
 
 module AICabinets
   module UI
@@ -307,6 +308,9 @@ module AICabinets
           state = build_bay_state(params)
           execute_state_callback(dialog, 'state_init', state)
           execute_state_callback(dialog, 'state_update_visibility', state[:ui])
+          selected = state[:selected_index]
+          path = selected.nil? ? preview_selected_path : [selected]
+          refresh_preview_with(params, selected_path: path)
         end
         private_class_method :deliver_bay_state
 
@@ -314,6 +318,9 @@ module AICabinets
           state = build_bay_state(params)
           execute_state_callback(dialog, 'state_bays_changed', state)
           execute_state_callback(dialog, 'state_update_visibility', state[:ui])
+          selected = state[:selected_index]
+          path = selected.nil? ? preview_selected_path : [selected]
+          refresh_preview_with(params, selected_path: path)
         end
         private_class_method :deliver_state_bays_changed
 
@@ -357,6 +364,23 @@ module AICabinets
           end
         end
         private_class_method :deliver_double_validity_for_all
+
+        def refresh_preview_with(params, selected_path: nil)
+          return unless defined?(AICabinets::Preview)
+          return unless params.is_a?(Hash)
+
+          path = selected_path || preview_selected_path
+          config = deep_copy_params(params)
+          AICabinets::Preview.render(config: config, selected_path: path)
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to refresh preview: #{e.message}")
+        end
+        private_class_method :refresh_preview_with
+
+        def preview_selected_path
+          [selected_bay_index]
+        end
+        private_class_method :preview_selected_path
 
         def deliver_toast(dialog, message)
           return unless message && !message.to_s.empty?
@@ -446,6 +470,7 @@ module AICabinets
           bays = fetch_bays_array(params)
           clamped = AICabinets::UiVisibility.clamp_selected_index(index, bays.length)
           set_selected_bay_index(clamped)
+          refresh_preview_with(params, selected_path: [clamped]) if params.is_a?(Hash)
         end
         private_class_method :handle_ui_select_bay
 
@@ -654,6 +679,7 @@ module AICabinets
           updated_params = ensure_dialog_params
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
+          refresh_preview_with(updated_params, selected_path: preview_selected_path)
           if mode == 'fronts_shelves'
             allowed, reason = evaluate_double_validity(updated_params, index)
             deliver_double_validity(dialog, index, allowed, reason)
@@ -685,6 +711,7 @@ module AICabinets
           updated_params = ensure_dialog_params
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
+          refresh_preview_with(updated_params, selected_path: preview_selected_path)
         end
         private_class_method :handle_ui_set_subpartition_count
 
