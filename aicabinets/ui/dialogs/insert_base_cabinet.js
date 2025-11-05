@@ -53,6 +53,8 @@
   var pendingBayValidity = [];
   var pendingToasts = [];
 
+  var BAY_MODES = ['fronts_shelves', 'subpartitions'];
+
   var UNIT_TO_MM = {
     inch: 25.4,
     foot: 304.8,
@@ -153,6 +155,103 @@
     return numeric;
   }
 
+  function normalizeBayMode(mode) {
+    if (typeof mode === 'string') {
+      var text = mode.trim().toLowerCase();
+      if (BAY_MODES.indexOf(text) !== -1) {
+        return text;
+      }
+    }
+
+    return 'fronts_shelves';
+  }
+
+  function normalizeDoorMode(value) {
+    if (value == null) {
+      return null;
+    }
+
+    var text = String(value).trim();
+    if (!text) {
+      return null;
+    }
+
+    if (text === 'none') {
+      return null;
+    }
+
+    if (text === 'empty' || text === 'doors_left' || text === 'doors_right' || text === 'doors_double') {
+      return text;
+    }
+
+    return null;
+  }
+
+  function cloneFrontsShelvesState(source) {
+    var state = source && typeof source === 'object' ? source : {};
+    var shelfValue = state.shelf_count;
+    var shelf = Number(shelfValue);
+    if (!isFinite(shelf)) {
+      shelf = 0;
+    }
+    shelf = Math.max(0, Math.round(shelf));
+
+    var door = state.door_mode;
+    if (door == null && Object.prototype.hasOwnProperty.call(state, 'door_mode')) {
+      door = state.door_mode;
+    }
+
+    return {
+      shelf_count: shelf,
+      door_mode: normalizeDoorMode(door)
+    };
+  }
+
+  function cloneSubpartitionState(source) {
+    var state = source && typeof source === 'object' ? source : {};
+    var countValue = state.count;
+    var count = Number(countValue);
+    if (!isFinite(count)) {
+      count = 0;
+    }
+    count = Math.max(0, Math.round(count));
+
+    return {
+      count: count
+    };
+  }
+
+  function cloneBay(bay) {
+    if (!bay || typeof bay !== 'object') {
+      return {
+        mode: 'fronts_shelves',
+        shelf_count: 0,
+        door_mode: null,
+        fronts_shelves_state: { shelf_count: 0, door_mode: null },
+        subpartitions_state: { count: 0 }
+      };
+    }
+
+    var frontsSource = bay.fronts_shelves_state && typeof bay.fronts_shelves_state === 'object' ? bay.fronts_shelves_state : bay;
+    var fronts = cloneFrontsShelvesState(frontsSource);
+    if (fronts.door_mode == null && bay.door_mode != null) {
+      fronts.door_mode = normalizeDoorMode(bay.door_mode);
+    }
+    if ((fronts.shelf_count == null || !isFinite(fronts.shelf_count)) && typeof bay.shelf_count === 'number') {
+      fronts.shelf_count = Math.max(0, Math.round(bay.shelf_count));
+    }
+
+    var subpartitions = cloneSubpartitionState(bay.subpartitions_state);
+
+    return {
+      mode: normalizeBayMode(bay.mode),
+      shelf_count: fronts.shelf_count,
+      door_mode: fronts.door_mode,
+      fronts_shelves_state: fronts,
+      subpartitions_state: subpartitions
+    };
+  }
+
   function BayController(options) {
     options = options || {};
 
@@ -162,6 +261,12 @@
       typeof options.onShelfChange === 'function' ? options.onShelfChange : function () {};
     this.onDoorChange =
       typeof options.onDoorChange === 'function' ? options.onDoorChange : function () {};
+    this.onModeChange =
+      typeof options.onModeChange === 'function' ? options.onModeChange : function () {};
+    this.onSubpartitionChange =
+      typeof options.onSubpartitionChange === 'function'
+        ? options.onSubpartitionChange
+        : function () {};
     this.onApplyToAll =
       typeof options.onApplyToAll === 'function' ? options.onApplyToAll : function () {};
     this.onCopyLeftToRight =
@@ -176,9 +281,10 @@
     this.bays = [];
     this.chipButtons = [];
     this.doubleValidity = [];
-    this.template = { shelf_count: 0, door_mode: null };
+    this.template = cloneBay(null);
     this.shelfLock = false;
     this.doorLock = false;
+    this.buttonsDisabled = false;
 
     this.cacheElements();
     if (this.root) {
@@ -196,6 +302,18 @@
       this.decreaseButton = null;
       this.increaseButton = null;
       this.shelfInput = null;
+      this.modeFieldset = null;
+      this.modeInputs = [];
+      this.modeLegend = null;
+      this.modeLabelFronts = null;
+      this.modeLabelSubpartitions = null;
+      this.frontsEditor = null;
+      this.subpartitionsEditor = null;
+      this.subpartitionLabel = null;
+      this.subpartitionStepper = null;
+      this.subpartitionDecreaseButton = null;
+      this.subpartitionIncreaseButton = null;
+      this.subpartitionInput = null;
       this.doorFieldset = null;
       this.doorLegend = null;
       this.doorInputs = [];
@@ -203,7 +321,9 @@
       this.hint = null;
       this.applyAllButton = null;
       this.copyButton = null;
+      this.actionsContainer = null;
       this.statusRegion = null;
+      this.subpartitionLock = false;
       return;
     }
 
@@ -218,6 +338,19 @@
     this.decreaseButton = this.root.querySelector('[data-role="bay-stepper-decrease"]');
     this.increaseButton = this.root.querySelector('[data-role="bay-stepper-increase"]');
     this.shelfInput = this.root.querySelector('[data-role="bay-shelf-input"]');
+    this.modeFieldset = this.root.querySelector('[data-role="bay-mode-fieldset"]');
+    var modeOptions = this.root.querySelectorAll('[data-role="bay-mode-option"]');
+    this.modeInputs = Array.prototype.slice.call(modeOptions || []);
+    this.modeLegend = this.root.querySelector('[data-role="bay-mode-legend"]');
+    this.modeLabelFronts = this.root.querySelector('[data-role="bay-mode-label-fronts"]');
+    this.modeLabelSubpartitions = this.root.querySelector('[data-role="bay-mode-label-subpartitions"]');
+    this.frontsEditor = this.root.querySelector('[data-role="bay-fronts-editor"]');
+    this.subpartitionsEditor = this.root.querySelector('[data-role="bay-subpartitions-editor"]');
+    this.subpartitionLabel = this.root.querySelector('[data-role="bay-subpartition-label"]');
+    this.subpartitionStepper = this.root.querySelector('[data-role="bay-subpartition-stepper"]');
+    this.subpartitionDecreaseButton = this.root.querySelector('[data-role="bay-subpartition-decrease"]');
+    this.subpartitionIncreaseButton = this.root.querySelector('[data-role="bay-subpartition-increase"]');
+    this.subpartitionInput = this.root.querySelector('[data-role="bay-subpartition-input"]');
     this.doorFieldset = this.root.querySelector('[data-role="bay-door-fieldset"]');
     this.doorLegend = this.root.querySelector('[data-role="bay-door-legend"]');
     var doorOptions = this.root.querySelectorAll('[data-role="bay-door-option"]');
@@ -232,7 +365,9 @@
     this.hint = this.root.querySelector('[data-role="bay-double-hint"]');
     this.applyAllButton = this.root.querySelector('[data-role="bay-apply-all"]');
     this.copyButton = this.root.querySelector('[data-role="bay-copy-lr"]');
+    this.actionsContainer = this.root.querySelector('[data-role="bay-actions"]');
     this.statusRegion = this.root.querySelector('[data-role="bay-status"]');
+    this.subpartitionLock = false;
   };
 
   BayController.prototype.initializeText = function initializeText() {
@@ -259,6 +394,35 @@
     }
     if (this.shelfInput) {
       this.shelfInput.setAttribute('aria-label', this.translate('shelf_input_aria'));
+    }
+    if (this.modeLegend) {
+      this.modeLegend.textContent = this.translate('bay_editor_group_label');
+    }
+    if (this.modeLabelFronts) {
+      this.modeLabelFronts.textContent = this.translate('bay_editor_option_fronts');
+    }
+    if (this.modeLabelSubpartitions) {
+      this.modeLabelSubpartitions.textContent = this.translate('bay_editor_option_subpartitions');
+    }
+    if (this.subpartitionLabel) {
+      this.subpartitionLabel.textContent = this.translate('subpartition_stepper_label');
+    }
+    if (this.subpartitionDecreaseButton) {
+      this.subpartitionDecreaseButton.setAttribute(
+        'aria-label',
+        this.translate('subpartition_stepper_decrease')
+      );
+      this.subpartitionDecreaseButton.textContent = '−';
+    }
+    if (this.subpartitionIncreaseButton) {
+      this.subpartitionIncreaseButton.setAttribute(
+        'aria-label',
+        this.translate('subpartition_stepper_increase')
+      );
+      this.subpartitionIncreaseButton.textContent = '+';
+    }
+    if (this.subpartitionInput) {
+      this.subpartitionInput.setAttribute('aria-label', this.translate('subpartition_input_aria'));
     }
     if (this.doorLegend) {
       this.doorLegend.textContent = this.translate('door_mode_group_label');
@@ -311,6 +475,32 @@
         self.handleDoorChange(input.value);
       });
     });
+    this.modeInputs.forEach(function (input) {
+      if (!input) {
+        return;
+      }
+      input.addEventListener('change', function () {
+        self.handleModeChange(input.value);
+      });
+    });
+    if (this.subpartitionDecreaseButton) {
+      this.subpartitionDecreaseButton.addEventListener('click', function () {
+        self.adjustSubpartition(-1);
+      });
+    }
+    if (this.subpartitionIncreaseButton) {
+      this.subpartitionIncreaseButton.addEventListener('click', function () {
+        self.adjustSubpartition(1);
+      });
+    }
+    if (this.subpartitionInput) {
+      this.subpartitionInput.addEventListener('input', function () {
+        self.handleSubpartitionInput();
+      });
+      this.subpartitionInput.addEventListener('blur', function () {
+        self.handleSubpartitionBlur();
+      });
+    }
     if (this.applyAllButton) {
       this.applyAllButton.addEventListener('click', function () {
         self.onApplyToAll(self.selectedIndex);
@@ -511,6 +701,10 @@
 
     this.updateShelfControls();
     this.updateDoorControls();
+    this.updateModeControls();
+    this.updateSubpartitionControls();
+    this.applyModeSpecificDisabling();
+    this.updateActionsVisibility();
 
     this.announce(
       this.translate('bay_selection_status', { index: clamped + 1, total: this.bays.length })
@@ -528,16 +722,18 @@
       return;
     }
 
-    var bay = this.bays[this.selectedIndex] || { shelf_count: 0 };
-    var value = typeof bay.shelf_count === 'number' ? bay.shelf_count : 0;
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var fronts = bay.fronts_shelves_state || {};
+    var value = typeof fronts.shelf_count === 'number' ? fronts.shelf_count : 0;
     this.shelfLock = true;
     this.shelfInput.value = String(value);
     this.shelfLock = false;
   };
 
   BayController.prototype.updateDoorControls = function updateDoorControls() {
-    var bay = this.bays[this.selectedIndex] || { door_mode: null };
-    var mode = bay.door_mode;
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var fronts = bay.fronts_shelves_state || {};
+    var mode = fronts.door_mode;
     if (mode == null || mode === '') {
       mode = 'none';
     }
@@ -556,7 +752,7 @@
   BayController.prototype.setBays = function setBays(bays, options) {
     options = options || {};
     this.bays = Array.isArray(bays) ? bays.slice() : [];
-    this.template = this.bays.length ? cloneBay(this.bays[0]) : { shelf_count: 0, door_mode: null };
+    this.template = this.bays.length ? cloneBay(this.bays[0]) : cloneBay(null);
     var desiredIndex = options.selectedIndex != null ? options.selectedIndex : this.selectedIndex;
     desiredIndex = clampSelectedIndex(desiredIndex, this.bays.length);
     this.selectedIndex = desiredIndex;
@@ -567,16 +763,7 @@
     });
   };
 
-  function cloneBay(bay) {
-    if (!bay || typeof bay !== 'object') {
-      return { shelf_count: 0, door_mode: null };
-    }
-
-    return {
-      shelf_count: typeof bay.shelf_count === 'number' ? bay.shelf_count : 0,
-      door_mode: bay.door_mode == null ? null : bay.door_mode
-    };
-  }
+  // cloneBay defined earlier
 
   BayController.prototype.setBayValue = function setBayValue(index, bay) {
     if (index < 0 || index >= this.bays.length) {
@@ -587,6 +774,9 @@
     if (index === this.selectedIndex) {
       this.updateShelfControls();
       this.updateDoorControls();
+      this.updateSubpartitionControls();
+      this.updateModeControls();
+      this.applyModeSpecificDisabling();
     }
   };
 
@@ -638,6 +828,72 @@
     this.onShelfChange(this.selectedIndex, value);
   };
 
+  BayController.prototype.handleModeChange = function handleModeChange(value) {
+    var normalized = normalizeBayMode(value);
+    var bay = this.bays[this.selectedIndex];
+    if (!bay) {
+      return;
+    }
+
+    if (bay.mode === normalized) {
+      return;
+    }
+
+    bay.mode = normalized;
+    this.updateModeControls();
+    this.applyModeSpecificDisabling();
+    this.updateActionsVisibility();
+    this.onModeChange(this.selectedIndex, normalized);
+    if (normalized === 'fronts_shelves') {
+      this.requestValidity();
+    }
+  };
+
+  BayController.prototype.adjustSubpartition = function adjustSubpartition(delta) {
+    if (!this.subpartitionInput) {
+      return;
+    }
+
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var state = bay.subpartitions_state || {};
+    var current = typeof state.count === 'number' ? state.count : 0;
+    var next = Math.max(0, current + delta);
+    if (next === current) {
+      return;
+    }
+
+    this.subpartitionInput.value = String(next);
+    this.onSubpartitionChange(this.selectedIndex, next);
+  };
+
+  BayController.prototype.handleSubpartitionInput = function handleSubpartitionInput() {
+    if (this.subpartitionLock) {
+      return;
+    }
+    if (!this.subpartitionInput) {
+      return;
+    }
+
+    var value = parseInt(this.subpartitionInput.value, 10);
+    if (!isFinite(value) || value < 0) {
+      return;
+    }
+    this.onSubpartitionChange(this.selectedIndex, value);
+  };
+
+  BayController.prototype.handleSubpartitionBlur = function handleSubpartitionBlur() {
+    if (!this.subpartitionInput) {
+      return;
+    }
+
+    var value = parseInt(this.subpartitionInput.value, 10);
+    if (!isFinite(value) || value < 0) {
+      value = 0;
+    }
+    this.subpartitionInput.value = String(value);
+    this.onSubpartitionChange(this.selectedIndex, value);
+  };
+
   BayController.prototype.handleDoorChange = function handleDoorChange(value) {
     if (this.doorLock) {
       return;
@@ -662,6 +918,48 @@
     this.announce(this.translate(statusKey));
   };
 
+  BayController.prototype.updateModeControls = function updateModeControls() {
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var mode = normalizeBayMode(bay.mode);
+    if (this.modeInputs && this.modeInputs.length) {
+      this.modeInputs.forEach(function (input) {
+        if (!input) {
+          return;
+        }
+        input.checked = input.value === mode;
+      });
+    }
+    this.updateEditorVisibility(mode);
+  };
+
+  BayController.prototype.updateSubpartitionControls = function updateSubpartitionControls() {
+    if (!this.subpartitionInput) {
+      return;
+    }
+
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var state = bay.subpartitions_state || {};
+    var value = typeof state.count === 'number' ? state.count : 0;
+    this.subpartitionLock = true;
+    this.subpartitionInput.value = String(value);
+    this.subpartitionLock = false;
+  };
+
+  BayController.prototype.updateEditorVisibility = function updateEditorVisibility(mode) {
+    var resolved = mode || normalizeBayMode((this.bays[this.selectedIndex] || this.template).mode);
+    if (this.frontsEditor) {
+      var hideFronts = resolved !== 'fronts_shelves';
+      this.frontsEditor.classList.toggle('is-hidden', hideFronts);
+      this.frontsEditor.hidden = hideFronts;
+    }
+    if (this.subpartitionsEditor) {
+      var hideSub = resolved !== 'subpartitions';
+      this.subpartitionsEditor.classList.toggle('is-hidden', hideSub);
+      this.subpartitionsEditor.hidden = hideSub;
+    }
+    this.applyModeSpecificDisabling();
+  };
+
   BayController.prototype.applyDoubleValidityState = function applyDoubleValidityState() {
     if (!this.doubleDoorInput) {
       return;
@@ -682,10 +980,42 @@
 
     this.doubleDoorInput.disabled = true;
     var current = this.bays[this.selectedIndex] || {};
-    if (current.door_mode === 'doors_double') {
+    var fronts = current.fronts_shelves_state || {};
+    if (fronts.door_mode === 'doors_double') {
       this.handleDoorChange('none');
     }
     this.showHint(validity.reason || this.translate('door_mode_double_disabled_hint'));
+  };
+
+  BayController.prototype.applyModeSpecificDisabling = function applyModeSpecificDisabling() {
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var mode = normalizeBayMode(bay.mode);
+    var frontDisabled = this.buttonsDisabled || mode !== 'fronts_shelves';
+    var subDisabled = this.buttonsDisabled || mode !== 'subpartitions';
+
+    if (this.decreaseButton) {
+      this.decreaseButton.disabled = frontDisabled;
+    }
+    if (this.increaseButton) {
+      this.increaseButton.disabled = frontDisabled;
+    }
+    if (this.shelfInput) {
+      this.shelfInput.disabled = frontDisabled;
+    }
+    this.doorInputs.forEach(function (input) {
+      if (input) {
+        input.disabled = frontDisabled;
+      }
+    });
+    if (this.subpartitionDecreaseButton) {
+      this.subpartitionDecreaseButton.disabled = subDisabled;
+    }
+    if (this.subpartitionIncreaseButton) {
+      this.subpartitionIncreaseButton.disabled = subDisabled;
+    }
+    if (this.subpartitionInput) {
+      this.subpartitionInput.disabled = subDisabled;
+    }
   };
 
   BayController.prototype.setDoubleValidity = function setDoubleValidity(index, allowed, reason) {
@@ -712,12 +1042,29 @@
   };
 
   BayController.prototype.requestValidity = function requestValidity() {
+    var bay = this.bays[this.selectedIndex] || this.template;
+    if (normalizeBayMode(bay.mode) !== 'fronts_shelves') {
+      return;
+    }
     this.onRequestValidity(this.selectedIndex);
   };
 
   BayController.prototype.updateActionsVisibility = function updateActionsVisibility() {
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var mode = normalizeBayMode(bay.mode);
+    var hideActions = mode !== 'fronts_shelves';
+
+    if (this.actionsContainer) {
+      this.actionsContainer.classList.toggle('is-hidden', hideActions);
+      this.actionsContainer.hidden = hideActions;
+    }
+    if (this.applyAllButton) {
+      this.applyAllButton.disabled = this.buttonsDisabled || hideActions;
+    }
     if (this.copyButton) {
-      this.copyButton.hidden = this.bays.length < 2;
+      var disableCopy = this.buttonsDisabled || hideActions || this.bays.length < 2;
+      this.copyButton.disabled = disableCopy;
+      this.copyButton.hidden = hideActions || this.bays.length < 2;
     }
   };
 
@@ -732,24 +1079,16 @@
   };
 
   BayController.prototype.setButtonsDisabled = function setButtonsDisabled(disabled) {
-    if (this.decreaseButton) {
-      this.decreaseButton.disabled = disabled;
+    this.buttonsDisabled = !!disabled;
+    if (this.modeInputs && this.modeInputs.length) {
+      this.modeInputs.forEach(function (input) {
+        if (input) {
+          input.disabled = disabled;
+        }
+      });
     }
-    if (this.increaseButton) {
-      this.increaseButton.disabled = disabled;
-    }
-    if (this.shelfInput) {
-      this.shelfInput.disabled = disabled;
-    }
-    this.doorInputs.forEach(function (input) {
-      input.disabled = disabled;
-    });
-    if (this.applyAllButton) {
-      this.applyAllButton.disabled = disabled;
-    }
-    if (this.copyButton) {
-      this.copyButton.disabled = disabled || this.bays.length < 2;
-    }
+    this.applyModeSpecificDisabling();
+    this.updateActionsVisibility();
   };
 
   var MODE_COPY = {
@@ -1231,7 +1570,7 @@
     this.placementNotice = '';
     this.selectedBayIndex = 0;
     this.pendingSelectedBayIndex = null;
-    this.bayTemplate = { shelf_count: 0, door_mode: null };
+    this.bayTemplate = cloneBay(null);
 
     this.initializeElements();
     this.bindEvents();
@@ -1257,6 +1596,8 @@
       onSelect: this.handleBaySelection.bind(this),
       onShelfChange: this.handleBayShelfChange.bind(this),
       onDoorChange: this.handleBayDoorChange.bind(this),
+      onModeChange: this.handleBayModeChange.bind(this),
+      onSubpartitionChange: this.handleBaySubpartitionChange.bind(this),
       onApplyToAll: this.handleApplyBayToAll.bind(this),
       onCopyLeftToRight: this.handleCopyLeftToRight.bind(this),
       onRequestValidity: this.handleRequestBayValidity.bind(this),
@@ -1384,20 +1725,7 @@
   };
 
   FormController.prototype.normalizeBay = function normalizeBay(bay) {
-    var shelf = 0;
-    var door = null;
-    if (bay && typeof bay === 'object') {
-      if (typeof bay.shelf_count === 'number' && isFinite(bay.shelf_count)) {
-        shelf = Math.max(0, Math.round(bay.shelf_count));
-      }
-      if (typeof bay.door_mode === 'string' && bay.door_mode.trim()) {
-        door = bay.door_mode.trim();
-      } else if (bay.door_mode === null) {
-        door = null;
-      }
-    }
-
-    return { shelf_count: shelf, door_mode: door };
+    return cloneBay(bay);
   };
 
   FormController.prototype.normalizePartitionMode = function normalizePartitionMode(mode) {
@@ -1543,13 +1871,25 @@
     }
 
     var numeric = Math.max(0, Math.round(Number(value) || 0));
+    var state = bays[index].fronts_shelves_state || { shelf_count: 0, door_mode: null };
+    state.shelf_count = numeric;
+    bays[index].fronts_shelves_state = state;
     bays[index].shelf_count = numeric;
+    if (this.bayTemplate.fronts_shelves_state) {
+      this.bayTemplate.fronts_shelves_state.shelf_count = bays[0]
+        ? bays[0].fronts_shelves_state && typeof bays[0].fronts_shelves_state.shelf_count === 'number'
+          ? bays[0].fronts_shelves_state.shelf_count
+          : numeric
+        : numeric;
+    }
     this.bayTemplate.shelf_count = bays[0] ? bays[0].shelf_count : numeric;
     if (this.bayController) {
       this.bayController.setBayValue(index, bays[index]);
     }
     this.updateInsertButtonState();
-    this.sendBayShelfUpdate(index, numeric);
+    if (normalizeBayMode(bays[index].mode) === 'fronts_shelves') {
+      this.sendBayShelfUpdate(index, numeric);
+    }
   };
 
   FormController.prototype.handleBayDoorChange = function handleBayDoorChange(index, value) {
@@ -1568,7 +1908,13 @@
     }
 
     var normalized = value === 'none' ? null : value;
+    var state = bays[index].fronts_shelves_state || { shelf_count: 0, door_mode: null };
+    state.door_mode = normalized;
+    bays[index].fronts_shelves_state = state;
     bays[index].door_mode = normalized;
+    if (index === 0 && this.bayTemplate.fronts_shelves_state) {
+      this.bayTemplate.fronts_shelves_state.door_mode = normalized;
+    }
     if (index === 0) {
       this.bayTemplate.door_mode = normalized;
     }
@@ -1576,7 +1922,69 @@
       this.bayController.setBayValue(index, bays[index]);
     }
     this.updateInsertButtonState();
-    this.sendBayDoorUpdate(index, normalized);
+    if (normalizeBayMode(bays[index].mode) === 'fronts_shelves') {
+      this.sendBayDoorUpdate(index, normalized);
+    }
+  };
+
+  FormController.prototype.handleBayModeChange = function handleBayModeChange(index, value) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    var bays = this.values.partitions.bays || [];
+    if (!bays[index]) {
+      this.ensureBayLength();
+      bays = this.values.partitions.bays || [];
+    }
+
+    if (!bays[index]) {
+      bays[index] = cloneBay(this.bayTemplate);
+    }
+
+    var normalized = value === 'subpartitions' ? 'subpartitions' : 'fronts_shelves';
+    bays[index].mode = normalized;
+    if (this.bayController) {
+      this.bayController.setBayValue(index, bays[index]);
+    }
+    this.updateInsertButtonState();
+    this.sendBayModeUpdate(index, normalized);
+  };
+
+  FormController.prototype.handleBaySubpartitionChange = function handleBaySubpartitionChange(index, value) {
+    if (typeof index !== 'number' || !isFinite(index)) {
+      return;
+    }
+
+    var bays = this.values.partitions.bays || [];
+    if (!bays[index]) {
+      this.ensureBayLength();
+      bays = this.values.partitions.bays || [];
+    }
+
+    if (!bays[index]) {
+      bays[index] = cloneBay(this.bayTemplate);
+    }
+
+    var numeric = Math.max(0, Math.round(Number(value) || 0));
+    var state = bays[index].subpartitions_state || { count: 0 };
+    state.count = numeric;
+    bays[index].subpartitions_state = state;
+    if (this.bayTemplate.subpartitions_state) {
+      var templateCount = bays[0]
+        ? bays[0].subpartitions_state && typeof bays[0].subpartitions_state.count === 'number'
+          ? bays[0].subpartitions_state.count
+          : numeric
+        : numeric;
+      this.bayTemplate.subpartitions_state.count = templateCount;
+    }
+    if (this.bayController) {
+      this.bayController.setBayValue(index, bays[index]);
+    }
+    this.updateInsertButtonState();
+    if (normalizeBayMode(bays[index].mode) === 'subpartitions') {
+      this.sendBaySubpartitionUpdate(index, numeric);
+    }
   };
 
   FormController.prototype.handleApplyBayToAll = function handleApplyBayToAll(index) {
@@ -1677,6 +2085,16 @@
   FormController.prototype.sendBayDoorUpdate = function sendBayDoorUpdate(index, value) {
     var payload = { index: index, value: value };
     invokeSketchUp('ui_set_door_mode', JSON.stringify(payload));
+  };
+
+  FormController.prototype.sendBayModeUpdate = function sendBayModeUpdate(index, mode) {
+    var payload = { index: index, value: mode };
+    invokeSketchUp('ui_set_bay_mode', JSON.stringify(payload));
+  };
+
+  FormController.prototype.sendBaySubpartitionUpdate = function sendBaySubpartitionUpdate(index, count) {
+    var payload = { index: index, count: count };
+    invokeSketchUp('ui_set_subpartition_count', JSON.stringify(payload));
   };
 
   FormController.prototype.updateBayFromSketchUp = function updateBayFromSketchUp(index, bay) {
@@ -2885,8 +3303,28 @@
           function (bay) {
             var normalized = this.normalizeBay(bay);
             return {
+              mode: normalized.mode,
               shelf_count: normalized.shelf_count,
-              door_mode: normalized.door_mode
+              door_mode: normalized.door_mode,
+              fronts_shelves_state: {
+                shelf_count:
+                  normalized.fronts_shelves_state &&
+                  typeof normalized.fronts_shelves_state.shelf_count === 'number'
+                    ? normalized.fronts_shelves_state.shelf_count
+                    : normalized.shelf_count,
+                door_mode:
+                  normalized.fronts_shelves_state &&
+                  Object.prototype.hasOwnProperty.call(normalized.fronts_shelves_state, 'door_mode')
+                    ? normalized.fronts_shelves_state.door_mode
+                    : normalized.door_mode
+              },
+              subpartitions_state: {
+                count:
+                  normalized.subpartitions_state &&
+                  typeof normalized.subpartitions_state.count === 'number'
+                    ? normalized.subpartitions_state.count
+                    : 0
+              }
             };
           }.bind(this)
         )

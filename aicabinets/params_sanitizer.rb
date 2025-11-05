@@ -9,6 +9,8 @@ module AICabinets
     DEFAULT_SHELF_COUNT = 0
     PARTITION_MODES = %w[none vertical horizontal].freeze
     DEFAULT_PARTITION_MODE = 'none'
+    BAY_MODES = %w[fronts_shelves subpartitions].freeze
+    DEFAULT_BAY_MODE = 'fronts_shelves'
 
     DEFAULT_PARTITIONS = {
       mode: 'none',
@@ -80,21 +82,14 @@ module AICabinets
 
       sanitized = deep_dup(template)
 
-      if bay.key?(:shelf_count) || bay.key?('shelf_count')
-        shelf_value = bay[:shelf_count] || bay['shelf_count']
-        shelf_count = coerce_non_negative_integer(shelf_value)
-        sanitized[:shelf_count] = shelf_count unless shelf_count.nil?
-      end
-
-      if bay.key?(:door_mode) || bay.key?('door_mode')
-        door_value = bay[:door_mode] || bay['door_mode']
-        if door_value.nil? || door_value.to_s.strip.casecmp('none').zero?
-          sanitized[:door_mode] = nil
-        else
-          door_mode = sanitize_door_mode(door_value)
-          sanitized[:door_mode] = door_mode if door_mode
-        end
-      end
+      sanitized[:mode] = sanitize_bay_mode(bay[:mode] || bay['mode'], sanitized[:mode])
+      sanitized[:fronts_shelves_state] =
+        sanitize_fronts_shelves_state(bay, sanitized[:fronts_shelves_state])
+      sanitized[:shelf_count] = sanitized[:fronts_shelves_state][:shelf_count]
+      sanitized[:door_mode] = sanitized[:fronts_shelves_state][:door_mode]
+      sanitized[:subpartitions_state] =
+        sanitize_subpartitions_state(bay[:subpartitions_state] || bay['subpartitions_state'],
+                                     sanitized[:subpartitions_state])
 
       sanitized
     end
@@ -114,12 +109,83 @@ module AICabinets
     private_class_method :sanitize_door_mode
 
     def default_bay(defaults)
-      {
+      fronts = {
         shelf_count: default_shelf_count(defaults),
         door_mode: default_door_mode(defaults)
       }
+
+      {
+        mode: DEFAULT_BAY_MODE,
+        shelf_count: fronts[:shelf_count],
+        door_mode: fronts[:door_mode],
+        fronts_shelves_state: fronts,
+        subpartitions_state: { count: 0 }
+      }
     end
     private_class_method :default_bay
+
+    def sanitize_bay_mode(value, fallback)
+      return fallback unless value.respond_to?(:to_s)
+
+      candidate = value.to_s.strip.downcase
+      return fallback if candidate.empty?
+
+      if BAY_MODES.include?(candidate)
+        candidate
+      else
+        warn("AI Cabinets: Unknown bay mode '#{value}'; falling back to #{fallback}.")
+        fallback
+      end
+    end
+    private_class_method :sanitize_bay_mode
+
+    def sanitize_fronts_shelves_state(bay, template_state)
+      sanitized = template_state.is_a?(Hash) ? deep_dup(template_state) : { shelf_count: 0, door_mode: nil }
+      state = bay[:fronts_shelves_state] || bay['fronts_shelves_state']
+
+      if state.is_a?(Hash)
+        shelf_value = state[:shelf_count] || state['shelf_count']
+        shelf_count = coerce_non_negative_integer(shelf_value)
+        sanitized[:shelf_count] = shelf_count unless shelf_count.nil?
+
+        if state.key?(:door_mode) || state.key?('door_mode')
+          door_value = state[:door_mode] || state['door_mode']
+          sanitized[:door_mode] = sanitize_bay_door_mode(door_value)
+        end
+      end
+
+      if bay.key?(:shelf_count) || bay.key?('shelf_count')
+        fallback_shelf = coerce_non_negative_integer(bay[:shelf_count] || bay['shelf_count'])
+        sanitized[:shelf_count] = fallback_shelf unless fallback_shelf.nil?
+      end
+
+      if bay.key?(:door_mode) || bay.key?('door_mode')
+        sanitized[:door_mode] = sanitize_bay_door_mode(bay[:door_mode] || bay['door_mode'])
+      end
+
+      sanitized
+    end
+    private_class_method :sanitize_fronts_shelves_state
+
+    def sanitize_bay_door_mode(value)
+      return nil if value.nil?
+
+      text = value.to_s.strip
+      return nil if text.empty? || text.casecmp('none').zero?
+
+      sanitize_door_mode(text)
+    end
+    private_class_method :sanitize_bay_door_mode
+
+    def sanitize_subpartitions_state(raw_state, template_state)
+      sanitized = template_state.is_a?(Hash) ? deep_dup(template_state) : { count: 0 }
+      state = raw_state.is_a?(Hash) ? raw_state : {}
+      count_value = state[:count] || state['count']
+      count = coerce_non_negative_integer(count_value)
+      sanitized[:count] = count unless count.nil?
+      sanitized
+    end
+    private_class_method :sanitize_subpartitions_state
 
     def default_shelf_count(defaults)
       value = fetch_value(defaults, :shelves)

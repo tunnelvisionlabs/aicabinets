@@ -236,8 +236,15 @@ module AICabinets
           partitions = fetch_partitions(dialog_defaults)
           bays = partitions[:bays]
           sample = bays.is_a?(Array) ? bays.first : nil
-          template = sample.is_a?(Hash) ? sample : { shelf_count: 0, door_mode: nil }
-          deep_copy_params(template)
+          template =
+            if sample.is_a?(Hash)
+              deep_copy_params(sample)
+            else
+              deep_copy_params(
+                AICabinets::ParamsSanitizer.send(:default_bay, dialog_defaults)
+              )
+            end
+          template
         end
         private_class_method :default_bay_template
 
@@ -568,6 +575,8 @@ module AICabinets
             bays << default_bay_template
           end
 
+          bay_state = bays[index][:fronts_shelves_state] ||= { shelf_count: 0, door_mode: nil }
+          bay_state[:shelf_count] = value
           bays[index][:shelf_count] = value
           AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
           store_dialog_params(params)
@@ -575,8 +584,10 @@ module AICabinets
           updated_params = ensure_dialog_params
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
-          allowed, reason = evaluate_double_validity(updated_params, index)
-          deliver_double_validity(dialog, index, allowed, reason)
+          if (updated_bays[index] || {})[:mode] == 'fronts_shelves'
+            allowed, reason = evaluate_double_validity(updated_params, index)
+            deliver_double_validity(dialog, index, allowed, reason)
+          end
         end
         private_class_method :handle_ui_set_shelf_count
 
@@ -604,6 +615,8 @@ module AICabinets
             end
           end
 
+          bay_state = bays[index][:fronts_shelves_state] ||= { shelf_count: 0, door_mode: nil }
+          bay_state[:door_mode] = value
           bays[index][:door_mode] = value
           AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
           store_dialog_params(params)
@@ -611,10 +624,69 @@ module AICabinets
           updated_params = ensure_dialog_params
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
-          allowed, reason = evaluate_double_validity(updated_params, index)
-          deliver_double_validity(dialog, index, allowed, reason)
+          if (updated_bays[index] || {})[:mode] == 'fronts_shelves'
+            allowed, reason = evaluate_double_validity(updated_params, index)
+            deliver_double_validity(dialog, index, allowed, reason)
+          end
         end
         private_class_method :handle_ui_set_door_mode
+
+        def handle_ui_set_bay_mode(dialog, payload)
+          data = parse_payload(payload)
+          index = extract_index(data)
+          return unless index && index >= 0
+
+          raw_value = data[:value] || data['value']
+          mode = AICabinets::ParamsSanitizer.send(:sanitize_bay_mode, raw_value, 'fronts_shelves')
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          bays = fetch_bays_array(params)
+          while bays.length <= index
+            bays << default_bay_template
+          end
+
+          bays[index][:mode] = mode
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          updated_bays = fetch_bays_array(updated_params)
+          deliver_state_update_bay(dialog, index, updated_bays[index])
+          if mode == 'fronts_shelves'
+            allowed, reason = evaluate_double_validity(updated_params, index)
+            deliver_double_validity(dialog, index, allowed, reason)
+          end
+        end
+        private_class_method :handle_ui_set_bay_mode
+
+        def handle_ui_set_subpartition_count(dialog, payload)
+          data = parse_payload(payload)
+          index = extract_index(data)
+          return unless index && index >= 0
+
+          value = extract_integer(data[:count] || data['count'])
+          return if value.nil?
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          bays = fetch_bays_array(params)
+          while bays.length <= index
+            bays << default_bay_template
+          end
+
+          state = bays[index][:subpartitions_state] ||= { count: 0 }
+          state[:count] = value
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          updated_params = ensure_dialog_params
+          updated_bays = fetch_bays_array(updated_params)
+          deliver_state_update_bay(dialog, index, updated_bays[index])
+        end
+        private_class_method :handle_ui_set_subpartition_count
 
         def handle_ui_apply_to_all(dialog, payload)
           data = parse_payload(payload)
@@ -628,22 +700,30 @@ module AICabinets
           return unless index < bays.length
 
           source = bays[index]
-          source_shelf = extract_integer(source[:shelf_count]) || 0
-          source_door = source[:door_mode]
+          source_state = source[:fronts_shelves_state] || {}
+          source_shelf = extract_integer(source_state[:shelf_count])
+          source_shelf = extract_integer(source[:shelf_count]) if source_shelf.nil?
+          source_shelf ||= 0
+          source_door = source_state[:door_mode]
+          source_door = source[:door_mode] if source_door.nil? && source.key?(:door_mode)
           skipped = 0
 
           bays.each_with_index do |bay, bay_index|
+            bay_state = bay[:fronts_shelves_state] ||= { shelf_count: 0, door_mode: nil }
+            bay_state[:shelf_count] = source_shelf
             bay[:shelf_count] = source_shelf
             next if bay_index == index
 
             if source_door == 'doors_double'
               allowed, = evaluate_double_validity(params, bay_index)
               if allowed
+                bay_state[:door_mode] = source_door
                 bay[:door_mode] = source_door
               else
                 skipped += 1
               end
             else
+              bay_state[:door_mode] = source_door
               bay[:door_mode] = source_door
             end
           end
@@ -683,16 +763,27 @@ module AICabinets
             dest = bays[dest_index]
             next unless source.is_a?(Hash) && dest.is_a?(Hash)
 
-            dest[:shelf_count] = extract_integer(source[:shelf_count]) || 0
-            door_mode = source[:door_mode]
+            source_state = source[:fronts_shelves_state] || {}
+            dest_state = dest[:fronts_shelves_state] ||= { shelf_count: 0, door_mode: nil }
+
+            shelf_value = extract_integer(source_state[:shelf_count])
+            shelf_value = extract_integer(source[:shelf_count]) if shelf_value.nil?
+            shelf_value ||= 0
+            dest_state[:shelf_count] = shelf_value
+            dest[:shelf_count] = shelf_value
+
+            door_mode = source_state[:door_mode]
+            door_mode = source[:door_mode] if door_mode.nil? && source.key?(:door_mode)
             if door_mode == 'doors_double'
               allowed, = evaluate_double_validity(params, dest_index)
               if allowed
+                dest_state[:door_mode] = door_mode
                 dest[:door_mode] = door_mode
               else
                 skipped += 1
               end
             else
+              dest_state[:door_mode] = door_mode
               dest[:door_mode] = door_mode
             end
           end
@@ -813,6 +904,14 @@ module AICabinets
 
           dialog.add_action_callback('ui_set_door_mode') do |_context, payload|
             handle_ui_set_door_mode(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_set_bay_mode') do |_context, payload|
+            handle_ui_set_bay_mode(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_set_subpartition_count') do |_context, payload|
+            handle_ui_set_subpartition_count(dialog, payload)
           end
 
           dialog.add_action_callback('ui_apply_to_all') do |_context, payload|
@@ -1196,6 +1295,8 @@ module AICabinets
 
             typed[:panel_thickness_mm] = thickness
           end
+
+          typed[:bays] = raw[:bays] if raw.key?(:bays)
 
           typed
         end

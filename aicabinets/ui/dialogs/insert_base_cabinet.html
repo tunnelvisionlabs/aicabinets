@@ -254,76 +254,140 @@
                 <div class="bay__chips" data-role="bay-chips"></div>
               </div>
 
-              <div class="bay__row" data-role="bay-shelf-row">
-                <label class="bay__label" for="bay-shelf-count" data-role="bay-shelf-label"></label>
-                <div class="bay-stepper" data-role="bay-stepper">
-                  <button
-                    type="button"
-                    class="bay-stepper__button"
-                    data-role="bay-stepper-decrease"
-                    aria-label=""
-                  ></button>
-                  <input
-                    type="number"
-                    id="bay-shelf-count"
-                    class="bay-stepper__input"
-                    data-role="bay-shelf-input"
-                    min="0"
-                    step="1"
-                    inputmode="numeric"
-                    aria-label=""
-                  />
-                  <button
-                    type="button"
-                    class="bay-stepper__button"
-                    data-role="bay-stepper-increase"
-                    aria-label=""
-                  ></button>
+              <fieldset class="bay-editor-toggle" data-role="bay-mode-fieldset">
+                <legend
+                  class="bay-editor-toggle__legend"
+                  id="bay-editor-toggle-legend"
+                  data-role="bay-mode-legend"
+                ></legend>
+                <div
+                  class="bay-editor-toggle__options"
+                  role="radiogroup"
+                  aria-labelledby="bay-editor-toggle-legend"
+                >
+                  <label class="bay-editor-toggle__option">
+                    <input
+                      type="radio"
+                      name="bay-editor-mode"
+                      value="fronts_shelves"
+                      data-role="bay-mode-option"
+                    />
+                    <span data-role="bay-mode-label-fronts"></span>
+                  </label>
+                  <label class="bay-editor-toggle__option">
+                    <input
+                      type="radio"
+                      name="bay-editor-mode"
+                      value="subpartitions"
+                      data-role="bay-mode-option"
+                    />
+                    <span data-role="bay-mode-label-subpartitions"></span>
+                  </label>
                 </div>
+              </fieldset>
+
+              <div class="bay__editor" data-role="bay-fronts-editor">
+                <div class="bay__row" data-role="bay-shelf-row">
+                  <label class="bay__label" for="bay-shelf-count" data-role="bay-shelf-label"></label>
+                  <div class="bay-stepper" data-role="bay-stepper">
+                    <button
+                      type="button"
+                      class="bay-stepper__button"
+                      data-role="bay-stepper-decrease"
+                      aria-label=""
+                    ></button>
+                    <input
+                      type="number"
+                      id="bay-shelf-count"
+                      class="bay-stepper__input"
+                      data-role="bay-shelf-input"
+                      min="0"
+                      step="1"
+                      inputmode="numeric"
+                      aria-label=""
+                    />
+                    <button
+                      type="button"
+                      class="bay-stepper__button"
+                      data-role="bay-stepper-increase"
+                      aria-label=""
+                    ></button>
+                  </div>
+                </div>
+
+                <fieldset class="bay-door" data-role="bay-door-fieldset">
+                  <legend class="bay-door__legend" data-role="bay-door-legend"></legend>
+                  <div class="bay-door__options" data-role="bay-door-options">
+                    <label class="bay-door__option">
+                      <input
+                        type="radio"
+                        name="bay-door-mode"
+                        value="none"
+                        data-role="bay-door-option"
+                      />
+                      <span data-role="bay-door-label-none"></span>
+                    </label>
+                    <label class="bay-door__option">
+                      <input
+                        type="radio"
+                        name="bay-door-mode"
+                        value="doors_left"
+                        data-role="bay-door-option"
+                      />
+                      <span data-role="bay-door-label-left"></span>
+                    </label>
+                    <label class="bay-door__option">
+                      <input
+                        type="radio"
+                        name="bay-door-mode"
+                        value="doors_right"
+                        data-role="bay-door-option"
+                      />
+                      <span data-role="bay-door-label-right"></span>
+                    </label>
+                    <label class="bay-door__option">
+                      <input
+                        type="radio"
+                        name="bay-door-mode"
+                        value="doors_double"
+                        data-role="bay-door-option"
+                      />
+                      <span data-role="bay-door-label-double"></span>
+                    </label>
+                  </div>
+                  <p class="bay-door__hint" data-role="bay-double-hint" aria-live="polite" hidden></p>
+                </fieldset>
               </div>
 
-              <fieldset class="bay-door" data-role="bay-door-fieldset">
-                <legend class="bay-door__legend" data-role="bay-door-legend"></legend>
-                <div class="bay-door__options" data-role="bay-door-options">
-                  <label class="bay-door__option">
+              <div class="bay__editor bay__editor--subpartitions is-hidden" data-role="bay-subpartitions-editor">
+                <div class="bay__row" data-role="bay-subpartition-row">
+                  <label class="bay__label" for="bay-subpartition-count" data-role="bay-subpartition-label"></label>
+                  <div class="bay-stepper" data-role="bay-subpartition-stepper">
+                    <button
+                      type="button"
+                      class="bay-stepper__button"
+                      data-role="bay-subpartition-decrease"
+                      aria-label=""
+                    ></button>
                     <input
-                      type="radio"
-                      name="bay-door-mode"
-                      value="none"
-                      data-role="bay-door-option"
+                      type="number"
+                      id="bay-subpartition-count"
+                      class="bay-stepper__input"
+                      data-role="bay-subpartition-input"
+                      min="0"
+                      step="1"
+                      inputmode="numeric"
+                      aria-label=""
                     />
-                    <span data-role="bay-door-label-none"></span>
-                  </label>
-                  <label class="bay-door__option">
-                    <input
-                      type="radio"
-                      name="bay-door-mode"
-                      value="doors_left"
-                      data-role="bay-door-option"
-                    />
-                    <span data-role="bay-door-label-left"></span>
-                  </label>
-                  <label class="bay-door__option">
-                    <input
-                      type="radio"
-                      name="bay-door-mode"
-                      value="doors_right"
-                      data-role="bay-door-option"
-                    />
-                    <span data-role="bay-door-label-right"></span>
-                  </label>
-                  <label class="bay-door__option">
-                    <input
-                      type="radio"
-                      name="bay-door-mode"
-                      value="doors_double"
-                      data-role="bay-door-option"
-                    />
-                    <span data-role="bay-door-label-double"></span>
-                  </label>
+                    <button
+                      type="button"
+                      class="bay-stepper__button"
+                      data-role="bay-subpartition-increase"
+                      aria-label=""
+                    ></button>
+                  </div>
                 </div>
-                <p class="bay-door__hint" data-role="bay-double-hint" aria-live="polite" hidden></p>
-              </fieldset>
+              </div>
 
               <div class="bay__actions" data-role="bay-actions">
                 <button type="button" class="button button--tertiary" data-role="bay-apply-all"></button>
