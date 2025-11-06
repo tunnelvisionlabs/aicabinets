@@ -3,15 +3,15 @@
 require 'testup/testcase'
 
 require_relative 'suite_helper'
+require_relative '../support/ui_pump'
 
 Sketchup.require('aicabinets/test_harness')
 
 class TC_DialogPartitions < TestUp::TestCase
+  include TestUiPump
   DEFAULT_TEST_TIMEOUT = 15.0
 
   def setup
-    skip('HtmlDialog UI tests require TestUp::UI.wait.') unless testup_wait_available?
-
     @dialog_handle = AICabinets::TestHarness.open_dialog_for_tests
     @dialog_ready = false
     @ready_result = nil
@@ -220,10 +220,6 @@ class TC_DialogPartitions < TestUp::TestCase
   end
 
   def process_ui_events(interval = 0.01)
-    TestUp::UI.wait(interval)
-  end
-
-  def testup_wait_available?
-    defined?(TestUp) && defined?(TestUp::UI) && TestUp::UI.respond_to?(:wait)
+    super
   end
 end
