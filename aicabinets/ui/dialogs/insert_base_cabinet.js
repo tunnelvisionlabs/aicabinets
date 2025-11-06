@@ -555,6 +555,11 @@
     var fieldset = controller.partitionModeFieldset || null;
     var legend = fieldset ? fieldset.querySelector('legend') : null;
     var statusRegion = controller.statusRegion || null;
+    var liveRegionData = {
+      role: statusRegion ? statusRegion.getAttribute('role') || '' : '',
+      ariaLive: statusRegion ? statusRegion.getAttribute('aria-live') || '' : '',
+      ariaAtomic: statusRegion ? statusRegion.getAttribute('aria-atomic') || '' : ''
+    };
     var chipInfo = gatherChipData();
 
     return {
@@ -572,13 +577,7 @@
         partitionFieldsetTag: fieldset ? fieldset.tagName.toLowerCase() : null,
         partitionLegend: legend ? collapseWhitespace(legend.textContent) : '',
         radioLabels: gatherPartitionRadioLabels(),
-        liveRegion: statusRegion
-          ? {
-              role: statusRegion.getAttribute('role') || '',
-              ariaLive: statusRegion.getAttribute('aria-live') || '',
-              ariaAtomic: statusRegion.getAttribute('aria-atomic') || ''
-            }
-          : null,
+        liveRegion: liveRegionData,
         chipTabStops: chipInfo.map(function (chip) {
           return chip.tabIndex;
         })

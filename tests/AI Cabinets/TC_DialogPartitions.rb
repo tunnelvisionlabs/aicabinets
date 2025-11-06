@@ -81,6 +81,7 @@ class TC_DialogPartitions < TestUp::TestCase
       )
 
       live_region = a11y['liveRegion']
+      assert(live_region, 'Live region should be present')
       assert_equal('status', live_region['role'])
       assert_equal('polite', live_region['ariaLive'])
       assert_equal('true', live_region['ariaAtomic'])
@@ -101,14 +102,22 @@ class TC_DialogPartitions < TestUp::TestCase
       assert(gating_vertical['baysVisible'], 'Bays should be visible in vertical mode')
       refute(gating_vertical['globalsVisible'], 'Global fronts should be hidden in vertical mode')
 
-      message = await_js('AICabinetsTest.lastLiveRegion()')
-      assert_includes(message, 'Vertical', 'Expected live region message for vertical mode')
+      announcement_vertical = vertical_state.fetch('announcement')
+      assert_includes(
+        announcement_vertical,
+        'Vertical',
+        'Expected live region message for vertical mode'
+      )
 
       horizontal_state = await_js('AICabinetsTest.setPartitionMode("horizontal")')
       gating_horizontal = horizontal_state.fetch('gating')
       assert(gating_horizontal['baysVisible'], 'Bays should be visible in horizontal mode')
-      message_horizontal = await_js('AICabinetsTest.lastLiveRegion()')
-      assert_includes(message_horizontal, 'Horizontal', 'Expected live region message for horizontal mode')
+      announcement_horizontal = horizontal_state.fetch('announcement')
+      assert_includes(
+        announcement_horizontal,
+        'Horizontal',
+        'Expected live region message for horizontal mode'
+      )
     end
   end
 
