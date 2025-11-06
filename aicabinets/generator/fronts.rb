@@ -80,7 +80,7 @@ module AICabinets
           Geom::Point3d.new(width, 0, height),
           Geom::Point3d.new(0, 0, height)
         )
-        face.reverse! unless face.normal.y.positive?
+        face.reverse! if face.normal.y.positive?
         face.pushpull(thickness)
 
         translation = Geom::Transformation.translation([
