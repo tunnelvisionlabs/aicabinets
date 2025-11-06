@@ -4,15 +4,25 @@
 module TestUiPump
   # Pumps SketchUp's UI message loop for the given duration (seconds).
   #
-  # HtmlDialog callbacks are dispatched only while the UI loop runs. A tiny
-  # modal HtmlDialog spins a nested pump while it is open, so we display one
-  # off-screen and close it after the requested delay using a one-shot timer.
-  # The timer callback is guarded to avoid the known modal/timer re-entry bug
-  # discussed on the SketchUp forums.
+  # HtmlDialog callbacks only fire while the UI loop runs. A tiny modal
+  # HtmlDialog spins a nested pump while it is open, so we display one
+  # off-screen and let it close itself via `window.close()` after the
+  # requested delay.
   #
   # @param duration [Numeric] number of seconds to keep the nested loop alive
   # @return [void]
   def process_ui_events(duration = 0.02)
+    return if duration <= 0
+
+    ms = (duration * 1000).to_i
+    html = <<~HTML
+      <!doctype html><meta charset="utf-8">
+      <style>html,body{margin:0;padding:0;overflow:hidden}</style>
+      <script>
+        window.setTimeout(function(){ window.close(); }, #{ms});
+      </script>
+    HTML
+
     dlg = ::UI::HtmlDialog.new(
       dialog_title: 'AI Cabinets Test Pump',
       width: 1,
@@ -26,31 +36,8 @@ module TestUiPump
       # Positioning can fail on some platforms; ignore and proceed.
     end
 
-    dlg.set_html('<!doctype html><meta charset="utf-8">')
-
-    closed = false
-    timer = ::UI.start_timer(duration, false) do
-      next if closed
-
-      closed = true
-      begin
-        dlg.close
-      rescue StandardError
-        # Dialog might already be closing; ignore.
-      end
-    end
-
-    begin
-      dlg.show_modal
-    ensure
-      closed = true
-      if timer && ::UI.is_timer_running?(timer)
-        ::UI.stop_timer(timer)
-      end
-      if dlg.respond_to?(:visible?) && dlg.visible?
-        dlg.close
-      end
-    end
+    dlg.set_html(html)
+    dlg.show_modal
 
     nil
   end

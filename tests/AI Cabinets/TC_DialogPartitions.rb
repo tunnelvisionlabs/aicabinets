@@ -189,22 +189,31 @@ class TC_DialogPartitions < TestUp::TestCase
       fiber.resume if fiber.alive?
     end
 
+    timer_stopped = false
     timer = ::UI.start_timer(0.01, true) do
       next unless fiber.alive?
 
       if completed
         ::UI.stop_timer(timer)
+        timer_stopped = true
       elsif Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
         error = AICabinets::TestHarness::TimeoutError.new('Timed out waiting for HtmlDialog eval.')
         completed = true
         ::UI.stop_timer(timer)
+        timer_stopped = true
         fiber.resume if fiber.alive?
       end
     end
 
     Fiber.yield
 
-    ::UI.stop_timer(timer) if timer && ::UI.is_timer_running?(timer)
+    unless timer_stopped
+      begin
+        ::UI.stop_timer(timer)
+      rescue StandardError
+        # Timer may already be stopped by SketchUp; ignore.
+      end
+    end
 
     raise error if error
     raise AICabinets::TestHarness::TimeoutError, 'Timed out waiting for HtmlDialog eval.' unless result
