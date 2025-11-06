@@ -56,6 +56,15 @@ class TC_DialogPartitions < TestUp::TestCase
   def teardown
     @dialog_handle&.close
     @dialog_handle = nil
+
+    pump = UI::HtmlDialog.new(
+      dialog_title: 'Pump',
+      width: 1,
+      height: 1,
+      style: UI::HtmlDialog::STYLE_UTILITY
+    )
+    pump.set_html('<script>setTimeout(function(){ window.close(); }, 100);</script>')
+    pump.show_modal
   end
 
   def test_partition_mode_fieldset_accessibility
