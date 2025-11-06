@@ -10,6 +10,42 @@ Sketchup.require('aicabinets/test_harness')
 class TC_DialogPartitions < TestUp::TestCase
   include TestUiPump
   DEFAULT_TEST_TIMEOUT = 15.0
+  READY_SCRIPT = <<~JAVASCRIPT
+    (function () {
+      var attempts = 0;
+
+      function waitForApi(resolve, reject) {
+        var api = window.AICabinetsTest;
+        if (api && typeof api.ready === 'function') {
+          try {
+            var value = api.ready();
+            if (value && typeof value.then === 'function') {
+              value.then(resolve, reject);
+            } else {
+              resolve(value);
+            }
+          } catch (error) {
+            reject(error);
+          }
+          return;
+        }
+
+        attempts += 1;
+        if (attempts > 600) {
+          reject(new Error('AICabinetsTest.ready() unavailable after waiting.'));
+          return;
+        }
+
+        window.setTimeout(function () {
+          waitForApi(resolve, reject);
+        }, 10);
+      }
+
+      return new Promise(function (resolve, reject) {
+        waitForApi(resolve, reject);
+      });
+    })()
+  JAVASCRIPT
 
   def setup
     @dialog_handle = AICabinets::TestHarness.open_dialog_for_tests
@@ -169,7 +205,7 @@ class TC_DialogPartitions < TestUp::TestCase
   def ensure_dialog_ready
     return if @dialog_ready
 
-    result = await_js('AICabinetsTest.ready()')
+    result = await_js(READY_SCRIPT)
     @dialog_ready = true if result
     @ready_result = result
   end
