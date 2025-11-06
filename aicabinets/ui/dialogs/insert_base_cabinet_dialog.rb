@@ -112,6 +112,20 @@ module AICabinets
         end
         private_class_method :build_dialog
 
+        def enable_test_mode!
+          @dialog_test_mode = true
+        end
+
+        def disable_test_mode!
+          @dialog_test_mode = false
+        end
+
+        def test_mode?
+          !!@dialog_test_mode
+        end
+
+        private_class_method :enable_test_mode!, :disable_test_mode!, :test_mode?
+
         def dialog_context
           @dialog_context ||= { mode: :insert, prefill: nil, selection: nil }
         end
@@ -939,6 +953,9 @@ module AICabinets
           end
           dialog.add_action_callback('ui_partitions_changed') do |_context, payload|
             handle_ui_partitions_changed(dialog, payload)
+          end
+          dialog.add_action_callback('__aicabinets_test_eval') do |_context, payload|
+            handle_test_eval_payload(payload)
           end
         end
         private_class_method :attach_callbacks
@@ -1773,9 +1790,31 @@ module AICabinets
             return
           end
 
-          dialog.set_file(html_path)
+          if test_mode?
+            dialog.set_url(test_dialog_url_for(html_path))
+          else
+            dialog.set_file(html_path)
+          end
         end
         private_class_method :set_dialog_file
+
+        def test_dialog_url_for(path)
+          base = file_url_for(path)
+          separator = base.include?('?') ? '&' : '?'
+          "#{base}#{separator}__aicabinets_test__=true"
+        end
+        private_class_method :test_dialog_url_for
+
+        def file_url_for(path)
+          expanded = File.expand_path(path)
+          normalized = expanded.tr('\\', '/')
+
+          return "file:///#{normalized}" if normalized.match?(/^[a-zA-Z]:\//)
+          return "file://#{normalized}" if normalized.start_with?('/')
+
+          "file:///#{normalized}"
+        end
+        private_class_method :file_url_for
 
         def ensure_html_dialog_support
           return true if defined?(::UI::HtmlDialog)
@@ -1789,6 +1828,15 @@ module AICabinets
           warn("AI Cabinets: Unable to locate dialog asset: #{path}")
         end
         private_class_method :warn_missing_asset
+
+        def handle_test_eval_payload(payload)
+          return unless defined?(AICabinets::TestHarness)
+
+          AICabinets::TestHarness.handle_eval_payload(payload)
+        rescue StandardError => e
+          warn("AI Cabinets: Test evaluation payload failed: #{e.message}")
+        end
+        private_class_method :handle_test_eval_payload
       end
     end
   end

@@ -22,3 +22,6 @@ suite will appear in the TestUp panel as **AI Cabinets**.
   the edit workflow for **Only this instance** and **All instances**, and verifies
   definition keys, stored parameters, transforms, FLB origin invariance, and
   single-step undo behavior.
+* `TC_DialogPartitions` uses `AICabinets::TestHarness.open_dialog_for_tests` to
+  drive the insert dialog HtmlDialog in test mode, asserting partition gating,
+  bay chip behavior, live-region announcements, and per-bay editor round-trips.
