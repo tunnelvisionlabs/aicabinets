@@ -1,29 +1,39 @@
 # frozen_string_literal: true
 
-# Utilities to pump SketchUp's UI message loop during HtmlDialog tests.
+# Utilities to run a nested SketchUp UI message loop while waiting for
+# HtmlDialog callbacks. The helper opens a tiny off-screen modal dialog and
+# closes it either when the caller invokes the provided closer or when a
+# timeout elapses inside the dialog itself.
 module TestUiPump
-  # Pumps SketchUp's UI message loop for the given duration (seconds).
-  #
-  # HtmlDialog callbacks only fire while the UI loop runs. A tiny modal
-  # HtmlDialog spins a nested pump while it is open, so we display one
-  # off-screen and let it close itself via `window.close()` after the
-  # requested delay.
-  #
-  # @param duration [Numeric] number of seconds to keep the nested loop alive
-  # @return [void]
-  def process_ui_events(duration = 0.02)
-    return if duration <= 0
+  module_function
 
-    ms = (duration * 1000).to_i
+  # Runs a modal HtmlDialog pump for up to the specified timeout. The dialog
+  # auto-closes itself after the timeout via `window.close()`. Callers receive a
+  # block that yields the dialog instance and a `close_pump` lambda that closes
+  # the dialog immediately (marking the result as :callback). The method returns
+  # the symbol reason the pump closed (`:callback` or `:timeout`).
+  #
+  # @param timeout [Numeric] maximum seconds to keep the nested loop alive
+  # @yieldparam dialog [UI::HtmlDialog]
+  # @yieldparam close_pump [Proc]
+  # @yieldreturn [void]
+  # @return [Symbol] :callback if closed by the caller, otherwise :timeout
+  def with_modal_pump(timeout: 8.0)
+    raise ArgumentError, 'with_modal_pump requires a block.' unless block_given?
+
+    duration = timeout.to_f
+    raise ArgumentError, 'timeout must be positive.' if duration <= 0.0
+
+    timeout_ms = [(duration * 1000).to_i, 1].max
     html = <<~HTML
       <!doctype html><meta charset="utf-8">
       <style>html,body{margin:0;padding:0;overflow:hidden}</style>
       <script>
-        window.setTimeout(function(){ window.close(); }, #{ms});
+        window.setTimeout(function () { window.close(); }, #{timeout_ms});
       </script>
     HTML
 
-    dlg = ::UI::HtmlDialog.new(
+    dialog = ::UI::HtmlDialog.new(
       dialog_title: 'AI Cabinets Test Pump',
       width: 1,
       height: 1,
@@ -31,31 +41,47 @@ module TestUiPump
     )
 
     begin
-      dlg.set_position(-10_000, -10_000)
+      dialog.set_position(-10_000, -10_000)
     rescue StandardError
-      # Positioning can fail on some platforms; ignore and proceed.
+      # Some environments reject the off-screen position; a 1x1 dialog is fine.
     end
 
-    dlg.set_html(html)
-    dlg.show_modal
+    closed = false
+    reason = :timeout
 
-    nil
-  end
-
-  # Repeatedly pumps UI events until the provided block returns truthy or the
-  # timeout is reached.
-  #
-  # @param timeout [Numeric] overall timeout in seconds
-  # @param slice [Numeric] slice duration passed to {#process_ui_events}
-  # @yieldreturn [Boolean] true to stop waiting
-  # @raise [RuntimeError] if the timeout expires before the block returns true
-  def pump_until(timeout: 8.0, slice: 0.02)
-    deadline = Time.now + timeout
-
-    until yield
-      raise "timeout after #{timeout}s in pump_until" if Time.now > deadline
-
-      process_ui_events(slice)
+    dialog.set_on_closed do
+      closed = true
     end
+
+    close_pump = lambda do
+      next if closed
+
+      closed = true
+      reason = :callback
+      begin
+        dialog.close
+      rescue StandardError
+        # Dialog may already be closing; ignore.
+      end
+    end
+
+    dialog.set_html(html)
+
+    begin
+      yield(dialog, close_pump)
+      dialog.show_modal unless closed
+    ensure
+      unless closed
+        begin
+          dialog.close
+        rescue StandardError
+          # The dialog might not have been shown yet; ignore close errors.
+        ensure
+          closed = true
+        end
+      end
+    end
+
+    reason
   end
 end

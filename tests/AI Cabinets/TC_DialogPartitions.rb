@@ -51,17 +51,11 @@ class TC_DialogPartitions < TestUp::TestCase
     @dialog_handle = AICabinets::TestHarness.open_dialog_for_tests
     @dialog_ready = false
     @ready_result = nil
-    @current_test_fiber = nil
-    @async_done = false
-    @async_error = nil
   end
 
   def teardown
     @dialog_handle&.close
     @dialog_handle = nil
-    @current_test_fiber = nil
-    @async_done = false
-    @async_error = nil
   end
 
   def test_partition_mode_fieldset_accessibility
@@ -169,37 +163,11 @@ class TC_DialogPartitions < TestUp::TestCase
 
   private
 
-  def run_dialog_test(timeout: DEFAULT_TEST_TIMEOUT, &block)
+  def run_dialog_test(&block)
     raise ArgumentError, 'run_dialog_test requires a block' unless block_given?
 
-    @async_done = false
-    @async_error = nil
-
-    fiber = Fiber.new do
-      @current_test_fiber = Fiber.current
-      begin
-        ensure_dialog_ready
-        instance_eval(&block)
-      rescue StandardError => exception
-        @async_error = exception
-      ensure
-        @async_done = true
-        @current_test_fiber = nil
-      end
-    end
-
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
-    fiber.resume
-
-    until @async_done
-      flunk('Timed out waiting for async dialog test to finish.') if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-
-      process_ui_events
-    end
-
-    raise @async_error if @async_error
-  ensure
-    @current_test_fiber = nil
+    ensure_dialog_ready
+    instance_eval(&block)
   end
 
   def ensure_dialog_ready
@@ -211,48 +179,21 @@ class TC_DialogPartitions < TestUp::TestCase
   end
 
   def await_js(expression, timeout: DEFAULT_TEST_TIMEOUT)
-    fiber = @current_test_fiber
-    raise 'await_js must be used within run_dialog_test' unless fiber.is_a?(Fiber)
-
     result = nil
-    error = nil
-    completed = false
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
 
-    @dialog_handle.eval_js_async(expression) do |payload|
-      result = payload
-      completed = true
-      fiber.resume if fiber.alive?
-    end
-
-    timer_stopped = false
-    timer = ::UI.start_timer(0.01, true) do
-      next unless fiber.alive?
-
-      if completed
-        ::UI.stop_timer(timer)
-        timer_stopped = true
-      elsif Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-        error = AICabinets::TestHarness::TimeoutError.new('Timed out waiting for HtmlDialog eval.')
-        completed = true
-        ::UI.stop_timer(timer)
-        timer_stopped = true
-        fiber.resume if fiber.alive?
+    reason = with_modal_pump(timeout: timeout) do |_pump, close_pump|
+      @dialog_handle.eval_js_async(expression) do |payload|
+        result = payload
+        close_pump.call
       end
     end
 
-    Fiber.yield
+    if result.nil?
+      message = 'Timed out waiting for HtmlDialog eval.'
+      raise AICabinets::TestHarness::TimeoutError, message if reason == :timeout
 
-    unless timer_stopped
-      begin
-        ::UI.stop_timer(timer)
-      rescue StandardError
-        # Timer may already be stopped by SketchUp; ignore.
-      end
+      raise AICabinets::TestHarness::EvalError, 'HtmlDialog eval ended without a payload.'
     end
-
-    raise error if error
-    raise AICabinets::TestHarness::TimeoutError, 'Timed out waiting for HtmlDialog eval.' unless result
 
     return result[:value] if result[:ok]
 
@@ -264,7 +205,4 @@ class TC_DialogPartitions < TestUp::TestCase
     await_js('AICabinetsTest.getState()')
   end
 
-  def process_ui_events(interval = 0.01)
-    super
-  end
 end

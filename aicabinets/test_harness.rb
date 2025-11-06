@@ -23,6 +23,7 @@ module AICabinets
 
       @eval_results = {}
       @eval_callbacks = {}
+      @dispatching_eval_callback = false
 
       DialogHandle.new(dialog)
     end
@@ -49,9 +50,12 @@ module AICabinets
       return unless callback
 
       begin
+        @dispatching_eval_callback = true
         callback.call(normalize_eval_result(data))
       rescue StandardError => error
         warn("AI Cabinets: Error dispatching eval callback: #{error.message}")
+      ensure
+        @dispatching_eval_callback = false
       end
     end
 
@@ -183,6 +187,10 @@ module AICabinets
       JAVASCRIPT
     end
 
+    def dispatching_eval_callback?
+      !!@dispatching_eval_callback
+    end
+
     class DialogHandle
       def initialize(dialog)
         @dialog = dialog
@@ -205,16 +213,20 @@ module AICabinets
         token = TestHarness.next_token
         script = TestHarness.wrap_script(expression, token)
 
-        if block_given?
-          TestHarness.register_eval_callback(token, on_complete)
-        end
+        TestHarness.register_eval_callback(token, on_complete) if block_given?
 
-        ::UI.start_timer(0, false) do
+        dispatch = lambda do
           begin
             @dialog.execute_script(script)
           rescue StandardError => error
             TestHarness.dispatch_eval_failure(token, error)
           end
+        end
+
+        if TestHarness.dispatching_eval_callback?
+          ::UI.start_timer(0, false) { dispatch.call }
+        else
+          dispatch.call
         end
 
         token
