@@ -108,3 +108,13 @@ Generated base cabinets accept a `partitions` payload to divide the interior int
 ## Per-bay Controls
 
 The Insert/Edit HtmlDialog surfaces a bay selector (chips), shelf stepper, and door mode segmented control for each bay. Selecting **None** persists `door_mode: null`, while the Ruby helper blocks “Double” whenever the bay’s clear width cannot accommodate two leaves. Quality-of-life actions apply settings to every bay or mirror the left half to the right, skipping destinations that would violate the double-door constraints.
+
+## HtmlDialog Accessibility
+
+The Insert/Edit dialog ships with a predictable focus order and polite announcements so keyboard and assistive technology users receive the same feedback as mouse users.
+
+- Native radios live inside `<fieldset>/<legend>` groups for the partition mode selector, scope toggle, and bay editor switcher. Each option uses an explicit `<label for="…">` pairing so screen readers expose the full option text.
+- The bay chip strip keeps a single tab stop by following the roving `tabindex` pattern. Arrow keys move focus across buttons, `aria-selected` tracks the active bay, and Space/Enter confirm the selection without breaking the tab sequence.
+- A single visually hidden live region (`#sr-updates`) relays status changes. The JavaScript `LiveAnnouncer` helper coalesces messages (200 ms debounce) and sanitizes text before setting `textContent` to avoid spamming assistive tech.
+- Inactive controls are removed from the tab order with `HTMLElement.inert` when Chromium supports it, or a fallback that toggles `aria-hidden` and saves/restores prior tabindex values.
+- Validation errors reuse the same live region: `FormController#setFieldError` sets `aria-invalid`, updates the field’s inline message, and announces `{Label}: {Error}` when the text changes.

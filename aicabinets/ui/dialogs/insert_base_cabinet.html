@@ -16,6 +16,15 @@
         </p>
       </header>
 
+      <div
+        id="sr-updates"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        class="sr-only"
+        data-role="dialog-status"
+      ></div>
+
       <main class="dialog__content" role="main">
         <form class="form" data-role="insert-form" novalidate>
           <section class="dialog__scope is-hidden" data-role="scope-section">
@@ -24,32 +33,35 @@
                 <legend class="scope-toggle__legend" id="scope-toggle-legend">
                   Scope
                 </legend>
-                <div
-                  class="scope-toggle__options"
-                  role="radiogroup"
-                  aria-labelledby="scope-toggle-legend"
-                >
-                  <label class="scope-toggle__option">
+                <div class="scope-toggle__options">
+                  <div class="scope-toggle__option">
                     <input
                       type="radio"
+                      class="scope-toggle__input"
+                      id="scope-instance"
                       name="scope"
                       value="instance"
                       checked
                     />
-                    <span>This instance only</span>
-                  </label>
-                  <label class="scope-toggle__option">
-                    <input type="radio" name="scope" value="all" />
-                    <span>All instances</span>
-                  </label>
+                    <label class="scope-toggle__label" for="scope-instance">
+                      <span>This instance only</span>
+                    </label>
+                  </div>
+                  <div class="scope-toggle__option">
+                    <input
+                      type="radio"
+                      class="scope-toggle__input"
+                      id="scope-all"
+                      name="scope"
+                      value="all"
+                    />
+                    <label class="scope-toggle__label" for="scope-all">
+                      <span>All instances</span>
+                    </label>
+                  </div>
                 </div>
               </fieldset>
-              <p
-                class="scope-toggle__hint"
-                data-role="scope-hint"
-                aria-live="polite"
-                hidden
-              ></p>
+              <p class="scope-toggle__hint" data-role="scope-hint" hidden></p>
             </div>
             <p class="scope-note" data-role="scope-note" hidden>
               Scope: This cabinet (already unique).
@@ -59,16 +71,14 @@
           <p class="form__notice" data-role="units-note">
             Values without a suffix use the model’s display unit. Examples: 600, 450mm, 2' 3-1/2", 24 in.
           </p>
-          <div class="form__banner" data-role="form-banner" hidden aria-live="polite"></div>
+          <div class="form__banner" data-role="form-banner" hidden></div>
           <div
             class="form__placing-indicator"
             data-role="placing-indicator"
-            aria-live="polite"
             hidden
           >
             Placing cabinet… click in model.
           </div>
-          <div class="visually-hidden" data-role="dialog-status" aria-live="polite"></div>
 
           <section class="form__section">
             <h2 class="form__section-title">Dimensions</h2>
@@ -83,7 +93,7 @@
                   inputmode="decimal"
                 />
                 <p class="field-help">Overall cabinet width.</p>
-                <p class="field-error" data-error-for="width" aria-live="polite"></p>
+                <p class="field-error" data-error-for="width"></p>
               </div>
 
               <div class="form-field" data-field="depth">
@@ -96,7 +106,7 @@
                   inputmode="decimal"
                 />
                 <p class="field-help">Overall cabinet depth.</p>
-                <p class="field-error" data-error-for="depth" aria-live="polite"></p>
+                <p class="field-error" data-error-for="depth"></p>
               </div>
 
               <div class="form-field" data-field="height">
@@ -109,7 +119,7 @@
                   inputmode="decimal"
                 />
                 <p class="field-help">Overall cabinet height.</p>
-                <p class="field-error" data-error-for="height" aria-live="polite"></p>
+                <p class="field-error" data-error-for="height"></p>
               </div>
 
               <div class="form-field" data-field="panel_thickness">
@@ -122,7 +132,7 @@
                   inputmode="decimal"
                 />
                 <p class="field-help">Carcass panel thickness.</p>
-                <p class="field-error" data-error-for="panel_thickness" aria-live="polite"></p>
+                <p class="field-error" data-error-for="panel_thickness"></p>
               </div>
 
               <div class="form-field" data-field="toe_kick_height">
@@ -135,7 +145,7 @@
                   inputmode="decimal"
                 />
                 <p class="field-help">Height of the toe kick recess.</p>
-                <p class="field-error" data-error-for="toe_kick_height" aria-live="polite"></p>
+                <p class="field-error" data-error-for="toe_kick_height"></p>
               </div>
 
               <div class="form-field" data-field="toe_kick_depth">
@@ -148,7 +158,7 @@
                   inputmode="decimal"
                 />
                 <p class="field-help">Depth of the toe kick recess.</p>
-                <p class="field-error" data-error-for="toe_kick_depth" aria-live="polite"></p>
+                <p class="field-error" data-error-for="toe_kick_depth"></p>
               </div>
             </div>
           </section>
@@ -159,18 +169,43 @@
             <fieldset class="segmented-control" data-role="partition-mode-group">
               <legend class="segmented-control__legend">Partition mode</legend>
               <div class="segmented-control__options">
-                <label class="segmented-control__option">
-                  <input type="radio" name="partition_mode" value="none" checked />
-                  <span>None</span>
-                </label>
-                <label class="segmented-control__option">
-                  <input type="radio" name="partition_mode" value="vertical" />
-                  <span>Vertical (start left)</span>
-                </label>
-                <label class="segmented-control__option">
-                  <input type="radio" name="partition_mode" value="horizontal" />
-                  <span>Horizontal (start top)</span>
-                </label>
+                <div class="segmented-control__option">
+                  <input
+                    type="radio"
+                    class="segmented-control__input"
+                    id="partition-mode-none"
+                    name="partition_mode"
+                    value="none"
+                    checked
+                  />
+                  <label class="segmented-control__label" for="partition-mode-none">
+                    <span>None</span>
+                  </label>
+                </div>
+                <div class="segmented-control__option">
+                  <input
+                    type="radio"
+                    class="segmented-control__input"
+                    id="partition-mode-vertical"
+                    name="partition_mode"
+                    value="vertical"
+                  />
+                  <label class="segmented-control__label" for="partition-mode-vertical">
+                    <span>Vertical (start left)</span>
+                  </label>
+                </div>
+                <div class="segmented-control__option">
+                  <input
+                    type="radio"
+                    class="segmented-control__input"
+                    id="partition-mode-horizontal"
+                    name="partition_mode"
+                    value="horizontal"
+                  />
+                  <label class="segmented-control__label" for="partition-mode-horizontal">
+                    <span>Horizontal (start top)</span>
+                  </label>
+                </div>
               </div>
             </fieldset>
 
@@ -184,7 +219,7 @@
                   <option value="doors_double">Doors — double</option>
                 </select>
                 <p class="field-help">Choose the door configuration for the cabinet front.</p>
-                <p class="field-error" data-error-for="front" aria-live="polite"></p>
+                <p class="field-error" data-error-for="front"></p>
               </div>
 
               <div class="form-field" data-field="shelves" data-role="global-shelves-group">
@@ -198,7 +233,7 @@
                   step="1"
                 />
                 <p class="field-help">Number of adjustable shelves.</p>
-                <p class="field-error" data-error-for="shelves" aria-live="polite"></p>
+                <p class="field-error" data-error-for="shelves"></p>
               </div>
             </div>
             <div class="form__grid form__grid--columns" data-role="partition-controls">
@@ -212,7 +247,7 @@
                 <p class="field-help">
                   Add partitions to divide the interior. Choose even spacing or provide explicit positions.
                 </p>
-                <p class="field-error" data-error-for="partitions_mode" aria-live="polite"></p>
+                <p class="field-error" data-error-for="partitions_mode"></p>
               </div>
 
               <div class="form-field is-hidden" data-field="partitions_count" data-partitions-control="even">
@@ -226,7 +261,7 @@
                   step="1"
                 />
                 <p class="field-help">Number of evenly spaced partitions.</p>
-                <p class="field-error" data-error-for="partitions_count" aria-live="polite"></p>
+                <p class="field-error" data-error-for="partitions_count"></p>
               </div>
 
               <div class="form-field is-hidden" data-field="partitions_positions" data-partitions-control="positions">
@@ -242,7 +277,7 @@
                 <p class="field-help">
                   Comma-separated distances from the starting edge. Values must increase and use allowed units.
                 </p>
-                <p class="field-error" data-error-for="partitions_positions" aria-live="polite"></p>
+                <p class="field-error" data-error-for="partitions_positions"></p>
               </div>
             </div>
           </section>
@@ -260,29 +295,33 @@
                   id="bay-editor-toggle-legend"
                   data-role="bay-mode-legend"
                 ></legend>
-                <div
-                  class="bay-editor-toggle__options"
-                  role="radiogroup"
-                  aria-labelledby="bay-editor-toggle-legend"
-                >
-                  <label class="bay-editor-toggle__option">
+                <div class="bay-editor-toggle__options">
+                  <div class="bay-editor-toggle__option">
                     <input
                       type="radio"
+                      class="bay-editor-toggle__input"
+                      id="bay-editor-fronts"
                       name="bay-editor-mode"
                       value="fronts_shelves"
                       data-role="bay-mode-option"
                     />
-                    <span data-role="bay-mode-label-fronts"></span>
-                  </label>
-                  <label class="bay-editor-toggle__option">
+                    <label class="bay-editor-toggle__label" for="bay-editor-fronts">
+                      <span data-role="bay-mode-label-fronts"></span>
+                    </label>
+                  </div>
+                  <div class="bay-editor-toggle__option">
                     <input
                       type="radio"
+                      class="bay-editor-toggle__input"
+                      id="bay-editor-subpartitions"
                       name="bay-editor-mode"
                       value="subpartitions"
                       data-role="bay-mode-option"
                     />
-                    <span data-role="bay-mode-label-subpartitions"></span>
-                  </label>
+                    <label class="bay-editor-toggle__label" for="bay-editor-subpartitions">
+                      <span data-role="bay-mode-label-subpartitions"></span>
+                    </label>
+                  </div>
                 </div>
               </fieldset>
 
@@ -355,7 +394,7 @@
                       <span data-role="bay-door-label-double"></span>
                     </label>
                   </div>
-                  <p class="bay-door__hint" data-role="bay-double-hint" aria-live="polite" hidden></p>
+              <p class="bay-door__hint" data-role="bay-double-hint" hidden></p>
                 </fieldset>
               </div>
 
@@ -394,7 +433,6 @@
                 <button type="button" class="button button--tertiary" data-role="bay-copy-lr" hidden></button>
               </div>
 
-              <div class="visually-hidden" aria-live="polite" data-role="bay-status"></div>
             </div>
           </section>
         </form>

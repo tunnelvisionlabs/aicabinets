@@ -110,10 +110,11 @@ body {
 .segmented-control__option {
   position: relative;
   flex: 1 1 160px;
+  display: flex;
 }
 
-.scope-toggle__option input[type='radio'],
-.segmented-control__option input[type='radio'] {
+.scope-toggle__input,
+.segmented-control__input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -124,8 +125,8 @@ body {
   clip-path: inset(50%);
 }
 
-.scope-toggle__option span,
-.segmented-control__option span {
+.scope-toggle__label,
+.segmented-control__label {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,18 +141,18 @@ body {
     box-shadow 0.15s ease;
 }
 
-.scope-toggle__option span:hover,
-.segmented-control__option span:hover {
+.scope-toggle__label:hover,
+.segmented-control__label:hover {
   background-color: rgba(30, 136, 229, 0.12);
 }
 
-.scope-toggle__option input[type='radio']:focus-visible + span,
-.segmented-control__option input[type='radio']:focus-visible + span {
+.scope-toggle__input:focus-visible + .scope-toggle__label,
+.segmented-control__input:focus-visible + .segmented-control__label {
   box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.35);
 }
 
-.scope-toggle__option input[type='radio']:checked + span,
-.segmented-control__option input[type='radio']:checked + span {
+.scope-toggle__input:checked + .scope-toggle__label,
+.segmented-control__input:checked + .segmented-control__label {
   background-color: #1e88e5;
   color: #ffffff;
   border-color: #1e88e5;
@@ -269,10 +270,50 @@ body {
 }
 
 .bay-editor-toggle__option {
-  display: inline-flex;
+  position: relative;
+  display: flex;
+  flex: 1 1 160px;
+}
+
+.bay-editor-toggle__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.bay-editor-toggle__label {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(30, 136, 229, 0.35);
+  background-color: rgba(255, 255, 255, 0.95);
+  color: inherit;
   font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.bay-editor-toggle__label:hover {
+  background-color: rgba(30, 136, 229, 0.12);
+}
+
+.bay-editor-toggle__input:focus-visible + .bay-editor-toggle__label {
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.35);
+}
+
+.bay-editor-toggle__input:checked + .bay-editor-toggle__label {
+  background-color: #1e88e5;
+  color: #ffffff;
+  border-color: #1e88e5;
+  box-shadow: 0 0 0 1px rgba(30, 136, 229, 0.55);
 }
 
 .bay__editor {
@@ -309,7 +350,7 @@ body {
   box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.35);
 }
 
-.bay-chip[aria-pressed='true'] {
+.bay-chip[aria-selected='true'] {
   background-color: #1e88e5;
   color: #ffffff;
   border-color: #1e88e5;
@@ -466,6 +507,7 @@ body {
   gap: 8px;
 }
 
+.sr-only,
 .visually-hidden {
   position: absolute !important;
   width: 1px;
