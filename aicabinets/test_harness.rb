@@ -21,6 +21,9 @@ module AICabinets
       dialog = dialog_module.show
       raise 'Failed to create HtmlDialog for tests.' unless dialog
 
+      @eval_results = {}
+      @eval_callbacks = {}
+
       DialogHandle.new(dialog)
     end
 
@@ -28,6 +31,7 @@ module AICabinets
       data = JSON.parse(payload.to_s)
       token = data['token']
       store_eval_result(token, data)
+      notify_eval_callback(token, data)
     rescue JSON::ParserError => e
       warn("AI Cabinets: Unable to parse test eval payload: #{e.message}")
     end
@@ -35,12 +39,29 @@ module AICabinets
     def store_eval_result(token, data)
       return unless token
 
-      @eval_results ||= {}
       @eval_results[token] = data
     end
 
+    def notify_eval_callback(token, data)
+      return unless token
+
+      callback = @eval_callbacks.delete(token)
+      return unless callback
+
+      begin
+        callback.call(normalize_eval_result(data))
+      rescue StandardError => error
+        warn("AI Cabinets: Error dispatching eval callback: #{error.message}")
+      end
+    end
+
+    def register_eval_callback(token, callback)
+      return unless token && callback
+
+      @eval_callbacks[token] = callback
+    end
+
     def take_eval_result(token, timeout: DEFAULT_TIMEOUT)
-      @eval_results ||= {}
       deadline = Time.now + timeout
       loop do
         data = @eval_results.delete(token)
@@ -157,16 +178,30 @@ module AICabinets
         @dialog = dialog
       end
 
-      def eval_js(expression, timeout: DEFAULT_TIMEOUT)
+      def eval_js(*_args, **_kwargs)
+        message = if @dialog
+                    'HtmlDialog evals must be asynchronous in SketchUp tests. '\
+                      'Use #eval_js_async and wait for the callback instead.'
+                  else
+                    'Dialog is closed.'
+                  end
+        error_class = @dialog ? SynchronousEvalUnsupportedError : RuntimeError
+        raise(error_class, message)
+      end
+
+      def eval_js_async(expression, &on_complete)
         raise 'Dialog is closed.' unless @dialog
 
         token = TestHarness.next_token
         script = TestHarness.wrap_script(expression, token)
-        @dialog.execute_script(script)
-        result = TestHarness.take_eval_result(token, timeout: timeout)
-        raise EvalError, result[:error] unless result[:ok]
 
-        result[:value]
+        if block_given?
+          TestHarness.register_eval_callback(token, on_complete)
+        end
+
+        @dialog.execute_script(script)
+
+        token
       end
 
       def close
@@ -183,5 +218,6 @@ module AICabinets
 
     class EvalError < StandardError; end
     class TimeoutError < StandardError; end
+    class SynchronousEvalUnsupportedError < StandardError; end
   end
 end

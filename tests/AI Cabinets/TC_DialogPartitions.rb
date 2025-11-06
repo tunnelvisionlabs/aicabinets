@@ -10,6 +10,7 @@ class TC_DialogPartitions < TestUp::TestCase
   def setup
     @dialog_handle = AICabinets::TestHarness.open_dialog_for_tests
     @dialog_ready = false
+    @ready_result = nil
   end
 
   def teardown
@@ -43,31 +44,31 @@ class TC_DialogPartitions < TestUp::TestCase
     assert(gating['globalsVisible'], 'Globals should be visible in none mode')
     refute(gating['baysVisible'], 'Bays should be hidden when partition mode is none')
 
-    vertical_state = eval_js('AICabinetsTest.setPartitionMode("vertical")')
+    vertical_state = await_js('AICabinetsTest.setPartitionMode("vertical")')
     gating_vertical = vertical_state.fetch('gating')
     assert(gating_vertical['baysVisible'], 'Bays should be visible in vertical mode')
     refute(gating_vertical['globalsVisible'], 'Global fronts should be hidden in vertical mode')
 
-    message = eval_js('AICabinetsTest.lastLiveRegion()')
+    message = await_js('AICabinetsTest.lastLiveRegion()')
     assert_includes(message, 'Vertical', 'Expected live region message for vertical mode')
 
-    horizontal_state = eval_js('AICabinetsTest.setPartitionMode("horizontal")')
+    horizontal_state = await_js('AICabinetsTest.setPartitionMode("horizontal")')
     gating_horizontal = horizontal_state.fetch('gating')
     assert(gating_horizontal['baysVisible'], 'Bays should be visible in horizontal mode')
-    message_horizontal = eval_js('AICabinetsTest.lastLiveRegion()')
+    message_horizontal = await_js('AICabinetsTest.lastLiveRegion()')
     assert_includes(message_horizontal, 'Horizontal', 'Expected live region message for horizontal mode')
   end
 
   def test_bay_chips_count_and_first_click_selects
-    eval_js('AICabinetsTest.setPartitionMode("vertical")')
-    state = eval_js('AICabinetsTest.setTopCount(2)')
+    await_js('AICabinetsTest.setPartitionMode("vertical")')
+    state = await_js('AICabinetsTest.setTopCount(2)')
 
     chips = state['chips']
     assert_equal(3, chips.length, 'Expected count + 1 chips when count = 2')
     assert_equal(['Bay 1', 'Bay 2', 'Bay 3'], chips.map { |chip| chip['label'] })
     assert(chips.first['selected'], 'First chip should start selected')
 
-    after_click = eval_js('AICabinetsTest.clickBay(2)')
+    after_click = await_js('AICabinetsTest.clickBay(2)')
     assert_equal(2, after_click['selected_bay_index'])
     chip_selection = after_click['chips'].map { |chip| chip['selected'] }
     assert_equal([false, false, true], chip_selection, 'Expected the third chip to be selected after first click')
@@ -77,18 +78,18 @@ class TC_DialogPartitions < TestUp::TestCase
   end
 
   def test_selection_clamped_when_count_decreases
-    eval_js('AICabinetsTest.setPartitionMode("vertical")')
-    eval_js('AICabinetsTest.setTopCount(3)')
-    eval_js('AICabinetsTest.clickBay(3)')
+    await_js('AICabinetsTest.setPartitionMode("vertical")')
+    await_js('AICabinetsTest.setTopCount(3)')
+    await_js('AICabinetsTest.clickBay(3)')
 
-    reduced = eval_js('AICabinetsTest.setTopCount(1)')
+    reduced = await_js('AICabinetsTest.setTopCount(1)')
     assert_equal(1, reduced['selected_bay_index'], 'Selection should clamp to the last available bay')
     assert_equal(2, reduced['chips'].length, 'Count 1 should render two bays')
   end
 
   def test_per_bay_editor_round_trip_preserves_fronts
-    eval_js('AICabinetsTest.setPartitionMode("vertical")')
-    eval_js('AICabinetsTest.setTopCount(1)')
+    await_js('AICabinetsTest.setPartitionMode("vertical")')
+    await_js('AICabinetsTest.setTopCount(1)')
 
     seed_fronts_script = <<~JAVASCRIPT
       (function () {
@@ -99,12 +100,12 @@ class TC_DialogPartitions < TestUp::TestCase
         return true;
       })()
     JAVASCRIPT
-    eval_js(seed_fronts_script)
+    await_js(seed_fronts_script)
 
-    eval_js('AICabinetsTest.toggleBayEditor("subpartitions")')
-    eval_js('AICabinetsTest.setNestedCount(2)')
+    await_js('AICabinetsTest.toggleBayEditor("subpartitions")')
+    await_js('AICabinetsTest.setNestedCount(2)')
 
-    restored = eval_js('AICabinetsTest.toggleBayEditor("fronts_shelves")')
+    restored = await_js('AICabinetsTest.toggleBayEditor("fronts_shelves")')
     fronts = restored.dig('baySnapshot', 'selected', 'fronts_shelves_state')
     assert_equal(4, fronts['shelf_count'], 'Shelf count should survive bay editor toggles')
     assert_equal('doors_left', fronts['door_mode'], 'Door mode should survive bay editor toggles')
@@ -112,54 +113,55 @@ class TC_DialogPartitions < TestUp::TestCase
 
   private
 
-  def wait_for_ready
-    deadline = Time.now + 15
-
-    loop do
-      script = <<~'JAVASCRIPT'
-        (function () {
-          if (!window.AICabinetsTest || typeof window.AICabinetsTest.ready !== 'function') {
-            return '__pending__';
-          }
-          return window.AICabinetsTest.ready();
-        })()
-      JAVASCRIPT
-
-      result = begin
-        raw_eval_js(script)
-      rescue AICabinets::TestHarness::EvalError
-        '__pending__'
-      end
-
-      if result.is_a?(Hash)
-        @dialog_ready = true
-        return result
-      end
-
-      break if Time.now > deadline
-      sleep(0.05)
-    end
-
-    flunk('Timed out waiting for HtmlDialog test namespace to become ready.')
-  end
-
   def ensure_dialog_ready
     return if @dialog_ready
 
     wait_for_ready
   end
 
-  def eval_js(expression)
-    ensure_dialog_ready
-    @dialog_handle.eval_js(expression)
+  def wait_for_ready
+    wait_for_async('AICabinetsTest.ready()') do |result|
+      if result[:ok]
+        @dialog_ready = true
+        @ready_result = result[:value]
+      end
+    end
+    flunk('Timed out waiting for HtmlDialog test namespace to become ready.') unless @dialog_ready
   end
 
-  def raw_eval_js(expression)
-    @dialog_handle.eval_js(expression)
+  def await_js(expression)
+    ensure_dialog_ready
+    wait_for_async(expression) do |result|
+      return result[:value] if result[:ok]
+
+      raise AICabinets::TestHarness::EvalError, result[:error]
+    end
+    raise AICabinets::TestHarness::TimeoutError, 'Timed out waiting for HtmlDialog eval.'
   end
 
   def dialog_state
     ensure_dialog_ready
-    raw_eval_js('AICabinetsTest.getState()')
+    await_js('AICabinetsTest.getState()')
+  end
+
+  def wait_for_async(expression)
+    finished = false
+    payload = nil
+
+    @dialog_handle.eval_js_async(expression) do |result|
+      payload = result
+      finished = true
+    end
+
+    deadline = Time.now + 15.0
+    until finished
+      if Time.now > deadline
+        return nil
+      end
+
+      sleep(0.01)
+    end
+
+    block_given? ? yield(payload) : payload
   end
 end
