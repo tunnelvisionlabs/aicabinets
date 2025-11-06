@@ -101,6 +101,7 @@ Generated base cabinets accept a `partitions` payload to divide the interior int
   - `even` spaces `count` partitions so the resulting `count + 1` bays have nearly equal clear widths.
 - `positions` places partitions at explicit offsets measured in millimeters from the cabinet’s left outside face to each partition’s left face.
 - `bays` stores per-bay settings such as `shelf_count` and `door_mode`. Its length always matches `count + 1`, and missing or partial entries are filled from the active defaults.
+- Shelves and door fronts are generated per leaf bay. Parent bays that declare `subpartitions` skip shelf/front geometry so nested bays can provide their own counts and door modes. Each door leaf uses the bay’s clear width, subtracts edge/top/bottom reveals, and for doubles splits the remaining width around the configured center gap.
 - Each bay may define a `subpartitions` container with its own `count`, `orientation`, and nested `bays`. The sanitizer forces nested orientations to stay perpendicular to the parent partitions and fills missing bays to `count + 1`.
 - Partitions use the carcass panel thickness (or an explicit `panel_thickness_mm` value when provided) and span the interior height (top of the bottom panel to the underside of the top or stringers) and depth (front face to the back panel).
 - Invalid or overlapping requests are ignored, and the generator logs warnings when positions are clamped to the cabinet interior or discarded because they violate minimum bay widths.

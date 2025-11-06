@@ -519,7 +519,7 @@ module AICabinets
                     :door_top_reveal_mm, :door_bottom_reveal_mm,
                     :door_center_reveal_mm, :door_edge_reveal,
                     :door_top_reveal, :door_bottom_reveal,
-                    :door_center_reveal
+                    :door_center_reveal, :partition_bays
 
         def initialize(params_mm)
           @width_mm = params_mm[:width_mm].to_f
@@ -643,6 +643,8 @@ module AICabinets
               @partition_bay_ranges_mm = [[left, right]]
             end
           end
+
+          @partition_bays = build_partition_bays(params_mm[:partitions])
         end
 
         class << self
@@ -733,6 +735,145 @@ module AICabinets
           numeric
         rescue ArgumentError, TypeError
           nil
+        end
+
+        def build_partition_bays(raw_partitions)
+          ranges = @partition_bay_ranges_mm
+          return [] if ranges.empty?
+
+          normalized = normalize_hash(raw_partitions)
+          raw_bays = Array(normalized[:bays])
+          count = ranges.length
+
+          Array.new(count) do |index|
+            bounds_start_mm, bounds_end_mm = ranges[index]
+            bay_hash = normalize_hash(raw_bays[index])
+            fronts_state = normalize_hash(bay_hash[:fronts_shelves_state])
+            sub_state = normalize_hash(bay_hash[:subpartitions_state])
+            sub_config = normalize_hash(bay_hash[:subpartitions])
+
+            shelf_count = extract_shelf_count(bay_hash, fronts_state)
+            door_mode = normalize_bay_door_mode(
+              extract_door_mode(bay_hash, fronts_state)
+            )
+            mode = normalize_bay_mode(bay_hash[:mode])
+            subpartition_count = extract_subpartition_count(sub_state, sub_config)
+
+            PartitionBay.new(
+              index: index,
+              start_mm: bounds_start_mm,
+              end_mm: bounds_end_mm,
+              shelf_count: shelf_count,
+              door_mode: door_mode,
+              mode: mode,
+              subpartition_count: subpartition_count
+            )
+          end
+        end
+
+        def normalize_hash(value)
+          return {} unless value.is_a?(Hash)
+
+          value.each_with_object({}) do |(key, entry), memo|
+            memo[key.is_a?(String) ? key.to_sym : key] = entry
+          end
+        end
+
+        def extract_shelf_count(bay_hash, fronts_state)
+          shelf_value =
+            if bay_hash.key?(:shelf_count)
+              bay_hash[:shelf_count]
+            else
+              fronts_state[:shelf_count]
+            end
+
+          coerce_non_negative_integer(shelf_value) || 0
+        end
+
+        def extract_door_mode(bay_hash, fronts_state)
+          return bay_hash[:door_mode] if bay_hash.key?(:door_mode)
+
+          fronts_state[:door_mode]
+        end
+
+        def extract_subpartition_count(sub_state, sub_config)
+          count = coerce_non_negative_integer(sub_state[:count])
+          count ||= coerce_non_negative_integer(sub_config[:count])
+          count || 0
+        end
+
+        def coerce_non_negative_integer(value)
+          return nil if value.nil?
+
+          integer =
+            if value.is_a?(Integer)
+              value
+            elsif value.is_a?(Numeric)
+              value.to_i
+            else
+              Integer(value)
+            end
+
+          return nil if integer.negative?
+
+          integer
+        rescue ArgumentError, TypeError
+          nil
+        end
+
+        def normalize_bay_mode(value)
+          text = value.to_s.strip.downcase
+          case text
+          when 'subpartitions'
+            :subpartitions
+          else
+            :fronts_shelves
+          end
+        end
+
+        def normalize_bay_door_mode(value)
+          return :none if value.nil?
+
+          text = value.to_s.strip.downcase
+          return :none if text.empty?
+
+          mappings = {
+            'none' => :none,
+            'doors_none' => :none,
+            'empty' => :none,
+            'left' => :left,
+            'doors_left' => :left,
+            'right' => :right,
+            'doors_right' => :right,
+            'double' => :double,
+            'doors_double' => :double
+          }
+
+          mappings.fetch(text, :none)
+        end
+
+        class PartitionBay
+          attr_reader :index, :start_mm, :end_mm, :shelf_count, :door_mode
+
+          def initialize(index:, start_mm:, end_mm:, shelf_count:, door_mode:, mode:, subpartition_count:)
+            @index = index
+            @start_mm = start_mm.to_f
+            @end_mm = end_mm.to_f
+            @shelf_count = shelf_count.to_i
+            @door_mode = door_mode
+            @mode = mode
+            @subpartition_count = subpartition_count.to_i
+          end
+
+          def width_mm
+            [@end_mm - @start_mm, 0.0].max
+          end
+
+          def leaf?
+            return false if @mode == :subpartitions
+
+            @subpartition_count <= 0
+          end
         end
 
         def normalize_top_type(value)
