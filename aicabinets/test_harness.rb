@@ -7,7 +7,7 @@ require 'aicabinets/ui/dialogs/insert_base_cabinet_dialog'
 
 module AICabinets
   module TestHarness
-    DEFAULT_TIMEOUT = 5.0
+    DEFAULT_TIMEOUT = 8.0
     module_function
 
     def open_dialog_for_tests
@@ -77,6 +77,37 @@ module AICabinets
       token_json = JSON.generate(token.to_s)
       <<~JAVASCRIPT
         (function () {
+          function dispatchTestResult(json) {
+            if (window.sketchup && typeof window.sketchup.__aicabinets_test_eval === 'function') {
+              window.sketchup.__aicabinets_test_eval(json);
+              return true;
+            }
+
+            return false;
+          }
+
+          function scheduleDispatch(json) {
+            var attempts = 0;
+
+            function attemptDispatch() {
+              if (dispatchTestResult(json)) {
+                return;
+              }
+
+              if (attempts >= 400) {
+                if (window.console && typeof window.console.warn === 'function') {
+                  window.console.warn('AI Cabinets test harness: eval callback unavailable.');
+                }
+                return;
+              }
+
+              attempts += 1;
+              window.setTimeout(attemptDispatch, 10);
+            }
+
+            attemptDispatch();
+          }
+
           function postResult(success, payload) {
             var message = { token: #{token_json}, ok: success };
             if (success) {
@@ -89,8 +120,13 @@ module AICabinets
             } else {
               message.error = payload && payload.message ? payload.message : String(payload);
             }
-            if (window.sketchup && typeof window.sketchup.__aicabinets_test_eval === 'function') {
-              window.sketchup.__aicabinets_test_eval(JSON.stringify(message));
+
+            try {
+              scheduleDispatch(JSON.stringify(message));
+            } catch (error) {
+              if (window.console && typeof window.console.error === 'function') {
+                window.console.error('AI Cabinets test harness: failed to dispatch eval result.', error);
+              }
             }
           }
 

@@ -113,9 +113,31 @@ class TC_DialogPartitions < TestUp::TestCase
   private
 
   def wait_for_ready
-    result = @dialog_handle.eval_js('AICabinetsTest.ready()')
-    assert_kind_of(Hash, result)
-    result
+    deadline = Time.now + 15
+
+    loop do
+      script = <<~'JAVASCRIPT'
+        (function () {
+          if (!window.AICabinetsTest || typeof window.AICabinetsTest.ready !== 'function') {
+            return '__pending__';
+          }
+          return window.AICabinetsTest.ready();
+        })()
+      JAVASCRIPT
+
+      result = begin
+        @dialog_handle.eval_js(script)
+      rescue AICabinets::TestHarness::EvalError
+        '__pending__'
+      end
+
+      return result if result.is_a?(Hash)
+
+      break if Time.now > deadline
+      sleep(0.05)
+    end
+
+    flunk('Timed out waiting for HtmlDialog test namespace to become ready.')
   end
 
   def dialog_state
