@@ -2165,7 +2165,7 @@
     );
     this.partitionControls = form.querySelector('[data-role="partition-controls"]');
     this.baySection = form.querySelector('[data-role="bay-section"]');
-    this.statusRegion = form.querySelector('[data-role="dialog-status"]');
+    this.statusRegion = document.querySelector('[data-role="dialog-status"]');
     this.liveAnnouncer = new LiveAnnouncer(this.statusRegion, { delay: 200 });
     if (this.statusRegion) {
       this.statusRegion.setAttribute('aria-label', translate('live_region_title'));
