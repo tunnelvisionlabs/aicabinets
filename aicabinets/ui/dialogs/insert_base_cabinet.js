@@ -116,6 +116,156 @@
     return key;
   }
 
+  var FOCUSABLE_SELECTOR =
+    'a[href], area[href], button, input, select, textarea, [tabindex], [contenteditable="true"]';
+
+  function collapseWhitespace(value) {
+    if (value == null) {
+      return '';
+    }
+
+    return String(value).replace(/\s+/g, ' ').trim();
+  }
+
+  function ensureDescribedBy(control, id) {
+    if (!control || !id) {
+      return;
+    }
+
+    var tokens = (control.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+    if (tokens.indexOf(id) === -1) {
+      tokens.push(id);
+    }
+
+    if (tokens.length) {
+      control.setAttribute('aria-describedby', tokens.join(' '));
+    }
+  }
+
+  function setElementInert(element, inert) {
+    if (!element) {
+      return;
+    }
+
+    if ('inert' in element) {
+      element.inert = !!inert;
+      if (!inert) {
+        element.removeAttribute('aria-hidden');
+      }
+      return;
+    }
+
+    if (inert) {
+      element.setAttribute('aria-hidden', 'true');
+      element.setAttribute('data-inert-applied', 'true');
+      var focusable = element.querySelectorAll(FOCUSABLE_SELECTOR);
+      for (var index = 0; index < focusable.length; index += 1) {
+        var node = focusable[index];
+        if (!node) {
+          continue;
+        }
+        if (!node.hasAttribute('data-inert-tabindex')) {
+          var current = node.getAttribute('tabindex');
+          node.setAttribute('data-inert-tabindex', current != null ? current : '');
+        }
+        node.setAttribute('tabindex', '-1');
+      }
+    } else {
+      if (element.getAttribute('data-inert-applied') === 'true') {
+        element.removeAttribute('data-inert-applied');
+        var nodes = element.querySelectorAll('[data-inert-tabindex]');
+        for (var i = 0; i < nodes.length; i += 1) {
+          var target = nodes[i];
+          if (!target) {
+            continue;
+          }
+          var previous = target.getAttribute('data-inert-tabindex');
+          target.removeAttribute('data-inert-tabindex');
+          if (previous === null || previous === '') {
+            target.removeAttribute('tabindex');
+          } else {
+            target.setAttribute('tabindex', previous);
+          }
+        }
+      }
+      element.removeAttribute('aria-hidden');
+    }
+  }
+
+  function LiveAnnouncer(element, options) {
+    options = options || {};
+    this.element = element || null;
+    this.delay = typeof options.delay === 'number' && options.delay >= 0 ? options.delay : 200;
+    this.pendingMessage = '';
+    this.timerId = null;
+  }
+
+  LiveAnnouncer.prototype.setElement = function setElement(element) {
+    this.element = element || null;
+  };
+
+  LiveAnnouncer.prototype.sanitize = function sanitize(message) {
+    if (message == null) {
+      return '';
+    }
+
+    var text = String(message);
+    if (!text) {
+      return '';
+    }
+
+    return text.replace(/\s+/g, ' ').trim();
+  };
+
+  LiveAnnouncer.prototype.post = function post(message, options) {
+    var text = this.sanitize(message);
+    if (!text || !this.element) {
+      return;
+    }
+
+    this.pendingMessage = text;
+    var immediate = options && options.immediate;
+    var delay = this.delay;
+    if (options && typeof options.delay === 'number' && options.delay >= 0) {
+      delay = options.delay;
+    }
+
+    if (immediate) {
+      this.flush();
+      return;
+    }
+
+    var self = this;
+    window.clearTimeout(this.timerId);
+    this.timerId = window.setTimeout(function () {
+      self.flush();
+    }, delay);
+  };
+
+  LiveAnnouncer.prototype.flush = function flush() {
+    if (!this.element || !this.pendingMessage) {
+      return;
+    }
+
+    window.clearTimeout(this.timerId);
+    this.timerId = null;
+
+    var message = this.pendingMessage;
+    this.pendingMessage = '';
+
+    this.element.textContent = '';
+    this.element.textContent = message;
+  };
+
+  LiveAnnouncer.prototype.clear = function clear() {
+    window.clearTimeout(this.timerId);
+    this.timerId = null;
+    this.pendingMessage = '';
+    if (this.element) {
+      this.element.textContent = '';
+    }
+  };
+
   function parsePayload(value) {
     if (typeof value === 'string') {
       try {
@@ -280,6 +430,8 @@
     this.selectedIndex = 0;
     this.bays = [];
     this.chipButtons = [];
+    this.focusedIndex = 0;
+    this.lastRenderedBayCount = 0;
     this.doubleValidity = [];
     this.template = cloneBay(null);
     this.shelfLock = false;
@@ -322,7 +474,6 @@
       this.applyAllButton = null;
       this.copyButton = null;
       this.actionsContainer = null;
-      this.statusRegion = null;
       this.subpartitionLock = false;
       return;
     }
@@ -366,7 +517,6 @@
     this.applyAllButton = this.root.querySelector('[data-role="bay-apply-all"]');
     this.copyButton = this.root.querySelector('[data-role="bay-copy-lr"]');
     this.actionsContainer = this.root.querySelector('[data-role="bay-actions"]');
-    this.statusRegion = this.root.querySelector('[data-role="bay-status"]');
     this.subpartitionLock = false;
   };
 
@@ -444,9 +594,6 @@
     }
     if (this.copyButton) {
       this.copyButton.textContent = this.translate('copy_left_to_right_label');
-    }
-    if (this.statusRegion) {
-      this.statusRegion.setAttribute('aria-label', this.translate('live_region_title'));
     }
   };
 
@@ -528,12 +675,14 @@
     }
 
     var container = this.chipsContainer;
-    var existing = this.chipButtons ? this.chipButtons.slice() : [];
     var desiredCount = this.bays.length;
-    var clampedIndex = clampSelectedIndex(this.selectedIndex, desiredCount);
-    if (clampedIndex !== this.selectedIndex) {
-      this.selectedIndex = clampedIndex;
+    if (desiredCount < 1) {
+      desiredCount = 1;
     }
+
+    var existing = this.chipButtons ? this.chipButtons.slice() : [];
+    var activeBefore = document.activeElement;
+    var hadFocusInside = activeBefore && container.contains(activeBefore);
 
     var newButtons = [];
 
@@ -545,9 +694,6 @@
         button.className = 'bay-chip';
       }
 
-      // Update the existing nodes in place so delegated handlers remain intact;
-      // replacing the innerHTML here has caused listeners to disappear before
-      // SketchUp invokes them.
       var referenceNode = container.children[index] || null;
       if (referenceNode !== button) {
         container.insertBefore(button, referenceNode);
@@ -558,8 +704,6 @@
         button.textContent = label;
       }
       button.setAttribute('data-index', String(index));
-      button.setAttribute('aria-pressed', index === this.selectedIndex ? 'true' : 'false');
-      button.tabIndex = index === this.selectedIndex ? 0 : -1;
 
       newButtons.push(button);
     }
@@ -580,13 +724,101 @@
     }
 
     this.chipButtons = newButtons;
+    this.selectedIndex = clampSelectedIndex(this.selectedIndex, desiredCount);
+    this.focusedIndex = clampSelectedIndex(
+      this.focusedIndex != null ? this.focusedIndex : this.selectedIndex,
+      desiredCount
+    );
 
+    var lostFocus =
+      hadFocusInside && (!activeBefore || !container.contains(activeBefore) || !document.contains(activeBefore));
+
+    this.refreshChipAttributes({ focus: lostFocus && !this.buttonsDisabled });
     this.updateActionsVisibility();
-    this.announce(this.translate('bay_count_status', { count: this.bays.length }));
+    this.lastRenderedBayCount = desiredCount;
+  };
+
+  BayController.prototype.refreshChipAttributes = function refreshChipAttributes(options) {
+    if (!this.chipButtons || !this.chipButtons.length) {
+      return;
+    }
+
+    var clampedFocus = clampSelectedIndex(
+      this.focusedIndex != null ? this.focusedIndex : 0,
+      this.chipButtons.length
+    );
+    this.focusedIndex = clampedFocus;
+
+    for (var index = 0; index < this.chipButtons.length; index += 1) {
+      var button = this.chipButtons[index];
+      if (!button) {
+        continue;
+      }
+      var isSelected = index === this.selectedIndex;
+      button.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      button.tabIndex = index === clampedFocus ? 0 : -1;
+      if (this.buttonsDisabled) {
+        button.setAttribute('aria-disabled', 'true');
+      } else {
+        button.removeAttribute('aria-disabled');
+      }
+    }
+
+    if (
+      options &&
+      options.focus &&
+      !this.buttonsDisabled &&
+      this.chipButtons[clampedFocus] &&
+      typeof this.chipButtons[clampedFocus].focus === 'function'
+    ) {
+      this.chipButtons[clampedFocus].focus();
+    }
+  };
+
+  BayController.prototype.setFocusIndex = function setFocusIndex(index, options) {
+    if (!this.chipButtons || !this.chipButtons.length) {
+      return;
+    }
+
+    var clamped = clampSelectedIndex(index, this.chipButtons.length);
+    this.focusedIndex = clamped;
+    this.refreshChipAttributes({ focus: options && options.focus });
+  };
+
+  BayController.prototype.moveFocusToIndex = function moveFocusToIndex(index) {
+    if (!this.chipButtons || !this.chipButtons.length) {
+      return;
+    }
+
+    var clamped = clampSelectedIndex(index, this.chipButtons.length);
+    if (clamped === this.focusedIndex) {
+      return;
+    }
+
+    this.focusedIndex = clamped;
+    this.refreshChipAttributes({ focus: true });
+  };
+
+  BayController.prototype.selectFocusedChip = function selectFocusedChip(options) {
+    if (!this.chipButtons || !this.chipButtons.length) {
+      return;
+    }
+
+    var settings = options || {};
+    this.setSelectedIndex(this.focusedIndex, {
+      emit: settings.emit !== false,
+      focus: true,
+      announce: settings.announce !== false,
+      requestValidity: settings.requestValidity !== false
+    });
   };
 
   BayController.prototype.handleChipContainerClick = function handleChipContainerClick(event) {
     if (!event) {
+      return;
+    }
+
+    if (this.buttonsDisabled) {
       return;
     }
 
@@ -597,6 +829,7 @@
     }
 
     event.preventDefault();
+    this.setFocusIndex(index, { focus: true });
     this.setSelectedIndex(index, { emit: true, focus: true });
   };
 
@@ -639,19 +872,33 @@
       return;
     }
 
+    if (this.buttonsDisabled) {
+      return;
+    }
+
     var key = event.key || event.keyCode;
     var handled = false;
     if (key === 'ArrowRight' || key === 'Right' || key === 39) {
-      this.focusChip(index + 1);
+      this.moveFocusToIndex(index + 1);
       handled = true;
     } else if (key === 'ArrowLeft' || key === 'Left' || key === 37) {
-      this.focusChip(index - 1);
+      this.moveFocusToIndex(index - 1);
       handled = true;
     } else if (key === 'Home' || key === 36) {
-      this.focusChip(0);
+      this.moveFocusToIndex(0);
       handled = true;
     } else if (key === 'End' || key === 35) {
-      this.focusChip(this.bays.length - 1);
+      this.moveFocusToIndex(this.chipButtons.length - 1);
+      handled = true;
+    } else if (
+      key === ' ' ||
+      key === 'Spacebar' ||
+      key === 32 ||
+      key === 'Enter' ||
+      key === 13
+    ) {
+      this.setFocusIndex(index);
+      this.selectFocusedChip({ announce: true });
       handled = true;
     }
 
@@ -659,15 +906,6 @@
       event.preventDefault();
       event.stopPropagation();
     }
-  };
-
-  BayController.prototype.focusChip = function focusChip(index) {
-    if (!this.chipButtons || !this.chipButtons.length) {
-      return;
-    }
-
-    var clamped = clampSelectedIndex(index, this.chipButtons.length);
-    this.setSelectedIndex(clamped, { emit: true, focus: true });
   };
 
   BayController.prototype.setSelectedIndex = function setSelectedIndex(index, options) {
@@ -681,23 +919,8 @@
     var previous = this.selectedIndex;
     this.selectedIndex = clamped;
 
-    if (this.chipButtons) {
-      this.chipButtons.forEach(function (button, buttonIndex) {
-        if (!button) {
-          return;
-        }
-        var pressed = buttonIndex === clamped ? 'true' : 'false';
-        button.setAttribute('aria-pressed', pressed);
-        button.tabIndex = buttonIndex === clamped ? 0 : -1;
-      });
-      if (
-        options.focus &&
-        this.chipButtons[clamped] &&
-        typeof this.chipButtons[clamped].focus === 'function'
-      ) {
-        this.chipButtons[clamped].focus();
-      }
-    }
+    this.focusedIndex = clamped;
+    this.refreshChipAttributes({ focus: options.focus });
 
     this.updateShelfControls();
     this.updateDoorControls();
@@ -706,15 +929,21 @@
     this.applyModeSpecificDisabling();
     this.updateActionsVisibility();
 
-    this.announce(
-      this.translate('bay_selection_status', { index: clamped + 1, total: this.bays.length })
-    );
+    var shouldAnnounce = options.announce !== false;
+    if ((shouldAnnounce && clamped !== previous) || options.forceAnnounce) {
+      this.announce(
+        this.translate('bay_selection_status', { index: clamped + 1, total: this.bays.length }),
+        { immediate: true }
+      );
+    }
 
     if (options.emit && clamped !== previous) {
       this.onSelect(clamped);
     }
 
-    this.requestValidity();
+    if (options.requestValidity !== false) {
+      this.requestValidity();
+    }
   };
 
   BayController.prototype.updateShelfControls = function updateShelfControls() {
@@ -756,10 +985,17 @@
     var desiredIndex = options.selectedIndex != null ? options.selectedIndex : this.selectedIndex;
     desiredIndex = clampSelectedIndex(desiredIndex, this.bays.length);
     this.selectedIndex = desiredIndex;
+    this.focusedIndex = clampSelectedIndex(
+      this.focusedIndex != null ? this.focusedIndex : desiredIndex,
+      this.bays.length || 1
+    );
     this.renderChips();
+    var shouldAnnounce = options.announce === true;
     this.setSelectedIndex(desiredIndex, {
       emit: options.emit === true,
-      focus: options.focus === true
+      focus: options.focus === true,
+      announce: shouldAnnounce,
+      requestValidity: options.requestValidity !== false
     });
   };
 
@@ -843,6 +1079,10 @@
     this.updateModeControls();
     this.applyModeSpecificDisabling();
     this.updateActionsVisibility();
+    this.ensureActiveEditorFocus(normalized, { force: true });
+    var editorStatusKey =
+      normalized === 'subpartitions' ? 'bay_editor_status_subpartitions' : 'bay_editor_status_fronts';
+    this.announce(this.translate(editorStatusKey), { immediate: true });
     this.onModeChange(this.selectedIndex, normalized);
     if (normalized === 'fronts_shelves') {
       this.requestValidity();
@@ -951,13 +1191,114 @@
       var hideFronts = resolved !== 'fronts_shelves';
       this.frontsEditor.classList.toggle('is-hidden', hideFronts);
       this.frontsEditor.hidden = hideFronts;
+      setElementInert(this.frontsEditor, hideFronts);
     }
     if (this.subpartitionsEditor) {
       var hideSub = resolved !== 'subpartitions';
       this.subpartitionsEditor.classList.toggle('is-hidden', hideSub);
       this.subpartitionsEditor.hidden = hideSub;
+      setElementInert(this.subpartitionsEditor, hideSub);
     }
     this.applyModeSpecificDisabling();
+    this.ensureActiveEditorFocus(resolved);
+  };
+
+  BayController.prototype.focusFrontEditorControls = function focusFrontEditorControls() {
+    if (this.shelfInput && !this.shelfInput.disabled && typeof this.shelfInput.focus === 'function') {
+      this.shelfInput.focus();
+      return true;
+    }
+
+    for (var index = 0; index < this.doorInputs.length; index += 1) {
+      var doorInput = this.doorInputs[index];
+      if (doorInput && !doorInput.disabled && typeof doorInput.focus === 'function') {
+        doorInput.focus();
+        return true;
+      }
+    }
+
+    if (this.applyAllButton && !this.applyAllButton.disabled && typeof this.applyAllButton.focus === 'function') {
+      this.applyAllButton.focus();
+      return true;
+    }
+
+    if (
+      this.copyButton &&
+      !this.copyButton.disabled &&
+      !this.copyButton.hidden &&
+      typeof this.copyButton.focus === 'function'
+    ) {
+      this.copyButton.focus();
+      return true;
+    }
+
+    return false;
+  };
+
+  BayController.prototype.focusSubpartitionEditorControls = function focusSubpartitionEditorControls() {
+    if (
+      this.subpartitionInput &&
+      !this.subpartitionInput.disabled &&
+      typeof this.subpartitionInput.focus === 'function'
+    ) {
+      this.subpartitionInput.focus();
+      return true;
+    }
+
+    if (
+      this.subpartitionDecreaseButton &&
+      !this.subpartitionDecreaseButton.disabled &&
+      typeof this.subpartitionDecreaseButton.focus === 'function'
+    ) {
+      this.subpartitionDecreaseButton.focus();
+      return true;
+    }
+
+    if (
+      this.subpartitionIncreaseButton &&
+      !this.subpartitionIncreaseButton.disabled &&
+      typeof this.subpartitionIncreaseButton.focus === 'function'
+    ) {
+      this.subpartitionIncreaseButton.focus();
+      return true;
+    }
+
+    return false;
+  };
+
+  BayController.prototype.ensureActiveEditorFocus = function ensureActiveEditorFocus(mode, options) {
+    var resolved = normalizeBayMode(mode || (this.bays[this.selectedIndex] || this.template).mode);
+    var activeElement = document.activeElement;
+    var focusInsideFronts = this.frontsEditor && activeElement && this.frontsEditor.contains(activeElement);
+    var focusInsideSub = this.subpartitionsEditor && activeElement && this.subpartitionsEditor.contains(activeElement);
+
+    var forceFocus = options && options.force;
+    var needsFocus = forceFocus;
+
+    if (!needsFocus && focusInsideFronts && this.frontsEditor && this.frontsEditor.hidden) {
+      needsFocus = true;
+    }
+    if (!needsFocus && focusInsideSub && this.subpartitionsEditor && this.subpartitionsEditor.hidden) {
+      needsFocus = true;
+    }
+
+    if (!needsFocus) {
+      return;
+    }
+
+    var moved = false;
+    if (resolved === 'subpartitions') {
+      moved = this.focusSubpartitionEditorControls();
+    } else {
+      moved = this.focusFrontEditorControls();
+    }
+
+    if (!moved && this.chipButtons && this.chipButtons[this.selectedIndex]) {
+      var button = this.chipButtons[this.selectedIndex];
+      if (button && typeof button.focus === 'function') {
+        button.focus();
+      }
+    }
   };
 
   BayController.prototype.applyDoubleValidityState = function applyDoubleValidityState() {
@@ -1068,14 +1409,13 @@
     }
   };
 
-  BayController.prototype.announce = function announce(message) {
+  BayController.prototype.announce = function announce(message, options) {
     if (!message) {
       return;
     }
-    if (this.statusRegion) {
-      this.statusRegion.textContent = message;
+    if (typeof this.announceCallback === 'function') {
+      this.announceCallback(message, options || {});
     }
-    this.announceCallback(message);
   };
 
   BayController.prototype.setButtonsDisabled = function setButtonsDisabled(disabled) {
@@ -1089,6 +1429,7 @@
     }
     this.applyModeSpecificDisabling();
     this.updateActionsVisibility();
+    this.refreshChipAttributes();
   };
 
   var MODE_COPY = {
@@ -1493,6 +1834,8 @@
     this.lengthService = new LengthService();
     this.inputs = {};
     this.errorElements = {};
+    this.fieldLabels = {};
+    this.fieldErrorMessages = {};
     this.touched = {};
     this.values = {
       lengths: {},
@@ -1551,6 +1894,10 @@
     this.partitionControls = form.querySelector('[data-role="partition-controls"]');
     this.baySection = form.querySelector('[data-role="bay-section"]');
     this.statusRegion = form.querySelector('[data-role="dialog-status"]');
+    this.liveAnnouncer = new LiveAnnouncer(this.statusRegion, { delay: 200 });
+    if (this.statusRegion) {
+      this.statusRegion.setAttribute('aria-label', translate('live_region_title'));
+    }
     this.currentUiVisibility = null;
     this.lastSentPartitionMode = null;
     this.lastSentPartitionsLayout = null;
@@ -1571,6 +1918,7 @@
     this.selectedBayIndex = 0;
     this.pendingSelectedBayIndex = null;
     this.bayTemplate = cloneBay(null);
+    this.lastAnnouncedBayCount = null;
 
     this.initializeElements();
     this.bindEvents();
@@ -1586,7 +1934,8 @@
       resetSelection: false,
       restoreLayout: false,
       ensureLength: false,
-      updateInsertButton: false
+      updateInsertButton: false,
+      announce: false
     });
     this.updateInsertButtonState();
     this.setSecondaryAction('cancel', this.secondaryDefaultLabel);
@@ -1605,6 +1954,42 @@
     });
   }
 
+  FormController.prototype.captureFieldMetadata = function captureFieldMetadata(name) {
+    if (!name) {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(this.fieldErrorMessages, name)) {
+      this.fieldErrorMessages[name] = '';
+    }
+
+    var input = this.inputs[name];
+    var errorElement = this.errorElements[name];
+
+    if (!Object.prototype.hasOwnProperty.call(this.fieldLabels, name)) {
+      this.fieldLabels[name] = '';
+    }
+
+    if (input && !this.fieldLabels[name]) {
+      var labelText = '';
+      if (input.id) {
+        var safeId = input.id.replace(/(["\\])/g, '\\$1');
+        var label = this.form.querySelector('label[for="' + safeId + '"]');
+        if (label) {
+          labelText = collapseWhitespace(label.textContent);
+        }
+      }
+      this.fieldLabels[name] = labelText;
+    }
+
+    if (input && errorElement) {
+      if (!errorElement.id) {
+        errorElement.id = 'field-error-' + name;
+      }
+      ensureDescribedBy(input, errorElement.id);
+    }
+  };
+
   FormController.prototype.initializeElements = function initializeElements() {
     var self = this;
     var interactiveNodeList = this.form.querySelectorAll('input, select, textarea');
@@ -1618,12 +2003,14 @@
       self.errorElements[name] = self.form.querySelector('[data-error-for="' + name + '"]');
       self.values.lengths[name] = null;
       self.touched[name] = false;
+      self.captureFieldMetadata(name);
     });
 
     INTEGER_FIELDS.forEach(function (name) {
       self.inputs[name] = self.form.querySelector('[name="' + name + '"]');
       self.errorElements[name] = self.form.querySelector('[data-error-for="' + name + '"]');
       self.touched[name] = false;
+      self.captureFieldMetadata(name);
     });
 
     this.inputs.front = this.form.querySelector('[name="front"]');
@@ -1635,6 +2022,9 @@
     this.touched.partitions_positions = false;
     this.touched.front = false;
     this.touched.partitions_mode = false;
+    this.captureFieldMetadata('front');
+    this.captureFieldMetadata('partitions_mode');
+    this.captureFieldMetadata('partitions_positions');
 
     if (this.inputs.shelves) {
       this.inputs.shelves.value = '0';
@@ -1644,6 +2034,8 @@
     if (this.inputs.front) {
       this.values.front = this.inputs.front.value;
     }
+
+    this.captureFieldMetadata('shelves');
   };
 
   FormController.prototype.toggleElementVisibility = function toggleElementVisibility(
@@ -1658,21 +2050,47 @@
       element.classList.remove('is-hidden');
       element.removeAttribute('hidden');
       element.removeAttribute('aria-hidden');
+      setElementInert(element, false);
     } else {
       element.classList.add('is-hidden');
       element.setAttribute('hidden', '');
       element.setAttribute('aria-hidden', 'true');
+      setElementInert(element, true);
     }
   };
 
-  FormController.prototype.announce = function announce(message) {
-    if (!message) {
+  FormController.prototype.refreshBaySummary = function refreshBaySummary() {
+    var bays = this.values.partitions.bays || [];
+    var bayCount = bays.length > 0 ? bays.length : 1;
+    if (bayCount === this.lastAnnouncedBayCount) {
       return;
     }
 
-    if (this.statusRegion) {
-      this.statusRegion.textContent = message;
+    this.lastAnnouncedBayCount = bayCount;
+    var partitionCount = this.values.partition_mode === 'none' ? 0 : Math.max(0, bayCount - 1);
+    var partitionLabel =
+      partitionCount === 1
+        ? translate('count_partition_singular')
+        : translate('count_partition_plural');
+    var bayLabel = bayCount === 1 ? translate('count_bay_singular') : translate('count_bay_plural');
+
+    this.announce(
+      translate('top_level_summary', {
+        partitions: partitionCount,
+        partition_label: partitionLabel,
+        bays: bayCount,
+        bay_label: bayLabel
+      }),
+      { immediate: true }
+    );
+  };
+
+  FormController.prototype.announce = function announce(message, options) {
+    if (!message || !this.liveAnnouncer) {
+      return;
     }
+
+    this.liveAnnouncer.post(message, options || {});
   };
 
   FormController.prototype.deriveVisibilityFromPartitionMode =
@@ -1792,6 +2210,7 @@
         emit: options && options.emit === true
       });
     }
+    this.refreshBaySummary();
   };
 
   FormController.prototype.computeDesiredBayCount = function computeDesiredBayCount() {
@@ -1833,6 +2252,7 @@
         selectedIndex: this.selectedBayIndex
       });
     }
+    this.refreshBaySummary();
   };
 
   FormController.prototype.handleBaySelection = function handleBaySelection(index) {
@@ -2007,11 +2427,11 @@
     invokeSketchUp('ui_request_validity', JSON.stringify({ index: index }));
   };
 
-  FormController.prototype.handleBayAnnouncement = function handleBayAnnouncement(message) {
+  FormController.prototype.handleBayAnnouncement = function handleBayAnnouncement(message, options) {
     if (!message) {
       return;
     }
-    this.announce(message);
+    this.announce(message, options);
   };
 
   FormController.prototype.notifyPartitionModeChange = function notifyPartitionModeChange(mode) {
@@ -2112,6 +2532,7 @@
     if (this.bayController) {
       this.bayController.setBayValue(index, bays[index]);
     }
+    this.refreshBaySummary();
     this.updateInsertButtonState();
   };
 
@@ -2486,7 +2907,8 @@
       resetSelection: false,
       restoreLayout: false,
       ensureLength: false,
-      updateInsertButton: false
+      updateInsertButton: false,
+      announce: false
     });
     this.touched.partitions_mode = false;
     this.setFieldError('partitions_mode', null, true);
@@ -2918,6 +3340,18 @@
 
     this.applyUiVisibility(this.deriveVisibilityFromPartitionMode(normalized));
 
+    if (options.announce !== false && previous !== normalized) {
+      var modeStatusKey;
+      if (normalized === 'vertical') {
+        modeStatusKey = 'partition_mode_status_vertical';
+      } else if (normalized === 'horizontal') {
+        modeStatusKey = 'partition_mode_status_horizontal';
+      } else {
+        modeStatusKey = 'partition_mode_status_none';
+      }
+      this.announce(translate(modeStatusKey), { immediate: true });
+    }
+
     if (options.notify !== false) {
       this.notifyPartitionModeChange(normalized);
     }
@@ -3098,16 +3532,34 @@
     }
 
     var element = this.errorElements[name];
-    if (!element) {
-      return;
+    var input = this.inputs[name];
+    var previous = this.fieldErrorMessages[name] || '';
+    var text = message ? String(message) : '';
+
+    if (element) {
+      if (text) {
+        element.textContent = text;
+      } else if (persist) {
+        element.textContent = '';
+      } else {
+        element.textContent = '';
+      }
     }
 
-    if (message) {
-      element.textContent = message;
-    } else if (persist) {
-      element.textContent = '';
-    } else {
-      element.textContent = '';
+    this.fieldErrorMessages[name] = text;
+
+    if (input) {
+      if (text) {
+        input.setAttribute('aria-invalid', 'true');
+      } else {
+        input.removeAttribute('aria-invalid');
+      }
+    }
+
+    if (text && text !== previous) {
+      var label = this.fieldLabels[name];
+      var announcement = label ? label + ': ' + text : text;
+      this.announce(announcement, { immediate: true });
     }
   };
 

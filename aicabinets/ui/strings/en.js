@@ -38,8 +38,18 @@
     door_mode_status_left: 'Door mode set to left hinge.',
     door_mode_status_right: 'Door mode set to right hinge.',
     door_mode_status_double: 'Door mode set to double.',
+    partition_mode_status_none: 'Partition mode: None.',
+    partition_mode_status_vertical: 'Partition mode: Vertical.',
+    partition_mode_status_horizontal: 'Partition mode: Horizontal.',
     bay_count_status: '%{count} bays available.',
     bay_selection_status: 'Selected bay %{index} of %{total}.',
+    bay_editor_status_fronts: 'Fronts and shelves editor active.',
+    bay_editor_status_subpartitions: 'Sub-partitions editor active.',
+    top_level_summary: 'Top level: %{partitions} %{partition_label}, %{bays} %{bay_label}.',
+    count_partition_singular: 'partition',
+    count_partition_plural: 'partitions',
+    count_bay_singular: 'bay',
+    count_bay_plural: 'bays',
     bay_chip_home: 'First bay',
     bay_chip_end: 'Last bay'
   };
