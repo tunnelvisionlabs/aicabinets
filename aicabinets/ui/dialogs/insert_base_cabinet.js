@@ -4557,6 +4557,7 @@
       var resolve = testSupport.readyResolve;
       testSupport.readyResolve = null;
       resolve(collectState());
+      invokeSketchUp('__aicabinets_test_boot', 'app-ready');
     }
   }
 

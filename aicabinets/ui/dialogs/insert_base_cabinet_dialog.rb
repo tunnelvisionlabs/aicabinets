@@ -957,6 +957,9 @@ module AICabinets
           dialog.add_action_callback('__aicabinets_test_eval') do |_context, payload|
             handle_test_eval_payload(payload)
           end
+          dialog.add_action_callback('__aicabinets_test_boot') do |_context, phase|
+            handle_test_boot_event(dialog, phase)
+          end
         end
         private_class_method :attach_callbacks
 
@@ -1837,6 +1840,16 @@ module AICabinets
           warn("AI Cabinets: Test evaluation payload failed: #{e.message}")
         end
         private_class_method :handle_test_eval_payload
+
+        def handle_test_boot_event(dialog, phase)
+          return unless test_mode?
+          return unless defined?(AICabinets::TestHarness)
+
+          AICabinets::TestHarness.handle_boot_event(dialog, phase)
+        rescue StandardError => e
+          warn("AI Cabinets: Test bootstrap event failed: #{e.message}")
+        end
+        private_class_method :handle_test_boot_event
       end
     end
   end

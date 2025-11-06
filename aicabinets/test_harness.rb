@@ -24,6 +24,10 @@ module AICabinets
       @eval_results = {}
       @eval_callbacks = {}
       @dispatching_eval_callback = false
+      @dialog_boot_states = {}.compare_by_identity
+      @dialog_eval_queues = {}.compare_by_identity
+
+      initialize_dialog_state(dialog)
 
       DialogHandle.new(dialog)
     end
@@ -35,6 +39,23 @@ module AICabinets
       notify_eval_callback(token, data)
     rescue JSON::ParserError => e
       warn("AI Cabinets: Unable to parse test eval payload: #{e.message}")
+    end
+
+    def handle_boot_event(dialog, phase)
+      return unless dialog
+
+      mapping = {
+        'dom-loading' => :dom_loading,
+        'dom-ready' => :dom_ready,
+        'app-ready' => :app_ready
+      }
+      state = mapping.fetch(phase.to_s, :dom_loading)
+
+      dialog_boot_states[dialog] = state
+
+      return unless ready_state?(state)
+
+      flush_eval_queue(dialog)
     end
 
     def store_eval_result(token, data)
@@ -191,6 +212,68 @@ module AICabinets
       !!@dispatching_eval_callback
     end
 
+    def initialize_dialog_state(dialog)
+      return unless dialog
+
+      dialog_boot_states[dialog] = :cold
+      dialog_eval_queues[dialog] = []
+    end
+
+    def dialog_boot_states
+      @dialog_boot_states ||= {}.compare_by_identity
+    end
+
+    def dialog_eval_queues
+      @dialog_eval_queues ||= {}.compare_by_identity
+    end
+
+    def ready_state?(state)
+      %i[dom_ready app_ready].include?(state)
+    end
+
+    def enqueue_eval(dialog, script, token)
+      dialog_eval_queues[dialog] ||= []
+      dialog_eval_queues[dialog] << [script, token, dialog]
+    end
+
+    def flush_eval_queue(dialog)
+      queue = dialog_eval_queues.delete(dialog)
+      return unless queue&.any?
+
+      dispatch = lambda do
+        queue.each do |script, token, target_dialog|
+          next unless target_dialog
+
+          execute_script(target_dialog, script, token)
+        end
+      end
+
+      if dispatching_eval_callback?
+        ::UI.start_timer(0, false) { dispatch.call }
+      else
+        dispatch.call
+      end
+    end
+
+    def execute_script(dialog, script, token)
+      dialog.execute_script(script)
+    rescue StandardError => error
+      dispatch_eval_failure(token, error)
+    end
+
+    def handle_dialog_closed(dialog)
+      return unless dialog
+
+      pending = dialog_eval_queues.delete(dialog)
+      dialog_boot_states.delete(dialog)
+
+      return unless pending&.any?
+
+      pending.each do |_script, token, _dlg|
+        dispatch_eval_failure(token, 'Dialog closed before HtmlDialog eval could run.')
+      end
+    end
+
     class DialogHandle
       def initialize(dialog)
         @dialog = dialog
@@ -215,18 +298,18 @@ module AICabinets
 
         TestHarness.register_eval_callback(token, on_complete) if block_given?
 
-        dispatch = lambda do
-          begin
-            @dialog.execute_script(script)
-          rescue StandardError => error
-            TestHarness.dispatch_eval_failure(token, error)
-          end
-        end
+        state = TestHarness.dialog_boot_states[@dialog]
 
-        if TestHarness.dispatching_eval_callback?
-          ::UI.start_timer(0, false) { dispatch.call }
+        if TestHarness.ready_state?(state)
+          dispatch = lambda { TestHarness.execute_script(@dialog, script, token) }
+
+          if TestHarness.dispatching_eval_callback?
+            ::UI.start_timer(0, false) { dispatch.call }
+          else
+            dispatch.call
+          end
         else
-          dispatch.call
+          TestHarness.enqueue_eval(@dialog, script, token)
         end
 
         token
@@ -238,6 +321,7 @@ module AICabinets
         begin
           @dialog.close
         ensure
+          TestHarness.handle_dialog_closed(@dialog)
           AICabinets::UI::Dialogs::InsertBaseCabinet.send(:disable_test_mode!)
           @dialog = nil
         end

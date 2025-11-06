@@ -13,6 +13,32 @@
         }
       })();
     </script>
+    <script>
+      (function () {
+        if (window.__AICABINETS_TEST__ !== true) {
+          return;
+        }
+
+        function ping(phase) {
+          try {
+            if (
+              window.sketchup &&
+              typeof window.sketchup.__aicabinets_test_boot === 'function'
+            ) {
+              window.sketchup.__aicabinets_test_boot(phase);
+            }
+          } catch (error) {
+            // Ignore bootstrap errors in test mode; the Ruby harness will time out if needed.
+          }
+        }
+
+        ping('dom-loading');
+
+        document.addEventListener('DOMContentLoaded', function () {
+          ping('dom-ready');
+        });
+      })();
+    </script>
     <link rel="stylesheet" href="insert_base_cabinet.css" />
   </head>
   <body>
