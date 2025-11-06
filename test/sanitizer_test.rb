@@ -174,6 +174,35 @@ class SanitizerTest < Minitest::Test
     assert_equal(first, second)
   end
 
+  def test_nested_counts_match_bays_after_sanitization
+    params = {
+      partition_mode: 'vertical',
+      partitions: {
+        count: 2,
+        bays: [
+          {
+            mode: 'subpartitions',
+            subpartitions: {
+              count: 3,
+              bays: []
+            }
+          }
+        ]
+      }
+    }
+
+    sanitized, = sanitize_copy(params)
+
+    top = sanitized[:partitions]
+    assert_equal(top[:count] + 1, top[:bays].length)
+    bay_with_sub = top[:bays].find { |bay| bay[:subpartitions].is_a?(Hash) }
+    refute_nil(bay_with_sub, 'Expected at least one bay with subpartitions after sanitization')
+
+    sub = bay_with_sub[:subpartitions]
+    assert_equal(sub[:count] + 1, sub[:bays].length)
+    assert_equal('horizontal', sub[:orientation], 'Nested orientation should be perpendicular to parent')
+  end
+
   private
 
   def sanitize_copy(params)

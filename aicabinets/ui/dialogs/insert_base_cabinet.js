@@ -45,6 +45,17 @@
   var insertFormNamespace = (uiRoot.InsertForm = uiRoot.InsertForm || {});
 
   var controller = null;
+  var testSupport = {
+    enabled: window.__AICABINETS_TEST__ === true,
+    readyPromise: null,
+    readyResolve: null,
+    lastLiveRegion: ''
+  };
+  if (testSupport.enabled) {
+    testSupport.readyPromise = new Promise(function (resolve) {
+      testSupport.readyResolve = resolve;
+    });
+  }
   var pendingUnitSettings = null;
   var pendingDefaults = null;
   var pendingConfiguration = null;
@@ -255,6 +266,10 @@
 
     this.element.textContent = '';
     this.element.textContent = message;
+    window.__AICABINETS_LAST_LIVE_REGION__ = message;
+    if (testSupport.enabled) {
+      testSupport.lastLiveRegion = message;
+    }
   };
 
   LiveAnnouncer.prototype.clear = function clear() {
@@ -263,6 +278,10 @@
     this.pendingMessage = '';
     if (this.element) {
       this.element.textContent = '';
+    }
+    window.__AICABINETS_LAST_LIVE_REGION__ = '';
+    if (testSupport.enabled) {
+      testSupport.lastLiveRegion = '';
     }
   };
 
@@ -399,6 +418,259 @@
       door_mode: fronts.door_mode,
       fronts_shelves_state: fronts,
       subpartitions_state: subpartitions
+    };
+  }
+
+  function cloneSubpartitionsForTest(source) {
+    if (!source || typeof source !== 'object') {
+      return null;
+    }
+
+    var bays = Array.isArray(source.bays)
+      ? source.bays.map(function (entry) {
+          return cloneBayForTest(entry);
+        })
+      : [];
+
+    return {
+      count: typeof source.count === 'number' ? source.count : 0,
+      orientation: source.orientation || null,
+      bays: bays
+    };
+  }
+
+  function cloneBayForTest(bay) {
+    if (!bay || typeof bay !== 'object') {
+      return null;
+    }
+
+    var clone = cloneBay(bay);
+    var result = {
+      mode: clone.mode,
+      shelf_count: clone.shelf_count,
+      door_mode: clone.door_mode,
+      fronts_shelves_state: {
+        shelf_count: clone.fronts_shelves_state
+          ? clone.fronts_shelves_state.shelf_count
+          : null,
+        door_mode: clone.fronts_shelves_state
+          ? clone.fronts_shelves_state.door_mode
+          : null
+      },
+      subpartitions_state: {
+        count: clone.subpartitions_state ? clone.subpartitions_state.count : 0
+      }
+    };
+
+    if (bay.subpartitions && typeof bay.subpartitions === 'object') {
+      result.subpartitions = cloneSubpartitionsForTest(bay.subpartitions);
+    }
+
+    return result;
+  }
+
+  function isElementVisible(element) {
+    if (!element) {
+      return false;
+    }
+
+    if (element.hidden) {
+      return false;
+    }
+    if (element.getAttribute && element.getAttribute('aria-hidden') === 'true') {
+      return false;
+    }
+    if (element.classList && element.classList.contains('is-hidden')) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function gatherPartitionRadioLabels() {
+    if (!controller || !controller.partitionModeInputs) {
+      return [];
+    }
+
+    return controller.partitionModeInputs.map(function (input) {
+      if (!input || !input.id || !controller.form) {
+        return '';
+      }
+
+      var escaped = input.id.replace(/(["\\])/g, '\\$1');
+      var label = controller.form.querySelector('label[for="' + escaped + '"]');
+      return label ? collapseWhitespace(label.textContent) : '';
+    });
+  }
+
+  function gatherChipData() {
+    if (!controller || !controller.bayController || !controller.bayController.chipButtons) {
+      return [];
+    }
+
+    return controller.bayController.chipButtons.map(function (button, index) {
+      if (!button) {
+        return {
+          index: index,
+          label: '',
+          selected: false,
+          tabIndex: null,
+          ariaDisabled: false
+        };
+      }
+
+      return {
+        index: index,
+        label: collapseWhitespace(button.textContent),
+        selected: button.getAttribute('aria-selected') === 'true',
+        tabIndex: typeof button.tabIndex === 'number' ? button.tabIndex : null,
+        ariaDisabled: button.getAttribute('aria-disabled') === 'true'
+      };
+    });
+  }
+
+  function collectState() {
+    if (!controller) {
+      return {
+        partition_mode: null,
+        count: null,
+        selected_bay_index: null,
+        gating: {
+          globalsVisible: false,
+          shelvesVisible: false,
+          partitionControlsVisible: false,
+          baysVisible: false
+        },
+        chips: [],
+        a11y: {},
+        baySnapshot: {},
+        announcement: testSupport.lastLiveRegion || window.__AICABINETS_LAST_LIVE_REGION__ || ''
+      };
+    }
+
+    var values = controller.values || {};
+    var partitions = values.partitions || {};
+    var bays = Array.isArray(partitions.bays) ? partitions.bays.slice() : [];
+    var selectedIndex = controller.selectedBayIndex != null ? controller.selectedBayIndex : 0;
+    var fieldset = controller.partitionModeFieldset || null;
+    var legend = fieldset ? fieldset.querySelector('legend') : null;
+    var statusRegion = controller.statusRegion || null;
+    var liveRegionData = {
+      role: statusRegion ? statusRegion.getAttribute('role') || '' : '',
+      ariaLive: statusRegion ? statusRegion.getAttribute('aria-live') || '' : '',
+      ariaAtomic: statusRegion ? statusRegion.getAttribute('aria-atomic') || '' : ''
+    };
+    var chipInfo = gatherChipData();
+
+    return {
+      partition_mode: values.partition_mode || 'none',
+      count: typeof partitions.count === 'number' ? partitions.count : null,
+      selected_bay_index: selectedIndex,
+      gating: {
+        globalsVisible: isElementVisible(controller.globalFrontGroup),
+        shelvesVisible: isElementVisible(controller.globalShelvesGroup),
+        partitionControlsVisible: isElementVisible(controller.partitionControls),
+        baysVisible: isElementVisible(controller.baySection)
+      },
+      chips: chipInfo,
+      a11y: {
+        partitionFieldsetTag: fieldset ? fieldset.tagName.toLowerCase() : null,
+        partitionLegend: legend ? collapseWhitespace(legend.textContent) : '',
+        radioLabels: gatherPartitionRadioLabels(),
+        liveRegion: liveRegionData,
+        chipTabStops: chipInfo.map(function (chip) {
+          return chip.tabIndex;
+        })
+      },
+      baySnapshot: {
+        total: bays.length,
+        selectedIndex: selectedIndex,
+        selected: cloneBayForTest(bays[selectedIndex]),
+        template: cloneBayForTest(controller.bayTemplate)
+      },
+      announcement: testSupport.lastLiveRegion || window.__AICABINETS_LAST_LIVE_REGION__ || ''
+    };
+  }
+
+  function whenReady(callback) {
+    if (controller) {
+      try {
+        return Promise.resolve(callback(controller));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+
+    if (testSupport.readyPromise) {
+      return testSupport.readyPromise.then(function () {
+        return callback(controller);
+      });
+    }
+
+    return Promise.reject(new Error('Controller not initialized'));
+  }
+
+  function buildTestApi() {
+    return {
+      ready: function ready() {
+        if (!testSupport.readyPromise) {
+          return Promise.resolve(collectState());
+        }
+        return testSupport.readyPromise.then(function () {
+          return collectState();
+        });
+      },
+      setPartitionMode: function setPartitionMode(mode) {
+        return whenReady(function (formController) {
+          formController.setPartitionMode(mode);
+          return collectState();
+        });
+      },
+      setTopCount: function setTopCount(value) {
+        return whenReady(function (formController) {
+          var numeric = Math.max(0, Math.round(Number(value) || 0));
+          formController.applyIntegerValue('partitions_count', numeric);
+          if (formController.inputs && formController.inputs.partitions_count) {
+            formController.inputs.partitions_count.value = String(numeric);
+          }
+          formController.refreshBaySummary();
+          formController.updateInsertButtonState();
+          return collectState();
+        });
+      },
+      setNestedCount: function setNestedCount(value) {
+        return whenReady(function (formController) {
+          var numeric = Math.max(0, Math.round(Number(value) || 0));
+          var index = formController.selectedBayIndex != null ? formController.selectedBayIndex : 0;
+          formController.handleBaySubpartitionChange(index, numeric);
+          return collectState();
+        });
+      },
+      clickBay: function clickBay(index) {
+        return whenReady(function (formController) {
+          if (formController.bayController) {
+            formController.bayController.setSelectedIndex(Number(index) || 0, {
+              emit: true,
+              focus: true,
+              announce: true
+            });
+          }
+          return collectState();
+        });
+      },
+      toggleBayEditor: function toggleBayEditor(mode) {
+        return whenReady(function (formController) {
+          var index = formController.selectedBayIndex != null ? formController.selectedBayIndex : 0;
+          formController.handleBayModeChange(index, mode);
+          return collectState();
+        });
+      },
+      getState: function getState() {
+        return collectState();
+      },
+      lastLiveRegion: function lastLiveRegion() {
+        return testSupport.lastLiveRegion || window.__AICABINETS_LAST_LIVE_REGION__ || '';
+      }
     };
   }
 
@@ -1893,7 +2165,7 @@
     );
     this.partitionControls = form.querySelector('[data-role="partition-controls"]');
     this.baySection = form.querySelector('[data-role="bay-section"]');
-    this.statusRegion = form.querySelector('[data-role="dialog-status"]');
+    this.statusRegion = document.querySelector('[data-role="dialog-status"]');
     this.liveAnnouncer = new LiveAnnouncer(this.statusRegion, { delay: 200 });
     if (this.statusRegion) {
       this.statusRegion.setAttribute('aria-label', translate('live_region_title'));
@@ -4222,6 +4494,7 @@
     }
 
     controller = new FormController(form);
+    namespace.controller = controller;
     if (pendingConfiguration) {
       controller.configureMode(pendingConfiguration);
       pendingConfiguration = null;
@@ -4278,6 +4551,17 @@
     invokeSketchUp('dialog_ready');
     invokeSketchUp('request_defaults');
     invokeSketchUp('ui_init_ready');
+
+    if (testSupport.enabled && testSupport.readyResolve) {
+      var resolve = testSupport.readyResolve;
+      testSupport.readyResolve = null;
+      resolve(collectState());
+      invokeSketchUp('__aicabinets_test_boot', 'app-ready');
+    }
+  }
+
+  if (testSupport.enabled) {
+    window.AICabinetsTest = buildTestApi();
   }
 
   document.addEventListener('DOMContentLoaded', initialize);
