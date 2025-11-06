@@ -209,7 +209,7 @@ module AICabinets
           TestHarness.register_eval_callback(token, on_complete)
         end
 
-        UI.start_timer(0, false) do
+        ::UI.start_timer(0, false) do
           begin
             @dialog.execute_script(script)
           rescue StandardError => error
