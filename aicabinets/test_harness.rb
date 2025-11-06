@@ -61,6 +61,16 @@ module AICabinets
       @eval_callbacks[token] = callback
     end
 
+    def dispatch_eval_failure(token, error)
+      data = {
+        'token' => token,
+        'ok' => false,
+        'error' => error.to_s
+      }
+      store_eval_result(token, data)
+      notify_eval_callback(token, data)
+    end
+
     def take_eval_result(token, timeout: DEFAULT_TIMEOUT)
       deadline = Time.now + timeout
       loop do
@@ -199,7 +209,13 @@ module AICabinets
           TestHarness.register_eval_callback(token, on_complete)
         end
 
-        @dialog.execute_script(script)
+        UI.start_timer(0, false) do
+          begin
+            @dialog.execute_script(script)
+          rescue StandardError => error
+            TestHarness.dispatch_eval_failure(token, error)
+          end
+        end
 
         token
       end

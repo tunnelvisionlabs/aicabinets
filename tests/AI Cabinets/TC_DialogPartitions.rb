@@ -120,23 +120,26 @@ class TC_DialogPartitions < TestUp::TestCase
   end
 
   def wait_for_ready
-    wait_for_async('AICabinetsTest.ready()') do |result|
-      if result[:ok]
-        @dialog_ready = true
-        @ready_result = result[:value]
-      end
+    result = wait_for_async('AICabinetsTest.ready()')
+    if result && result[:ok]
+      @dialog_ready = true
+      @ready_result = result[:value]
+    else
+      error_message = result ? result[:error].to_s : 'Timeout waiting for ready state.'
+      flunk("HtmlDialog test namespace failed to become ready: #{error_message}")
     end
-    flunk('Timed out waiting for HtmlDialog test namespace to become ready.') unless @dialog_ready
   end
 
   def await_js(expression)
     ensure_dialog_ready
-    wait_for_async(expression) do |result|
-      return result[:value] if result[:ok]
-
+    result = wait_for_async(expression)
+    if result.nil?
+      raise AICabinets::TestHarness::TimeoutError, 'Timed out waiting for HtmlDialog eval.'
+    elsif result[:ok]
+      result[:value]
+    else
       raise AICabinets::TestHarness::EvalError, result[:error]
     end
-    raise AICabinets::TestHarness::TimeoutError, 'Timed out waiting for HtmlDialog eval.'
   end
 
   def dialog_state
@@ -144,24 +147,28 @@ class TC_DialogPartitions < TestUp::TestCase
     await_js('AICabinetsTest.getState()')
   end
 
-  def wait_for_async(expression)
-    finished = false
+  def wait_for_async(expression, timeout: 15.0)
     payload = nil
 
     @dialog_handle.eval_js_async(expression) do |result|
       payload = result
-      finished = true
     end
 
-    deadline = Time.now + 15.0
-    until finished
-      if Time.now > deadline
-        return nil
-      end
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    until payload
+      return nil if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
 
-      sleep(0.01)
+      process_ui_events
     end
 
     block_given? ? yield(payload) : payload
+  end
+
+  def process_ui_events(interval = 0.01)
+    if respond_to?(:wait)
+      wait(interval)
+    else
+      sleep(interval)
+    end
   end
 end
