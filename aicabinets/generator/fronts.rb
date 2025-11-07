@@ -29,9 +29,13 @@ module AICabinets
         keyword_init: true
       )
 
+      FRONTS_TAG_NAME = 'AICabinets/Fronts'.freeze
+
       def build(parent_entities:, params:)
         validate_parent!(parent_entities)
         return [] unless params.respond_to?(:front_mode)
+
+        clear_existing_fronts(parent_entities)
 
         placements = plan_layout(params)
         return [] if placements.empty?
@@ -132,9 +136,18 @@ module AICabinets
           bounds = BayBounds.interior_bounds(params: params, bay: bay)
           next unless bounds
 
+          opening_left_mm, opening_right_mm = bay_opening_bounds(
+            params: params,
+            bounds: bounds,
+            total_bays: total_bays
+          )
+
+          next unless opening_right_mm - opening_left_mm > MIN_DIMENSION_MM
+
           placements = build_bay_fronts(
             bay: bay,
-            bounds: bounds,
+            opening_left_mm: opening_left_mm,
+            opening_right_mm: opening_right_mm,
             left_reveal_mm: left_reveal_mm,
             right_reveal_mm: right_reveal_mm,
             center_gap_mm: center_gap_mm,
@@ -146,14 +159,16 @@ module AICabinets
       end
       private_class_method :plan_layout_from_bays
 
-      def build_bay_fronts(bay:, bounds:, left_reveal_mm:, right_reveal_mm:, center_gap_mm:, vertical_bounds:, total_bays:)
-        clear_width_mm = bounds.width_mm - left_reveal_mm - right_reveal_mm
+      def build_bay_fronts(bay:, opening_left_mm:, opening_right_mm:, left_reveal_mm:, right_reveal_mm:, center_gap_mm:, vertical_bounds:, total_bays:)
+        door_left_mm = opening_left_mm + left_reveal_mm
+        door_right_mm = opening_right_mm - right_reveal_mm
+        clear_width_mm = door_right_mm - door_left_mm
         if clear_width_mm <= MIN_DIMENSION_MM
           warn_skip("Skipped doors for bay #{bay.index + 1} because reveals consumed the width.")
           return []
         end
 
-        base_x = bounds.x_start_mm + left_reveal_mm
+        base_x = door_left_mm
         case bay.door_mode
         when :left
           [DoorPlacement.new(
@@ -338,6 +353,55 @@ module AICabinets
         end
       end
       private_class_method :validate_parent!
+
+      def clear_existing_fronts(parent_entities)
+        existing = parent_entities.to_a.select do |entity|
+          next false unless entity&.valid?
+          next false unless entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
+
+          layer = entity.respond_to?(:layer) ? entity.layer : nil
+          layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
+          layer_name == FRONTS_TAG_NAME
+        end
+
+        existing.each do |entity|
+          entity.erase! if entity.valid?
+        end
+      end
+      private_class_method :clear_existing_fronts
+
+      def bay_opening_bounds(params:, bounds:, total_bays:)
+        left_extension_mm = bay_edge_extension_mm(
+          params: params,
+          bay_index: bounds.bay_index,
+          total_bays: total_bays,
+          side: :left
+        )
+        right_extension_mm = bay_edge_extension_mm(
+          params: params,
+          bay_index: bounds.bay_index,
+          total_bays: total_bays,
+          side: :right
+        )
+
+        [
+          bounds.x_start_mm - left_extension_mm,
+          bounds.x_end_mm + right_extension_mm
+        ]
+      end
+      private_class_method :bay_opening_bounds
+
+      def bay_edge_extension_mm(params:, bay_index:, total_bays:, side:)
+        case side
+        when :left
+          return params.panel_thickness_mm.to_f if bay_index.zero?
+        when :right
+          return params.panel_thickness_mm.to_f if bay_index == total_bays - 1
+        end
+
+        0.0
+      end
+      private_class_method :bay_edge_extension_mm
 
       def warn_skip(message)
         warn("AI Cabinets: #{message}")
