@@ -75,7 +75,7 @@ class TC_DialogConsoleErrors < TestUp::TestCase
   end
 
   def test_fixture_reports_onload_error
-    error = assert_raises(Test::Unit::AssertionFailedError) do
+    error = assert_raises(Minitest::Assertion) do
       with_console_fixture(dialog_id: 'fixture-onload', on_load: 'throw new Error("fixture load failure");') do |dialog|
         assert_no_console_errors(dialog, 'Fixture load')
       end
@@ -86,7 +86,7 @@ class TC_DialogConsoleErrors < TestUp::TestCase
   end
 
   def test_fixture_reports_unhandled_rejection
-    error = assert_raises(Test::Unit::AssertionFailedError) do
+    error = assert_raises(Minitest::Assertion) do
       script = 'Promise.reject(new Error("fixture rejection"));'
       with_console_fixture(dialog_id: 'fixture-rejection', on_load: script) do |dialog|
         assert_no_console_errors(dialog, 'Fixture rejection')
@@ -98,7 +98,7 @@ class TC_DialogConsoleErrors < TestUp::TestCase
   end
 
   def test_fixture_reports_console_error
-    error = assert_raises(Test::Unit::AssertionFailedError) do
+    error = assert_raises(Minitest::Assertion) do
       script = 'console.error("fixture console failure");'
       with_console_fixture(dialog_id: 'fixture-console-error', on_load: script) do |dialog|
         assert_no_console_errors(dialog, 'Fixture console error')
