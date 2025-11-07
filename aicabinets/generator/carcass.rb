@@ -514,12 +514,12 @@ module AICabinets
                     :shelf_thickness, :shelf_thickness_mm, :interior_depth,
                     :interior_depth_mm, :interior_bottom_z_mm, :interior_top_z_mm,
                     :interior_clear_height_mm, :partition_left_faces_mm,
-                    :partition_thickness_mm, :front_mode, :door_thickness,
+                    :partition_thickness_mm, :partition_orientation, :front_mode, :door_thickness,
                     :door_thickness_mm, :door_edge_reveal_mm,
                     :door_top_reveal_mm, :door_bottom_reveal_mm,
                     :door_center_reveal_mm, :door_edge_reveal,
                     :door_top_reveal, :door_bottom_reveal,
-                    :door_center_reveal
+                    :door_center_reveal, :partition_bays
 
         def initialize(params_mm)
           @width_mm = params_mm[:width_mm].to_f
@@ -600,6 +600,7 @@ module AICabinets
             [@interior_top_z_mm - @interior_bottom_z_mm, 0.0].max
 
           @front_mode = normalize_front(params_mm[:front])
+          @global_fronts_shelves_state = normalize_hash(params_mm[:fronts_shelves_state])
 
           thickness_override = coerce_positive_numeric(params_mm[:door_thickness_mm])
           @door_thickness_mm =
@@ -632,10 +633,17 @@ module AICabinets
           layout = compute_partition_layout(params_mm[:partitions])
           @partition_left_faces_mm = layout.partition_left_faces_mm
           @partition_thickness_mm = layout.partition_thickness_mm
+          @partition_orientation = layout.orientation
           layout.warnings.each do |message|
             warn("AI Cabinets: #{message}")
           end
-          @partition_bay_ranges_mm = layout.bay_ranges_mm
+          bay_ranges_mm = layout.bay_ranges_mm
+          @partition_bay_ranges_mm =
+            if layout.axis == :z
+              bay_ranges_mm.reverse
+            else
+              bay_ranges_mm
+            end
           if @partition_bay_ranges_mm.empty?
             left = interior_left_face_mm
             right = interior_right_face_mm
@@ -643,6 +651,8 @@ module AICabinets
               @partition_bay_ranges_mm = [[left, right]]
             end
           end
+
+          @partition_bays = build_partition_bays(params_mm[:partitions])
         end
 
         class << self
@@ -735,6 +745,186 @@ module AICabinets
           nil
         end
 
+        def build_partition_bays(raw_partitions)
+          ranges = @partition_bay_ranges_mm
+          return [] if ranges.empty?
+
+          normalized = normalize_hash(raw_partitions)
+          raw_bays = Array(normalized[:bays])
+          axis = partition_axis
+          count = ranges.length
+
+          Array.new(count) do |index|
+            bounds_start_mm, bounds_end_mm = ranges[index]
+            bay_hash = normalize_hash(raw_bays[index])
+            fronts_state = normalize_hash(bay_hash[:fronts_shelves_state])
+            sub_state = normalize_hash(bay_hash[:subpartitions_state])
+            sub_config = normalize_hash(bay_hash[:subpartitions])
+
+            shelf_count = extract_shelf_count(bay_hash, fronts_state)
+            door_mode = normalize_bay_door_mode(
+              extract_door_mode(bay_hash, fronts_state)
+            )
+            mode = normalize_bay_mode(bay_hash[:mode])
+            subpartition_count = extract_subpartition_count(sub_state, sub_config)
+
+            PartitionBay.new(
+              index: index,
+              start_mm: bounds_start_mm,
+              end_mm: bounds_end_mm,
+              shelf_count: shelf_count,
+              door_mode: door_mode,
+              mode: mode,
+              subpartition_count: subpartition_count,
+              axis: axis
+            )
+          end
+        end
+
+        def partition_axis
+          case partition_orientation
+          when :horizontal
+            :z
+          else
+            :x
+          end
+        end
+
+        def normalize_hash(value)
+          return {} unless value.is_a?(Hash)
+
+          value.each_with_object({}) do |(key, entry), memo|
+            memo[key.is_a?(String) ? key.to_sym : key] = entry
+          end
+        end
+
+        def extract_shelf_count(bay_hash, fronts_state)
+          shelf_value =
+            if bay_hash.key?(:shelf_count)
+              bay_hash[:shelf_count]
+            elsif fronts_state.key?(:shelf_count)
+              fronts_state[:shelf_count]
+            end
+
+          result = coerce_non_negative_integer(shelf_value)
+          return result unless result.nil?
+
+          default_bay_shelf_count
+        end
+
+        def extract_door_mode(bay_hash, fronts_state)
+          return bay_hash[:door_mode] if bay_hash.key?(:door_mode)
+
+          return fronts_state[:door_mode] if fronts_state.key?(:door_mode)
+
+          default_bay_door_mode
+        end
+
+        def extract_subpartition_count(sub_state, sub_config)
+          count = coerce_non_negative_integer(sub_state[:count])
+          count ||= coerce_non_negative_integer(sub_config[:count])
+          count || 0
+        end
+
+        def coerce_non_negative_integer(value)
+          return nil if value.nil?
+
+          integer =
+            if value.is_a?(Integer)
+              value
+            elsif value.is_a?(Numeric)
+              value.to_i
+            else
+              Integer(value)
+            end
+
+          return nil if integer.negative?
+
+          integer
+        rescue ArgumentError, TypeError
+          nil
+        end
+
+        def normalize_bay_mode(value)
+          text = value.to_s.strip.downcase
+          case text
+          when 'subpartitions'
+            :subpartitions
+          else
+            :fronts_shelves
+          end
+        end
+
+        def normalize_bay_door_mode(value)
+          return :none if value.nil?
+
+          text = value.to_s.strip.downcase
+          return :none if text.empty?
+
+          mappings = {
+            'none' => :none,
+            'doors_none' => :none,
+            'empty' => :none,
+            'left' => :left,
+            'doors_left' => :left,
+            'right' => :right,
+            'doors_right' => :right,
+            'double' => :double,
+            'doors_double' => :double
+          }
+
+          mappings.fetch(text, :none)
+        end
+
+        def default_bay_shelf_count
+          return @default_bay_shelf_count if defined?(@default_bay_shelf_count)
+
+          count =
+            if @global_fronts_shelves_state.key?(:shelf_count)
+              coerce_non_negative_integer(@global_fronts_shelves_state[:shelf_count])
+            end
+
+          @default_bay_shelf_count = count || 0
+        end
+
+        def default_bay_door_mode
+          return @default_bay_door_mode if defined?(@default_bay_door_mode)
+
+          candidate =
+            if @global_fronts_shelves_state.key?(:door_mode)
+              @global_fronts_shelves_state[:door_mode]
+            else
+              @front_mode
+            end
+
+          @default_bay_door_mode = candidate
+        end
+
+        class PartitionBay
+          attr_reader :index, :start_mm, :end_mm, :shelf_count, :door_mode, :axis
+
+          def initialize(index:, start_mm:, end_mm:, shelf_count:, door_mode:, mode:, subpartition_count:, axis: :x)
+            @index = index
+            @start_mm = start_mm.to_f
+            @end_mm = end_mm.to_f
+            @shelf_count = shelf_count.to_i
+            @door_mode = door_mode
+            @mode = mode
+            @subpartition_count = subpartition_count.to_i
+            @axis = axis
+          end
+
+          def width_mm
+            [@end_mm - @start_mm, 0.0].max
+          end
+
+          def leaf?
+            return false if @mode == :subpartitions
+
+            @subpartition_count <= 0
+          end
+        end
+
         def normalize_top_type(value)
           candidate =
             case value
@@ -776,7 +966,11 @@ module AICabinets
             raw: raw,
             panel_thickness_mm: @panel_thickness_mm,
             width_mm: @width_mm,
-            min_bay_width_mm: Shelves::MIN_BAY_WIDTH_MM
+            interior_left_face_mm: interior_left_face_mm,
+            interior_right_face_mm: interior_right_face_mm,
+            interior_bottom_z_mm: @interior_bottom_z_mm,
+            interior_top_z_mm: @interior_top_z_mm,
+            min_bay_span_mm: Shelves::MIN_BAY_WIDTH_MM
           )
         end
 
@@ -791,11 +985,16 @@ module AICabinets
         class PartitionLayout
           EPSILON_MM = 1.0e-3
 
-          def initialize(raw:, panel_thickness_mm:, width_mm:, min_bay_width_mm:)
+          def initialize(raw:, panel_thickness_mm:, width_mm:, interior_left_face_mm:, interior_right_face_mm:,
+                         interior_bottom_z_mm:, interior_top_z_mm:, min_bay_span_mm:)
             @raw = raw
             @panel_thickness_mm = panel_thickness_mm
             @width_mm = width_mm
-            @min_bay_width_mm = min_bay_width_mm
+            @interior_left_face_mm = interior_left_face_mm
+            @interior_right_face_mm = interior_right_face_mm
+            @interior_bottom_z_mm = interior_bottom_z_mm
+            @interior_top_z_mm = interior_top_z_mm
+            @min_bay_span_mm = min_bay_span_mm
             @warnings = []
             @computed = false
           end
@@ -816,9 +1015,9 @@ module AICabinets
             candidate = safe_float(fetch(raw, :panel_thickness_mm))
             candidate = nil unless candidate && candidate.positive?
 
-            interior_width = interior_width_mm
-            if candidate && candidate >= interior_width - EPSILON_MM
-              add_warning('Partition thickness exceeded interior width; using carcass panel thickness instead.')
+            interior_span = interior_axis_span_mm
+            if candidate && candidate >= interior_span - EPSILON_MM
+              add_warning('Partition thickness exceeded interior span; using carcass panel thickness instead.')
               candidate = nil
             end
 
@@ -829,6 +1028,17 @@ module AICabinets
                                       end
           end
 
+          def orientation
+            @orientation ||= begin
+              value = normalize_orientation(fetch(raw, :orientation))
+              value || :vertical
+            end
+          end
+
+          def axis
+            orientation == :horizontal ? :z : :x
+          end
+
           def warnings
             ensure_computed
             @warnings.dup
@@ -836,7 +1046,9 @@ module AICabinets
 
           private
 
-          attr_reader :raw, :panel_thickness_mm, :width_mm, :min_bay_width_mm
+          attr_reader :raw, :panel_thickness_mm, :width_mm, :min_bay_span_mm,
+                      :interior_left_face_mm, :interior_right_face_mm,
+                      :interior_bottom_z_mm, :interior_top_z_mm
 
           def ensure_computed
             return if @computed
@@ -846,37 +1058,37 @@ module AICabinets
             @computed = true
           end
 
-          def interior_left_face_mm
-            panel_thickness_mm
+          def axis_start_mm
+            axis == :z ? interior_bottom_z_mm : interior_left_face_mm
           end
 
-          def interior_right_face_mm
-            width_mm - panel_thickness_mm
+          def axis_end_mm
+            axis == :z ? interior_top_z_mm : interior_right_face_mm
           end
 
-          def interior_width_mm
-            interior_right_face_mm - interior_left_face_mm
+          def interior_axis_span_mm
+            axis_end_mm - axis_start_mm
           end
 
           def compute_bay_ranges_from_faces(faces)
-            left = interior_left_face_mm
-            right = interior_right_face_mm
-            interior_width = right - left
-            return [] if interior_width < min_bay_width_mm
+            start = axis_start_mm
+            finish = axis_end_mm
+            interior_span = finish - start
+            return [] if interior_span < min_bay_span_mm
 
             ranges = []
-            current_left = left
+            current_start = start
 
             faces.each do |face|
-              break if face - current_left < min_bay_width_mm - EPSILON_MM
+              break if face - current_start < min_bay_span_mm - EPSILON_MM
 
-              ranges << [current_left, face]
-              current_left = face + partition_thickness_mm
-              break if right - current_left < min_bay_width_mm - EPSILON_MM
+              ranges << [current_start, face]
+              current_start = face + partition_thickness_mm
+              break if finish - current_start < min_bay_span_mm - EPSILON_MM
             end
 
-            if right - current_left >= min_bay_width_mm - EPSILON_MM
-              ranges << [current_left, right]
+            if finish - current_start >= min_bay_span_mm - EPSILON_MM
+              ranges << [current_start, finish]
             end
 
             ranges
@@ -926,23 +1138,23 @@ module AICabinets
             return [] if count <= 0
 
             thickness = partition_thickness_mm
-            interior_width = interior_width_mm
-            available_width = interior_width - (count * thickness)
-            minimum_required = min_bay_width_mm * (count + 1)
-            if available_width < minimum_required
-              add_warning("Requested #{count} partitions but interior width only allows bays of at least #{format_mm(min_bay_width_mm)}; skipping even partitions.")
+            interior_span = interior_axis_span_mm
+            available_span = interior_span - (count * thickness)
+            minimum_required = min_bay_span_mm * (count + 1)
+            if available_span < minimum_required
+              add_warning("Requested #{count} partitions but interior span only allows bays of at least #{format_mm(min_bay_span_mm)}; skipping even partitions.")
               return []
             end
 
-            bay_width = available_width / (count + 1)
-            if bay_width < min_bay_width_mm
-              add_warning("Requested #{count} partitions but resulting bay width #{format_mm(bay_width)} is below minimum #{format_mm(min_bay_width_mm)}; skipping even partitions.")
+            bay_span = available_span / (count + 1)
+            if bay_span < min_bay_span_mm
+              add_warning("Requested #{count} partitions but resulting bay span #{format_mm(bay_span)} is below minimum #{format_mm(min_bay_span_mm)}; skipping even partitions.")
               return []
             end
 
-            left = interior_left_face_mm
+            start = axis_start_mm
             Array.new(count) do |index|
-              left + ((index + 1) * bay_width) + (index * thickness)
+              start + ((index + 1) * bay_span) + (index * thickness)
             end
           end
 
@@ -950,8 +1162,8 @@ module AICabinets
             sorted = partition_positions.map { |value| safe_float(value) }.compact.sort
             return [] if sorted.empty?
 
-            left_boundary = interior_left_face_mm
-            right_boundary = interior_right_face_mm
+            left_boundary = axis_start_mm
+            right_boundary = axis_end_mm
             thickness = partition_thickness_mm
 
             offsets = []
@@ -973,14 +1185,14 @@ module AICabinets
               end
 
               left_gap = clamped - (offsets.empty? ? left_boundary : offsets.last + thickness)
-              if left_gap < min_bay_width_mm - EPSILON_MM
-                add_warning("Ignored partition at #{format_mm(raw_offset)} because the bay to its left would be #{format_mm([left_gap, 0.0].max)} wide (minimum #{format_mm(min_bay_width_mm)}).")
+              if left_gap < min_bay_span_mm - EPSILON_MM
+                add_warning("Ignored partition at #{format_mm(raw_offset)} because the adjacent bay would be #{format_mm([left_gap, 0.0].max)} wide (minimum #{format_mm(min_bay_span_mm)}).")
                 next
               end
 
               right_gap = right_boundary - (clamped + thickness)
-              if right_gap < min_bay_width_mm - EPSILON_MM
-                add_warning("Ignored partition at #{format_mm(raw_offset)} because the bay to its right would be #{format_mm([right_gap, 0.0].max)} wide (minimum #{format_mm(min_bay_width_mm)}).")
+              if right_gap < min_bay_span_mm - EPSILON_MM
+                add_warning("Ignored partition at #{format_mm(raw_offset)} because the adjacent bay would be #{format_mm([right_gap, 0.0].max)} wide (minimum #{format_mm(min_bay_span_mm)}).")
                 next
               end
 
@@ -995,6 +1207,18 @@ module AICabinets
             return nil unless hash.is_a?(Hash)
 
             hash[key] || hash[key.to_s]
+          end
+
+          def normalize_orientation(value)
+            text = value.to_s.strip.downcase
+            case text
+            when 'horizontal'
+              :horizontal
+            when 'vertical'
+              :vertical
+            else
+              nil
+            end
           end
 
           def safe_float(value)

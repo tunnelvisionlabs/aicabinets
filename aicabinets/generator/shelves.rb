@@ -2,6 +2,7 @@
 
 require 'sketchup.rb'
 
+Sketchup.require('aicabinets/generator/bay_bounds')
 Sketchup.require('aicabinets/ops/units')
 
 module AICabinets
@@ -22,6 +23,7 @@ module AICabinets
 
       Placement = Struct.new(
         :name,
+        :bay_index,
         :width_mm,
         :depth_mm,
         :top_z_mm,
@@ -45,72 +47,27 @@ module AICabinets
       end
 
       def plan_layout(params)
-        count = params.shelf_count
-        return if count <= 0
+        placements = params.partition_bays.each_with_object([]) do |bay, memo|
+          next unless bay.leaf?
+          next unless bay.shelf_count.positive?
 
-        usable_height_mm = params.interior_clear_height_mm
-        return if usable_height_mm <= EPSILON_MM
+          bounds = BayBounds.interior_bounds(params: params, bay: bay)
+          next unless bounds
+          next if bounds.width_mm <= MIN_BAY_WIDTH_MM
 
-        shelf_thickness_mm = params.shelf_thickness_mm
-        clear_height_mm = usable_height_mm
+          depth_mm = bounds.interior_depth_mm - FRONT_SETBACK_MM - REAR_CLEARANCE_MM
+          next if depth_mm <= MIN_DEPTH_MM
 
-        shelves_to_place = [count.to_i, 0].max
-        gap_mm = nil
-
-        while shelves_to_place.positive?
-          remaining_clear_mm = clear_height_mm - (shelf_thickness_mm * shelves_to_place)
-          if remaining_clear_mm <= EPSILON_MM
-            shelves_to_place -= 1
-            next
-          end
-
-          tentative_gap_mm = remaining_clear_mm / (shelves_to_place + 1)
-          if tentative_gap_mm >= MIN_VERTICAL_GAP_MM
-            gap_mm = tentative_gap_mm
-            break
-          end
-
-          shelves_to_place -= 1
-        end
-
-        return if shelves_to_place <= 0 || gap_mm.nil?
-
-        depth_mm = params.interior_depth_mm - FRONT_SETBACK_MM - REAR_CLEARANCE_MM
-        return if depth_mm <= MIN_DEPTH_MM
-
-        bay_ranges = params.partition_bay_ranges_mm
-        return unless bay_ranges.any?
-
-        top_positions_mm = []
-        current_bottom_mm = params.interior_bottom_z_mm + gap_mm
-
-        shelves_to_place.times do
-          top_positions_mm << (current_bottom_mm + shelf_thickness_mm)
-          current_bottom_mm += shelf_thickness_mm + gap_mm
-        end
-
-        placements = []
-        bay_ranges.each_with_index do |(bay_start_mm, bay_end_mm), bay_index|
-          bay_width_mm = bay_end_mm - bay_start_mm
-          next if bay_width_mm <= MIN_BAY_WIDTH_MM
-
-          name = if bay_ranges.length > 1
-                   "Shelf (Bay #{bay_index + 1})"
-                 else
-                   'Shelf'
-                 end
-
-          top_positions_mm.each do |top_mm|
-            placements << Placement.new(
-              name: name,
-              width_mm: bay_width_mm,
-              depth_mm: depth_mm,
-              top_z_mm: top_mm,
-              x_start_mm: bay_start_mm,
-              thickness_mm: shelf_thickness_mm,
-              front_offset_mm: FRONT_SETBACK_MM
-            )
-          end
+          bay_name = shelf_name(bay.index, params.partition_bays.length)
+          plan_bay_shelves(
+            memo,
+            name: bay_name,
+            bay_index: bay.index,
+            bounds: bounds,
+            depth_mm: depth_mm,
+            shelf_count: bay.shelf_count,
+            shelf_thickness_mm: params.shelf_thickness_mm
+          )
         end
 
         return if placements.empty?
@@ -154,6 +111,67 @@ module AICabinets
         Ops::Units.to_length_mm(value)
       end
       private_class_method :length_mm
+
+      def plan_bay_shelves(placements, name:, bay_index:, bounds:, depth_mm:, shelf_count:, shelf_thickness_mm:)
+        shelves_to_place = [shelf_count.to_i, 0].max
+        return if shelves_to_place <= 0
+
+        clear_height_mm = bounds.interior_height_mm
+        return if clear_height_mm <= EPSILON_MM
+
+        gap_mm = resolve_gap(clear_height_mm, shelf_thickness_mm, shelves_to_place)
+        return unless gap_mm
+
+        current_bottom_mm = bounds.interior_bottom_z_mm + gap_mm
+        shelves_to_place.times do
+          top_z_mm = current_bottom_mm + shelf_thickness_mm
+          placements << Placement.new(
+            name: name,
+            bay_index: bay_index,
+            width_mm: bounds.width_mm,
+            depth_mm: depth_mm,
+            top_z_mm: top_z_mm,
+            x_start_mm: bounds.x_start_mm,
+            thickness_mm: shelf_thickness_mm,
+            front_offset_mm: FRONT_SETBACK_MM
+          )
+          current_bottom_mm += shelf_thickness_mm + gap_mm
+        end
+      end
+      private_class_method :plan_bay_shelves
+
+      def resolve_gap(clear_height_mm, shelf_thickness_mm, shelves_to_place)
+        remaining_shelves = shelves_to_place
+        gap_mm = nil
+
+        while remaining_shelves.positive?
+          remaining_clear_mm = clear_height_mm - (shelf_thickness_mm * remaining_shelves)
+          if remaining_clear_mm <= EPSILON_MM
+            remaining_shelves -= 1
+            next
+          end
+
+          tentative_gap_mm = remaining_clear_mm / (remaining_shelves + 1)
+          if tentative_gap_mm >= MIN_VERTICAL_GAP_MM
+            gap_mm = tentative_gap_mm
+            break
+          end
+
+          remaining_shelves -= 1
+        end
+
+        return unless gap_mm
+
+        gap_mm
+      end
+      private_class_method :resolve_gap
+
+      def shelf_name(bay_index, total_bays)
+        return 'Shelf' if total_bays <= 1
+
+        "Shelf (Bay #{bay_index + 1})"
+      end
+      private_class_method :shelf_name
     end
   end
 end
