@@ -75,38 +75,33 @@ class TC_DialogConsoleErrors < TestUp::TestCase
   end
 
   def test_fixture_reports_onload_error
-    error = assert_raises(Minitest::Assertion) do
-      with_console_fixture(dialog_id: 'fixture-onload', on_load: 'throw new Error("fixture load failure");') do |dialog|
-        assert_no_console_errors(dialog, 'Fixture load')
-      end
-    end
+    errors = capture_fixture_errors(
+      dialog_id: 'fixture-onload',
+      on_load: 'throw new Error("fixture load failure");'
+    )
 
-    assert_includes(error.message, 'fixture load failure')
-    assert_includes(error.message, 'fixture-onload')
+    assert_event_message_includes(errors, 'fixture load failure')
+    assert_event_dialog_id_includes(errors, 'fixture-onload')
   end
 
   def test_fixture_reports_unhandled_rejection
-    error = assert_raises(Minitest::Assertion) do
-      script = 'Promise.reject(new Error("fixture rejection"));'
-      with_console_fixture(dialog_id: 'fixture-rejection', on_load: script) do |dialog|
-        assert_no_console_errors(dialog, 'Fixture rejection')
-      end
-    end
+    errors = capture_fixture_errors(
+      dialog_id: 'fixture-rejection',
+      on_load: 'Promise.reject(new Error("fixture rejection"));'
+    )
 
-    assert_includes(error.message, 'fixture rejection')
-    assert_includes(error.message, 'fixture-rejection')
+    assert_event_message_includes(errors, 'fixture rejection')
+    assert_event_dialog_id_includes(errors, 'fixture-rejection')
   end
 
   def test_fixture_reports_console_error
-    error = assert_raises(Minitest::Assertion) do
-      script = 'console.error("fixture console failure");'
-      with_console_fixture(dialog_id: 'fixture-console-error', on_load: script) do |dialog|
-        assert_no_console_errors(dialog, 'Fixture console error')
-      end
-    end
+    errors = capture_fixture_errors(
+      dialog_id: 'fixture-console-error',
+      on_load: 'console.error("fixture console failure");'
+    )
 
-    assert_includes(error.message, 'fixture console failure')
-    assert_includes(error.message, 'fixture-console-error')
+    assert_event_message_includes(errors, 'fixture console failure')
+    assert_event_dialog_id_includes(errors, 'fixture-console-error')
   end
 
   private
@@ -148,6 +143,14 @@ class TC_DialogConsoleErrors < TestUp::TestCase
     end
   end
 
+  def peek_console_events(target)
+    if target.respond_to?(:peek_console_events)
+      target.peek_console_events
+    else
+      AICabinets::UI::DialogConsoleBridge.peek_events(target)
+    end
+  end
+
   def assert_no_console_errors(target, phase)
     events = drain_console_events(target)
     errors = events.select { |event| event[:level] == 'error' }
@@ -175,6 +178,44 @@ class TC_DialogConsoleErrors < TestUp::TestCase
       Captured events:
       #{formatted.join("\n\n")}
     MESSAGE
+  end
+
+  def capture_fixture_errors(dialog_id:, on_load:)
+    errors = []
+
+    with_console_fixture(dialog_id: dialog_id, on_load: on_load) do |dialog|
+      wait_for_console_event(dialog, level: 'error')
+      drained = drain_console_events(dialog)
+      errors = drained.select { |event| event[:level] == 'error' }
+    end
+
+    refute_empty(errors, 'Expected at least one error-level console event.')
+    errors
+  end
+
+  def wait_for_console_event(target, level:, timeout: DEFAULT_PUMP_TIMEOUT)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout.to_f
+
+    loop do
+      events = peek_console_events(target)
+      return events if events.any? { |event| event[:level] == level }
+
+      if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        flunk("Timed out waiting for #{level}-level console event.")
+      end
+
+      with_modal_pump(timeout: 0.05) { |_pump, _close_pump| }
+    end
+  end
+
+  def assert_event_message_includes(events, expected)
+    messages = events.map { |event| event[:message].to_s }
+    assert(messages.any? { |message| message.include?(expected) }, "Expected event message to include '#{expected}'.")
+  end
+
+  def assert_event_dialog_id_includes(events, expected)
+    ids = events.map { |event| event[:dialog_id].to_s }
+    assert(ids.any? { |dialog_id| dialog_id.include?(expected) }, "Expected dialog identifier to include '#{expected}'.")
   end
 
   def with_console_fixture(dialog_id:, on_load:, interaction: nil)
