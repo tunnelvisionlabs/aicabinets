@@ -66,6 +66,8 @@ module AICabinets
         per_bay = plan_layout_from_bays(params)
         return per_bay if per_bay.any?
 
+        return per_bay if params.respond_to?(:partition_bays) && params.partition_bays.any?
+
         plan_layout_from_front_mode(params)
       end
 
@@ -115,9 +117,6 @@ module AICabinets
       private_class_method :toe_kick_clearance_mm
 
       def plan_layout_from_bays(params)
-        vertical_bounds = door_vertical_bounds(params)
-        return [] unless vertical_bounds
-
         bays = params.partition_bays
         return [] if bays.empty?
 
@@ -142,6 +141,14 @@ module AICabinets
           )
 
           next unless opening_right_mm - opening_left_mm > MIN_DIMENSION_MM
+
+          vertical_bounds = bay_vertical_bounds(
+            params: params,
+            bay: bay,
+            bounds: bounds,
+            total_bays: total_bays
+          )
+          next unless vertical_bounds
 
           left_reveal_mm = bay_edge_reveal_mm(
             params: params,
@@ -339,6 +346,60 @@ module AICabinets
         }
       end
       private_class_method :door_vertical_bounds
+
+      def bay_vertical_bounds(params:, bay:, bounds:, total_bays:)
+        orientation = params.respond_to?(:partition_orientation) ? params.partition_orientation : nil
+        if orientation == :horizontal && bounds.axis == :z
+          vertical_bounds_for_horizontal_bay(
+            params: params,
+            bay: bay,
+            bounds: bounds,
+            total_bays: total_bays
+          )
+        else
+          door_vertical_bounds(params)
+        end
+      end
+      private_class_method :bay_vertical_bounds
+
+      def vertical_bounds_for_horizontal_bay(params:, bay:, bounds:, total_bays:)
+        bottom_reveal_mm = bay_vertical_edge_reveal_mm(
+          params: params,
+          bay_index: bay.index,
+          total_bays: total_bays,
+          side: :bottom
+        )
+        top_reveal_mm = bay_vertical_edge_reveal_mm(
+          params: params,
+          bay_index: bay.index,
+          total_bays: total_bays,
+          side: :top
+        )
+
+        clear_height_mm = bounds.interior_height_mm - top_reveal_mm - bottom_reveal_mm
+        if clear_height_mm <= MIN_DIMENSION_MM
+          warn_skip("Skipped doors for bay #{bay.index + 1} because vertical reveals consumed the height.")
+          return nil
+        end
+
+        {
+          clear_height_mm: clear_height_mm,
+          bottom_z_mm: bounds.interior_bottom_z_mm + bottom_reveal_mm
+        }
+      end
+      private_class_method :vertical_bounds_for_horizontal_bay
+
+      def bay_vertical_edge_reveal_mm(params:, bay_index:, total_bays:, side:)
+        case side
+        when :bottom
+          return params.door_bottom_reveal_mm.to_f if bay_index.zero?
+        when :top
+          return params.door_top_reveal_mm.to_f if bay_index == total_bays - 1
+        end
+
+        0.0
+      end
+      private_class_method :bay_vertical_edge_reveal_mm
 
       def door_name(mode, bay_index, total_bays)
         suffix =

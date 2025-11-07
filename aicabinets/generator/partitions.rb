@@ -46,6 +46,10 @@ module AICabinets
       end
 
       def plan_layout(params)
+        if params.respond_to?(:partition_orientation) && params.partition_orientation == :horizontal
+          return []
+        end
+
         left_faces = Array(params.partition_left_faces_mm).map { |value| value.to_f }.sort
         return [] if left_faces.empty?
 
