@@ -4,10 +4,13 @@ require 'json'
 require 'securerandom'
 
 require 'aicabinets/ui/dialogs/insert_base_cabinet_dialog'
+require 'aicabinets/ui/dialog_console_bridge'
 
 module AICabinets
   module TestHarness
     DEFAULT_TIMEOUT = 8.0
+    ConsoleBridge = AICabinets::UI::DialogConsoleBridge
+    private_constant :ConsoleBridge
     module_function
 
     def open_dialog_for_tests
@@ -56,6 +59,18 @@ module AICabinets
       return unless ready_state?(state)
 
       flush_eval_queue(dialog)
+    end
+
+    def drain_console_events(dialog)
+      return [] unless dialog
+
+      ConsoleBridge.drain_events(dialog)
+    end
+
+    def peek_console_events(dialog)
+      return [] unless dialog
+
+      ConsoleBridge.peek_events(dialog)
     end
 
     def store_eval_result(token, data)
@@ -266,6 +281,7 @@ module AICabinets
 
       pending = dialog_eval_queues.delete(dialog)
       dialog_boot_states.delete(dialog)
+      ConsoleBridge.unregister_dialog(dialog)
 
       return unless pending&.any?
 
@@ -313,6 +329,18 @@ module AICabinets
         end
 
         token
+      end
+
+      def drain_console_events
+        raise 'Dialog is closed.' unless @dialog
+
+        TestHarness.drain_console_events(@dialog)
+      end
+
+      def peek_console_events
+        return [] unless @dialog
+
+        TestHarness.peek_console_events(@dialog)
       end
 
       def close

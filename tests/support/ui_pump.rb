@@ -84,4 +84,32 @@ module TestUiPump
 
     reason
   end
+
+  # Closes the provided HtmlDialog handle and runs a brief modal pump so the
+  # Chromium Embedded Framework (CEF) process can shut down cleanly between
+  # tests. The extra dialog prevents subsequent HtmlDialogs from inheriting
+  # state from a not-yet-destroyed renderer.
+  #
+  # @param dialog [UI::HtmlDialog, nil]
+  # @return [void]
+  def teardown_html_dialog(dialog)
+    begin
+      dialog&.close
+    rescue StandardError
+      # HtmlDialog may already be closing; ignore close errors.
+    end
+
+    pump = ::UI::HtmlDialog.new(
+      dialog_title: 'Pump',
+      width: 1,
+      height: 1,
+      style: ::UI::HtmlDialog::STYLE_UTILITY
+    )
+
+    # tiny pump to let CEF process tear down cleanly before next test
+    pump.set_html('<script>setTimeout(function(){ window.close(); }, 100);</script>')
+    pump.show_modal
+  end
+
+  module_function :teardown_html_dialog
 end
