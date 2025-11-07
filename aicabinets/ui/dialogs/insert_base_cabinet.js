@@ -324,6 +324,179 @@
     return numeric;
   }
 
+  function isInputDisabled(input) {
+    if (!input) {
+      return true;
+    }
+
+    if (input.disabled) {
+      return true;
+    }
+
+    if (input.getAttribute && input.getAttribute('aria-disabled') === 'true') {
+      return true;
+    }
+
+    return false;
+  }
+
+  function findFirstEnabledIndex(inputs) {
+    if (!inputs || !inputs.length) {
+      return -1;
+    }
+
+    for (var index = 0; index < inputs.length; index += 1) {
+      if (!isInputDisabled(inputs[index])) {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
+  function findLastEnabledIndex(inputs) {
+    if (!inputs || !inputs.length) {
+      return -1;
+    }
+
+    for (var index = inputs.length - 1; index >= 0; index -= 1) {
+      if (!isInputDisabled(inputs[index])) {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
+  function findNextEnabledIndex(inputs, startIndex, delta) {
+    if (!inputs || !inputs.length) {
+      return startIndex;
+    }
+
+    var length = inputs.length;
+    if (length < 1) {
+      return startIndex;
+    }
+
+    var normalized = Number(startIndex);
+    if (!isFinite(normalized)) {
+      normalized = 0;
+    }
+    normalized = Math.round(normalized);
+    if (normalized < 0) {
+      normalized = 0;
+    }
+    if (normalized >= length) {
+      normalized = length - 1;
+    }
+
+    for (var step = 0; step < length; step += 1) {
+      normalized = (normalized + delta + length) % length;
+      if (!isInputDisabled(inputs[normalized])) {
+        return normalized;
+      }
+    }
+
+    return startIndex;
+  }
+
+  function activateSegmentedInputElement(input) {
+    if (!input || input.disabled) {
+      return;
+    }
+
+    if (typeof input.click === 'function') {
+      input.click();
+    } else {
+      input.checked = true;
+      var changeEvent = document.createEvent('Event');
+      changeEvent.initEvent('change', true, true);
+      input.dispatchEvent(changeEvent);
+    }
+
+    if (typeof input.focus === 'function') {
+      input.focus();
+    }
+  }
+
+  function handleSegmentedGroupKeyDown(inputs, event) {
+    if (!event || !inputs || !inputs.length) {
+      return;
+    }
+
+    var list = Array.isArray(inputs) ? inputs : Array.prototype.slice.call(inputs);
+    var target = event.target;
+    var index = list.indexOf(target);
+    if (index === -1) {
+      return;
+    }
+
+    var key = event.key || event.keyCode;
+    var nextIndex = null;
+    var handled = false;
+
+    if (
+      key === 'ArrowRight' ||
+      key === 'Right' ||
+      key === 39 ||
+      key === 'ArrowDown' ||
+      key === 'Down' ||
+      key === 40
+    ) {
+      nextIndex = findNextEnabledIndex(list, index, 1);
+      handled = true;
+    } else if (
+      key === 'ArrowLeft' ||
+      key === 'Left' ||
+      key === 37 ||
+      key === 'ArrowUp' ||
+      key === 'Up' ||
+      key === 38
+    ) {
+      nextIndex = findNextEnabledIndex(list, index, -1);
+      handled = true;
+    } else if (key === 'Home' || key === 36) {
+      nextIndex = findFirstEnabledIndex(list);
+      handled = true;
+    } else if (key === 'End' || key === 35) {
+      nextIndex = findLastEnabledIndex(list);
+      handled = true;
+    }
+
+    if (!handled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (nextIndex == null || nextIndex === -1 || nextIndex === index) {
+      return;
+    }
+
+    activateSegmentedInputElement(list[nextIndex]);
+  }
+
+  function bindSegmentedGroupKeyHandlers(inputs) {
+    if (!inputs || !inputs.length) {
+      return;
+    }
+
+    var list = Array.isArray(inputs) ? inputs.slice() : Array.prototype.slice.call(inputs);
+    list.forEach(function (input) {
+      if (!input || input.__aicSegmentedKeyHandler) {
+        return;
+      }
+
+      var handler = function (event) {
+        handleSegmentedGroupKeyDown(list, event);
+      };
+
+      input.addEventListener('keydown', handler);
+      input.__aicSegmentedKeyHandler = handler;
+    });
+  }
+
   function normalizeBayMode(mode) {
     if (typeof mode === 'string') {
       var text = mode.trim().toLowerCase();
@@ -800,8 +973,8 @@
     if (this.sectionTitle) {
       this.sectionTitle.textContent = this.translate('bay_section_title');
     }
-    if (this.selector) {
-      this.selector.setAttribute('aria-label', this.translate('bay_selector_label'));
+    if (this.chipsContainer) {
+      this.chipsContainer.setAttribute('aria-label', this.translate('bay_selector_label'));
     }
     if (this.shelfLabel) {
       this.shelfLabel.textContent = this.translate('shelf_stepper_label');
@@ -902,6 +1075,8 @@
         self.handleModeChange(input.value);
       });
     });
+    this.bindSegmentedInputKeys(this.modeInputs);
+    this.bindSegmentedInputKeys(this.doorInputs);
     if (this.subpartitionDecreaseButton) {
       this.subpartitionDecreaseButton.addEventListener('click', function () {
         self.adjustSubpartition(-1);
@@ -941,6 +1116,10 @@
     }
   };
 
+  BayController.prototype.bindSegmentedInputKeys = function bindSegmentedInputKeys(inputs) {
+    bindSegmentedGroupKeyHandlers(inputs);
+  };
+
   BayController.prototype.renderChips = function renderChips() {
     if (!this.chipsContainer) {
       return;
@@ -964,6 +1143,10 @@
         button = document.createElement('button');
         button.type = 'button';
         button.className = 'bay-chip';
+      }
+
+      if (button.getAttribute('role') !== 'tab') {
+        button.setAttribute('role', 'tab');
       }
 
       var referenceNode = container.children[index] || null;
@@ -1057,34 +1240,6 @@
     this.refreshChipAttributes({ focus: options && options.focus });
   };
 
-  BayController.prototype.moveFocusToIndex = function moveFocusToIndex(index) {
-    if (!this.chipButtons || !this.chipButtons.length) {
-      return;
-    }
-
-    var clamped = clampSelectedIndex(index, this.chipButtons.length);
-    if (clamped === this.focusedIndex) {
-      return;
-    }
-
-    this.focusedIndex = clamped;
-    this.refreshChipAttributes({ focus: true });
-  };
-
-  BayController.prototype.selectFocusedChip = function selectFocusedChip(options) {
-    if (!this.chipButtons || !this.chipButtons.length) {
-      return;
-    }
-
-    var settings = options || {};
-    this.setSelectedIndex(this.focusedIndex, {
-      emit: settings.emit !== false,
-      focus: true,
-      announce: settings.announce !== false,
-      requestValidity: settings.requestValidity !== false
-    });
-  };
-
   BayController.prototype.handleChipContainerClick = function handleChipContainerClick(event) {
     if (!event) {
       return;
@@ -1149,18 +1304,38 @@
     }
 
     var key = event.key || event.keyCode;
+    var length = this.chipButtons ? this.chipButtons.length : 0;
+    if (!length) {
+      return;
+    }
+
     var handled = false;
-    if (key === 'ArrowRight' || key === 'Right' || key === 39) {
-      this.moveFocusToIndex(index + 1);
+    var nextIndex = null;
+    if (
+      key === 'ArrowRight' ||
+      key === 'Right' ||
+      key === 39 ||
+      key === 'ArrowDown' ||
+      key === 'Down' ||
+      key === 40
+    ) {
+      nextIndex = (index + 1 + length) % length;
       handled = true;
-    } else if (key === 'ArrowLeft' || key === 'Left' || key === 37) {
-      this.moveFocusToIndex(index - 1);
+    } else if (
+      key === 'ArrowLeft' ||
+      key === 'Left' ||
+      key === 37 ||
+      key === 'ArrowUp' ||
+      key === 'Up' ||
+      key === 38
+    ) {
+      nextIndex = (index - 1 + length) % length;
       handled = true;
     } else if (key === 'Home' || key === 36) {
-      this.moveFocusToIndex(0);
+      nextIndex = 0;
       handled = true;
     } else if (key === 'End' || key === 35) {
-      this.moveFocusToIndex(this.chipButtons.length - 1);
+      nextIndex = length - 1;
       handled = true;
     } else if (
       key === ' ' ||
@@ -1169,9 +1344,12 @@
       key === 'Enter' ||
       key === 13
     ) {
-      this.setFocusIndex(index);
-      this.selectFocusedChip({ announce: true });
+      this.setSelectedIndex(index, { emit: true, focus: true });
       handled = true;
+    }
+
+    if (nextIndex != null) {
+      this.setSelectedIndex(nextIndex, { emit: true, focus: true });
     }
 
     if (handled) {
@@ -1351,7 +1529,7 @@
     this.updateModeControls();
     this.applyModeSpecificDisabling();
     this.updateActionsVisibility();
-    this.ensureActiveEditorFocus(normalized, { force: true });
+    this.ensureActiveEditorFocus(normalized);
     var editorStatusKey =
       normalized === 'subpartitions' ? 'bay_editor_status_subpartitions' : 'bay_editor_status_fronts';
     this.announce(this.translate(editorStatusKey), { immediate: true });
@@ -2991,6 +3169,7 @@
     }
 
     if (this.partitionModeInputs.length) {
+      bindSegmentedGroupKeyHandlers(this.partitionModeInputs);
       this.partitionModeInputs.forEach(function (input) {
         input.addEventListener('change', function (event) {
           if (event.target.checked) {
