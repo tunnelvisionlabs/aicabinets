@@ -114,7 +114,7 @@ The Insert/Edit HtmlDialog surfaces a bay selector (chips), shelf stepper, and d
 The Insert/Edit dialog ships with a predictable focus order and polite announcements so keyboard and assistive technology users receive the same feedback as mouse users.
 
 - Native radios live inside `<fieldset>/<legend>` groups for the partition mode selector, scope toggle, and bay editor switcher. Each option uses an explicit `<label for="…">` pairing so screen readers expose the full option text.
-- The bay chip strip keeps a single tab stop by following the roving `tabindex` pattern. Arrow keys move focus across buttons, `aria-selected` tracks the active bay, and Space/Enter confirm the selection without breaking the tab sequence.
+- Segmented controls (bay chips, bay editor switcher, and door mode) expose a single tab stop per group. Arrow keys (and Home/End) wrap across options, immediately commit the new selection, and leave focus on the active segment so Tab/Shift+Tab can continue the dialog order. Disabled choices are skipped automatically, and `aria-selected`/native `aria-checked` states stay in sync with the visual highlight.
 - A single visually hidden live region (`#sr-updates`) relays status changes. The JavaScript `LiveAnnouncer` helper coalesces messages (200 ms debounce) and sanitizes text before setting `textContent` to avoid spamming assistive tech.
 - Inactive controls are removed from the tab order with `HTMLElement.inert` when Chromium supports it, or a fallback that toggles `aria-hidden` and saves/restores prior tabindex values.
 - Validation errors reuse the same live region: `FormController#setFieldError` sets `aria-invalid`, updates the field’s inline message, and announces `{Label}: {Error}` when the text changes.

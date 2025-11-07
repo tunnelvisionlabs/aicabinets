@@ -319,8 +319,13 @@
           <section class="form__section" data-role="bay-section">
             <h2 class="form__section-title" data-role="bay-section-title"></h2>
             <div class="bay" data-role="bay-controls">
-              <div class="bay__selector" role="group" aria-label="" data-role="bay-selector">
-                <div class="bay__chips" data-role="bay-chips"></div>
+              <div class="bay__selector" data-role="bay-selector">
+                <div
+                  class="bay__chips"
+                  role="tablist"
+                  aria-label=""
+                  data-role="bay-chips"
+                ></div>
               </div>
 
               <fieldset class="bay-editor-toggle" data-role="bay-mode-fieldset">
@@ -329,7 +334,11 @@
                   id="bay-editor-toggle-legend"
                   data-role="bay-mode-legend"
                 ></legend>
-                <div class="bay-editor-toggle__options">
+                <div
+                  class="bay-editor-toggle__options"
+                  role="radiogroup"
+                  aria-labelledby="bay-editor-toggle-legend"
+                >
                   <div class="bay-editor-toggle__option">
                     <input
                       type="radio"
@@ -390,7 +399,12 @@
 
                 <fieldset class="bay-door" data-role="bay-door-fieldset">
                   <legend class="bay-door__legend" data-role="bay-door-legend"></legend>
-                  <div class="bay-door__options" data-role="bay-door-options">
+                  <div
+                    class="bay-door__options"
+                    role="radiogroup"
+                    aria-labelledby="bay-door-legend"
+                    data-role="bay-door-options"
+                  >
                     <label class="bay-door__option">
                       <input
                         type="radio"
