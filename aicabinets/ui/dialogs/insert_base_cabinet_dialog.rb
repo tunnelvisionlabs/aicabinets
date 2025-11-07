@@ -298,7 +298,13 @@ module AICabinets
           reason =
             case reason_value
             when Symbol
-              Localization.string(reason_value)
+              if reason_value == AICabinets::DoorModeRules::DOUBLE_DISABLED_REASON &&
+                   metadata.is_a?(Hash) &&
+                   metadata[:min_leaf_width_mm]
+                nil
+              else
+                Localization.string(reason_value)
+              end
             when String
               reason_value
             else
