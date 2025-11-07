@@ -59,7 +59,7 @@ class TC_DialogConsoleErrors < TestUp::TestCase
   end
 
   def teardown
-    @dialog_handle&.close
+    teardown_html_dialog(@dialog_handle)
     @dialog_handle = nil
   end
 
@@ -210,11 +210,7 @@ class TC_DialogConsoleErrors < TestUp::TestCase
 
       yield(dialog)
     ensure
-      begin
-        dialog.close
-      rescue StandardError
-        # The dialog may already be closing; ignore.
-      end
+      teardown_html_dialog(dialog)
       AICabinets::UI::DialogConsoleBridge.unregister_dialog(dialog)
     end
   end
