@@ -90,8 +90,9 @@ class TC_EditScope < TestUp::TestCase
 
     edited_bbox_min = AICabinetsTestHelper.bbox_local_of(edited_definition).min
     sibling_bbox_min = AICabinetsTestHelper.bbox_local_of(sibling_definition).min
-    assert(edited_bbox_min.distance(ORIGIN) <= AICabinetsTestHelper::TOL,
-           'Edited definition should preserve FLB origin at ORIGIN')
+    assert_flb_anchor_preserved(edited_bbox_min,
+                                tolerance_mm,
+                                'Edited definition should preserve carcass FLB anchor at origin')
     assert(sibling_bbox_min.distance(original_bbox_min) <= AICabinetsTestHelper::TOL,
            'Sibling definition should preserve original FLB origin')
 
@@ -186,6 +187,19 @@ class TC_EditScope < TestUp::TestCase
   end
 
   private
+
+  def assert_flb_anchor_preserved(point3d, tolerance_mm, context)
+    x_mm = AICabinetsTestHelper.mm(point3d.x)
+    y_mm = AICabinetsTestHelper.mm(point3d.y)
+    z_mm = AICabinetsTestHelper.mm(point3d.z)
+
+    assert_in_delta(0.0, x_mm, tolerance_mm,
+                    "#{context}: expected minimum X to remain at 0 mm")
+    assert_operator(y_mm, :<=, tolerance_mm,
+                    "#{context}: expected minimum Y to sit on or in front of the carcass front plane")
+    assert_in_delta(0.0, z_mm, tolerance_mm,
+                    "#{context}: expected minimum Z to remain at 0 mm")
+  end
 
   def build_two_instances(params_mm)
     model = Sketchup.active_model
