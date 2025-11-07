@@ -38,7 +38,8 @@ class GeneratorPerBayTest < Minitest::Test
                 :door_edge_reveal_mm,
                 :door_top_reveal_mm, :door_bottom_reveal_mm, :door_center_reveal_mm,
                 :door_thickness_mm, :height_mm, :toe_kick_height_mm,
-                :toe_kick_depth_mm, :width_mm, :panel_thickness_mm
+                :toe_kick_depth_mm, :width_mm, :panel_thickness_mm,
+                :partition_thickness_mm
 
     attr_accessor :front_mode
 
@@ -49,7 +50,8 @@ class GeneratorPerBayTest < Minitest::Test
                    door_thickness_mm: 19.0, height_mm: 0.0,
                    toe_kick_height_mm: 0.0, toe_kick_depth_mm: 0.0,
                    width_mm: 0.0, front_mode: :empty,
-                   panel_thickness_mm: 0.0)
+                   panel_thickness_mm: 0.0,
+                   partition_thickness_mm: nil)
       @partition_bays = partition_bays
       @shelf_thickness_mm = shelf_thickness_mm
       @interior_clear_height_mm = interior_clear_height_mm
@@ -67,6 +69,7 @@ class GeneratorPerBayTest < Minitest::Test
       @width_mm = width_mm
       @front_mode = front_mode
       @panel_thickness_mm = panel_thickness_mm
+      @partition_thickness_mm = partition_thickness_mm || panel_thickness_mm
     end
   end
 
@@ -130,16 +133,17 @@ class GeneratorPerBayTest < Minitest::Test
 
     single = placements.find { |placement| placement.bay_index == 1 }
     refute_nil(single)
-    assert_in_delta(228.0, single.width_mm, 1.0e-6)
-    assert_in_delta(238.0, single.x_start_mm, 1.0e-6)
+    assert_in_delta(246.0, single.width_mm, 1.0e-6)
+    assert_in_delta(229.0, single.x_start_mm, 1.0e-6)
     assert_in_delta(616.0, single.height_mm, 1.0e-6)
     assert_in_delta(102.0, single.bottom_z_mm, 1.0e-6)
 
     double = placements.select { |placement| placement.bay_index == 2 }
     assert_equal(2, double.length)
     double.sort_by!(&:x_start_mm)
-    assert_in_delta(153.0, double[0].width_mm, 1.0e-6)
-    assert_in_delta(153.0, double[1].width_mm, 1.0e-6)
+    assert_in_delta(479.0, double[0].x_start_mm, 1.0e-6)
+    assert_in_delta(157.5, double[0].width_mm, 1.0e-6)
+    assert_in_delta(157.5, double[1].width_mm, 1.0e-6)
     gap = double[1].x_start_mm - (double[0].x_start_mm + double[0].width_mm)
     assert_in_delta(4.0, gap, 1.0e-6)
   end

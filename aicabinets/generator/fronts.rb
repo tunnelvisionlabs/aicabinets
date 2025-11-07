@@ -121,8 +121,7 @@ module AICabinets
         bays = params.partition_bays
         return [] if bays.empty?
 
-        left_reveal_mm = params.door_edge_reveal_mm.to_f
-        right_reveal_mm = params.door_edge_reveal_mm.to_f
+        front_presence = bays.map { |bay| bay.leaf? && bay.door_mode != :none }
         center_gap_mm = params.door_center_reveal_mm.to_f
 
         total_bays = bays.length
@@ -143,6 +142,21 @@ module AICabinets
           )
 
           next unless opening_right_mm - opening_left_mm > MIN_DIMENSION_MM
+
+          left_reveal_mm = bay_edge_reveal_mm(
+            params: params,
+            bay_index: bay.index,
+            total_bays: total_bays,
+            side: :left,
+            front_presence: front_presence
+          )
+          right_reveal_mm = bay_edge_reveal_mm(
+            params: params,
+            bay_index: bay.index,
+            total_bays: total_bays,
+            side: :right,
+            front_presence: front_presence
+          )
 
           placements = build_bay_fronts(
             bay: bay,
@@ -355,20 +369,40 @@ module AICabinets
       private_class_method :validate_parent!
 
       def clear_existing_fronts(parent_entities)
-        existing = parent_entities.to_a.select do |entity|
-          next false unless entity&.valid?
-          next false unless entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
+        parent_entities.to_a.each do |entity|
+          next unless entity&.valid?
+          next unless entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
 
-          layer = entity.respond_to?(:layer) ? entity.layer : nil
-          layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
-          layer_name == FRONTS_TAG_NAME
-        end
+          next unless front_entity?(entity)
 
-        existing.each do |entity|
           entity.erase! if entity.valid?
         end
       end
       private_class_method :clear_existing_fronts
+
+      def front_entity?(entity)
+        tagged_as_front?(entity) || front_named?(entity)
+      end
+      private_class_method :front_entity?
+
+      def tagged_as_front?(entity)
+        layer = entity.respond_to?(:layer) ? entity.layer : nil
+        layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
+        layer_name == FRONTS_TAG_NAME
+      end
+      private_class_method :tagged_as_front?
+
+      def front_named?(entity)
+        names = []
+        names << entity.name.to_s if entity.respond_to?(:name)
+        if entity.respond_to?(:definition)
+          definition = entity.definition
+          names << definition.name.to_s if definition
+        end
+
+        names.any? { |value| value.start_with?('Door (') }
+      end
+      private_class_method :front_named?
 
       def bay_opening_bounds(params:, bounds:, total_bays:)
         left_extension_mm = bay_edge_extension_mm(
@@ -395,13 +429,46 @@ module AICabinets
         case side
         when :left
           return params.panel_thickness_mm.to_f if bay_index.zero?
+          return interior_partition_half_thickness_mm(params)
         when :right
           return params.panel_thickness_mm.to_f if bay_index == total_bays - 1
+          return interior_partition_half_thickness_mm(params)
         end
 
         0.0
       end
       private_class_method :bay_edge_extension_mm
+
+      def interior_partition_half_thickness_mm(params)
+        thickness = params.partition_thickness_mm.to_f
+        thickness = params.panel_thickness_mm.to_f if thickness <= MIN_DIMENSION_MM
+
+        [thickness / 2.0, 0.0].max
+      end
+      private_class_method :interior_partition_half_thickness_mm
+
+      def bay_edge_reveal_mm(params:, bay_index:, total_bays:, side:, front_presence:)
+        edge_reveal = params.door_edge_reveal_mm.to_f
+        return edge_reveal if total_bays <= 1
+
+        case side
+        when :left
+          return edge_reveal if bay_index.zero?
+
+          neighbor_index = bay_index - 1
+          return edge_reveal unless front_presence[bay_index] && front_presence[neighbor_index]
+        when :right
+          return edge_reveal if bay_index == total_bays - 1
+
+          neighbor_index = bay_index + 1
+          return edge_reveal unless front_presence[bay_index] && front_presence[neighbor_index]
+        else
+          return edge_reveal
+        end
+
+        params.door_center_reveal_mm.to_f / 2.0
+      end
+      private_class_method :bay_edge_reveal_mm
 
       def warn_skip(message)
         warn("AI Cabinets: #{message}")
