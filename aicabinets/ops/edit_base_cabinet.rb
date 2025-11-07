@@ -207,13 +207,59 @@ module AICabinets
         return false unless entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
 
         layer = entity.respond_to?(:layer) ? entity.layer : nil
-        layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
-        return false unless layer_name.start_with?(OWNED_TAG_PREFIX)
-        return false if layer_name == WRAPPER_TAG_NAME
+        return false unless layer
+        return false if layer.respond_to?(:valid?) && !layer.valid?
 
-        true
+        cabinet_owned_tag?(layer)
       end
       private_class_method :cabinet_owned_entity?
+
+      def cabinet_owned_tag?(layer)
+        layer_name = layer_name_for(layer)
+        category = tag_category_for(layer)
+
+        return false if wrapper_tag_name?(layer_name, category)
+
+        return true if layer_name.start_with?(OWNED_TAG_PREFIX)
+        return true unless category.empty?
+
+        false
+      end
+      private_class_method :cabinet_owned_tag?
+
+      def wrapper_tag_name?(name, category)
+        return true if name == WRAPPER_TAG_NAME
+        return true if name == AICabinets::Tags::CABINET_TAG_NAME &&
+                       category == AICabinets::Tags::CABINET_TAG_NAME
+        return true if name == AICabinets::Tags::CABINET_TAG_COLLISION_NAME &&
+                       category == AICabinets::Tags::CABINET_TAG_NAME
+
+        false
+      end
+      private_class_method :wrapper_tag_name?
+
+      def layer_name_for(layer)
+        return '' unless layer.respond_to?(:name)
+
+        name = layer.name
+        name.is_a?(String) ? name : name.to_s
+      end
+      private_class_method :layer_name_for
+
+      def tag_category_for(layer)
+        return '' unless layer.respond_to?(:get_attribute)
+
+        value = layer.get_attribute(
+          AICabinets::Tags::TAG_DICTIONARY,
+          AICabinets::Tags::TAG_CATEGORY_KEY
+        )
+        return value if value.is_a?(String)
+
+        value.to_s
+      rescue StandardError
+        ''
+      end
+      private_class_method :tag_category_for
 
       def assign_definition_attributes(definition, def_key, params_json)
         definition.set_attribute(DICTIONARY_NAME, SCHEMA_VERSION_KEY, SCHEMA_VERSION)
