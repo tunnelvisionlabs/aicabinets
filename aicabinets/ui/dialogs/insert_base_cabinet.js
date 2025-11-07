@@ -400,6 +400,103 @@
     return startIndex;
   }
 
+  function activateSegmentedInputElement(input) {
+    if (!input || input.disabled) {
+      return;
+    }
+
+    if (typeof input.click === 'function') {
+      input.click();
+    } else {
+      input.checked = true;
+      var changeEvent = document.createEvent('Event');
+      changeEvent.initEvent('change', true, true);
+      input.dispatchEvent(changeEvent);
+    }
+
+    if (typeof input.focus === 'function') {
+      input.focus();
+    }
+  }
+
+  function handleSegmentedGroupKeyDown(inputs, event) {
+    if (!event || !inputs || !inputs.length) {
+      return;
+    }
+
+    var list = Array.isArray(inputs) ? inputs : Array.prototype.slice.call(inputs);
+    var target = event.target;
+    var index = list.indexOf(target);
+    if (index === -1) {
+      return;
+    }
+
+    var key = event.key || event.keyCode;
+    var nextIndex = null;
+    var handled = false;
+
+    if (
+      key === 'ArrowRight' ||
+      key === 'Right' ||
+      key === 39 ||
+      key === 'ArrowDown' ||
+      key === 'Down' ||
+      key === 40
+    ) {
+      nextIndex = findNextEnabledIndex(list, index, 1);
+      handled = true;
+    } else if (
+      key === 'ArrowLeft' ||
+      key === 'Left' ||
+      key === 37 ||
+      key === 'ArrowUp' ||
+      key === 'Up' ||
+      key === 38
+    ) {
+      nextIndex = findNextEnabledIndex(list, index, -1);
+      handled = true;
+    } else if (key === 'Home' || key === 36) {
+      nextIndex = findFirstEnabledIndex(list);
+      handled = true;
+    } else if (key === 'End' || key === 35) {
+      nextIndex = findLastEnabledIndex(list);
+      handled = true;
+    }
+
+    if (!handled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (nextIndex == null || nextIndex === -1 || nextIndex === index) {
+      return;
+    }
+
+    activateSegmentedInputElement(list[nextIndex]);
+  }
+
+  function bindSegmentedGroupKeyHandlers(inputs) {
+    if (!inputs || !inputs.length) {
+      return;
+    }
+
+    var list = Array.isArray(inputs) ? inputs.slice() : Array.prototype.slice.call(inputs);
+    list.forEach(function (input) {
+      if (!input || input.__aicSegmentedKeyHandler) {
+        return;
+      }
+
+      var handler = function (event) {
+        handleSegmentedGroupKeyDown(list, event);
+      };
+
+      input.addEventListener('keydown', handler);
+      input.__aicSegmentedKeyHandler = handler;
+    });
+  }
+
   function normalizeBayMode(mode) {
     if (typeof mode === 'string') {
       var text = mode.trim().toLowerCase();
@@ -1020,101 +1117,7 @@
   };
 
   BayController.prototype.bindSegmentedInputKeys = function bindSegmentedInputKeys(inputs) {
-    if (!inputs || !inputs.length) {
-      return;
-    }
-
-    var self = this;
-    inputs.forEach(function (input) {
-      if (!input) {
-        return;
-      }
-      input.addEventListener('keydown', function (event) {
-        self.handleSegmentedInputKeyDown(inputs, event);
-      });
-    });
-  };
-
-  BayController.prototype.handleSegmentedInputKeyDown = function handleSegmentedInputKeyDown(inputs, event) {
-    if (!event || !inputs || !inputs.length) {
-      return;
-    }
-
-    var key = event.key || event.keyCode;
-    var index = -1;
-    for (var i = 0; i < inputs.length; i += 1) {
-      if (inputs[i] === event.target) {
-        index = i;
-        break;
-      }
-    }
-
-    if (index === -1) {
-      return;
-    }
-
-    var nextIndex = null;
-    var handled = false;
-
-    if (
-      key === 'ArrowRight' ||
-      key === 'Right' ||
-      key === 39 ||
-      key === 'ArrowDown' ||
-      key === 'Down' ||
-      key === 40
-    ) {
-      nextIndex = findNextEnabledIndex(inputs, index, 1);
-      handled = true;
-    } else if (
-      key === 'ArrowLeft' ||
-      key === 'Left' ||
-      key === 37 ||
-      key === 'ArrowUp' ||
-      key === 'Up' ||
-      key === 38
-    ) {
-      nextIndex = findNextEnabledIndex(inputs, index, -1);
-      handled = true;
-    } else if (key === 'Home' || key === 36) {
-      nextIndex = findFirstEnabledIndex(inputs);
-      handled = true;
-    } else if (key === 'End' || key === 35) {
-      nextIndex = findLastEnabledIndex(inputs);
-      handled = true;
-    }
-
-    if (!handled) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (nextIndex == null || nextIndex === -1 || nextIndex === index) {
-      return;
-    }
-
-    this.activateSegmentedInput(inputs[nextIndex]);
-  };
-
-  BayController.prototype.activateSegmentedInput = function activateSegmentedInput(input) {
-    if (!input || input.disabled) {
-      return;
-    }
-
-    if (typeof input.click === 'function') {
-      input.click();
-    } else {
-      input.checked = true;
-      var changeEvent = document.createEvent('Event');
-      changeEvent.initEvent('change', true, true);
-      input.dispatchEvent(changeEvent);
-    }
-
-    if (typeof input.focus === 'function') {
-      input.focus();
-    }
+    bindSegmentedGroupKeyHandlers(inputs);
   };
 
   BayController.prototype.renderChips = function renderChips() {
@@ -3166,6 +3169,7 @@
     }
 
     if (this.partitionModeInputs.length) {
+      bindSegmentedGroupKeyHandlers(this.partitionModeInputs);
       this.partitionModeInputs.forEach(function (input) {
         input.addEventListener('change', function (event) {
           if (event.target.checked) {
