@@ -25,36 +25,101 @@ module AICabinets
     def double_door_validity(params_mm:, bay_index:)
       params = sanitize_params(params_mm)
       index = coerce_index(bay_index)
-      return failure unless params && !index.nil?
-      return failure if index.negative?
+
+      min_leaf_width_mm = fetch_min_leaf_width_mm(params)
+      metadata = { leaf_width_mm: nil, min_leaf_width_mm: min_leaf_width_mm }
+
+      return failure(metadata) unless params && !index.nil?
+      return failure(metadata) if index.negative?
 
       ranges = partition_bay_ranges_mm(params)
       bay_range = ranges[index]
-      return failure unless bay_range
+      return failure(metadata) unless bay_range
 
       bay_width_mm = bay_range[1].to_f - bay_range[0].to_f
-      return failure if bay_width_mm <= FRONT_MIN_DIMENSION_MM
+      return failure(metadata) if bay_width_mm <= FRONT_MIN_DIMENSION_MM
 
+      partitions = fetch_partitions(params)
+      total_bays = ranges.length
+      panel_thickness_mm = coerce_positive_numeric(params[:panel_thickness_mm]) || 0.0
+      orientation = partition_orientation(partitions)
+      interior_width_mm = coerce_positive_numeric(params[:width_mm]) || 0.0
+      interior_width_mm = [interior_width_mm - (panel_thickness_mm * 2.0), 0.0].max
+      partition_thickness_mm = compute_partition_thickness_mm(partitions, panel_thickness_mm, interior_width_mm)
+      interior_half_thickness_mm = [partition_thickness_mm / 2.0, 0.0].max
+
+      overlay_left_mm = bay_edge_overlay_mm(
+        bay_index: index,
+        total_bays: total_bays,
+        side: :left,
+        orientation: orientation,
+        panel_thickness_mm: panel_thickness_mm,
+        interior_half_thickness_mm: interior_half_thickness_mm
+      )
+      overlay_right_mm = bay_edge_overlay_mm(
+        bay_index: index,
+        total_bays: total_bays,
+        side: :right,
+        orientation: orientation,
+        panel_thickness_mm: panel_thickness_mm,
+        interior_half_thickness_mm: interior_half_thickness_mm
+      )
+      overlay_total_mm = overlay_left_mm + overlay_right_mm
+
+      front_presence = bay_front_presence(params)
       edge_reveal_mm = fetch_edge_reveal_mm(params)
       center_gap_mm = fetch_center_gap_mm(params)
+      left_reveal_mm = bay_edge_reveal_mm(
+        front_presence: front_presence,
+        bay_index: index,
+        total_bays: total_bays,
+        side: :left,
+        orientation: orientation,
+        edge_reveal_mm: edge_reveal_mm,
+        center_gap_mm: center_gap_mm
+      )
+      right_reveal_mm = bay_edge_reveal_mm(
+        front_presence: front_presence,
+        bay_index: index,
+        total_bays: total_bays,
+        side: :right,
+        orientation: orientation,
+        edge_reveal_mm: edge_reveal_mm,
+        center_gap_mm: center_gap_mm
+      )
+      reveal_total_mm = left_reveal_mm + right_reveal_mm
 
-      clear_width_mm = bay_width_mm - (edge_reveal_mm * 2.0)
-      return failure if clear_width_mm <= FRONT_MIN_DIMENSION_MM
-
-      usable_width_mm = clear_width_mm - center_gap_mm
-      return failure if usable_width_mm <= FRONT_MIN_DIMENSION_MM
+      usable_width_mm = bay_width_mm + overlay_total_mm - reveal_total_mm - center_gap_mm
+      if usable_width_mm <= FRONT_MIN_DIMENSION_MM
+        metadata[:leaf_width_mm] = 0.0
+        return failure(metadata)
+      end
 
       leaf_width_mm = usable_width_mm / 2.0
-      return failure if leaf_width_mm <= FRONT_MIN_DIMENSION_MM
+      if leaf_width_mm <= FRONT_MIN_DIMENSION_MM
+        metadata[:leaf_width_mm] = leaf_width_mm
+        return failure(metadata)
+      end
 
-      [true, nil]
+      metadata[:leaf_width_mm] = leaf_width_mm
+
+      allowed = AICabinets::Generator::Fronts.double_allowed?(
+        bay_interior_width_mm: bay_width_mm,
+        overlay_mm: overlay_total_mm,
+        reveal_mm: reveal_total_mm,
+        door_gap_mm: center_gap_mm,
+        min_leaf_width_mm: min_leaf_width_mm,
+        leaf_width_mm: leaf_width_mm
+      )
+
+      allowed ? [true, nil, metadata] : failure(metadata)
     rescue StandardError => error
       warn("AI Cabinets: double door validity check failed: #{error.message}")
-      failure
+      failure(metadata)
     end
 
-    def failure
-      [false, DOUBLE_DISABLED_REASON]
+    def failure(metadata = nil)
+      [false, DOUBLE_DISABLED_REASON, metadata]
     end
     private_class_method :failure
 
@@ -118,6 +183,125 @@ module AICabinets
       value
     end
     private_class_method :fetch_center_gap_mm
+
+    def fetch_partitions(params)
+      return {} unless params.is_a?(Hash)
+
+      container = params[:partitions] || params['partitions']
+      container.is_a?(Hash) ? container : {}
+    end
+    private_class_method :fetch_partitions
+
+    def partition_orientation(partitions)
+      raw = fetch_hash_value(partitions, :orientation)
+      text = raw.to_s.strip.downcase
+      text == 'horizontal' ? :horizontal : :vertical
+    end
+    private_class_method :partition_orientation
+
+    def bay_edge_overlay_mm(bay_index:, total_bays:, side:, orientation:, panel_thickness_mm:, interior_half_thickness_mm:)
+      return panel_thickness_mm.to_f if orientation == :horizontal
+
+      case side
+      when :left
+        return panel_thickness_mm.to_f if bay_index.zero?
+        interior_half_thickness_mm.to_f
+      when :right
+        return panel_thickness_mm.to_f if bay_index == total_bays - 1
+        interior_half_thickness_mm.to_f
+      else
+        interior_half_thickness_mm.to_f
+      end
+    end
+    private_class_method :bay_edge_overlay_mm
+
+    def bay_edge_reveal_mm(front_presence:, bay_index:, total_bays:, side:, orientation:, edge_reveal_mm:, center_gap_mm:)
+      return edge_reveal_mm.to_f if total_bays <= 1
+      return edge_reveal_mm.to_f if orientation == :horizontal
+
+      case side
+      when :left
+        return edge_reveal_mm.to_f if bay_index.zero?
+
+        neighbor_index = bay_index - 1
+        present = front_present?(front_presence, bay_index) && front_present?(front_presence, neighbor_index)
+        return edge_reveal_mm.to_f unless present
+      when :right
+        return edge_reveal_mm.to_f if bay_index == total_bays - 1
+
+        neighbor_index = bay_index + 1
+        present = front_present?(front_presence, bay_index) && front_present?(front_presence, neighbor_index)
+        return edge_reveal_mm.to_f unless present
+      else
+        return edge_reveal_mm.to_f
+      end
+
+      center_gap_mm.to_f / 2.0
+    end
+    private_class_method :bay_edge_reveal_mm
+
+    def bay_front_presence(params)
+      bays = fetch_bays_array(params)
+      bays.map { |bay| bay_front_present?(bay) }
+    end
+    private_class_method :bay_front_presence
+
+    def fetch_bays_array(params)
+      partitions = fetch_partitions(params)
+      bays = fetch_hash_value(partitions, :bays)
+      bays.is_a?(Array) ? bays : []
+    end
+    private_class_method :fetch_bays_array
+
+    def bay_front_present?(bay)
+      return false unless bay.is_a?(Hash)
+
+      mode_value = fetch_hash_value(bay, :mode)
+      normalized_mode = mode_value.to_s.strip.downcase
+      active_mode = normalized_mode.empty? || normalized_mode == 'fronts_shelves'
+      return false unless active_mode
+
+      fronts_state = fetch_hash_value(bay, :fronts_shelves_state)
+      door_value =
+        if fronts_state.is_a?(Hash)
+          fetch_hash_value(fronts_state, :door_mode)
+        else
+          nil
+        end
+      door_value ||= fetch_hash_value(bay, :door_mode)
+      text = door_value.to_s.strip.downcase
+      !text.empty? && text != 'none' && text != 'doors_none'
+    end
+    private_class_method :bay_front_present?
+
+    def front_present?(front_presence, index)
+      return false unless front_presence.is_a?(Array)
+      value = front_presence[index]
+      !!value
+    end
+    private_class_method :front_present?
+
+    def fetch_min_leaf_width_mm(params)
+      if params.is_a?(Hash)
+        constraints = params[:constraints] || params['constraints']
+        if constraints.is_a?(Hash)
+          value = constraints[:min_door_leaf_width_mm] || constraints['min_door_leaf_width_mm']
+          numeric = coerce_positive_numeric(value)
+          return numeric if numeric
+        end
+      end
+
+      defaults = AICabinets::Defaults.load_effective_mm
+      constraints = defaults[:constraints] || defaults['constraints'] || {}
+      value = constraints[:min_door_leaf_width_mm] || constraints['min_door_leaf_width_mm']
+      numeric = coerce_positive_numeric(value)
+      return numeric if numeric
+
+      AICabinets::Generator::Fronts.min_double_leaf_width_mm
+    rescue StandardError
+      AICabinets::Generator::Fronts.min_double_leaf_width_mm
+    end
+    private_class_method :fetch_min_leaf_width_mm
 
     def coerce_non_negative_numeric(value)
       numeric = coerce_float(value)

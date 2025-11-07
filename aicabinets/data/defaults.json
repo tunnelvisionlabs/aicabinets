@@ -18,5 +18,8 @@
       "positions_mm": [],
       "bays": []
     }
+  },
+  "constraints": {
+    "min_door_leaf_width_mm": 180
   }
 }

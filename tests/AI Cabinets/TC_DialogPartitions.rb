@@ -170,6 +170,48 @@ class TC_DialogPartitions < TestUp::TestCase
     end
   end
 
+  def test_double_door_gating_and_live_region_announcements
+    run_dialog_test do
+      await_js('AICabinetsTest.setPartitionMode("vertical")')
+
+      await_js('AICabinetsTest.setTopCount(5)')
+      narrow_state = await_js('AICabinetsTest.requestDoubleValidity()')
+      double_state = narrow_state.dig('baySnapshot', 'double')
+      refute_nil(double_state, 'Expected double-door snapshot data')
+
+      assert(double_state['disabled'], 'Double door option should be disabled for narrow bay')
+      assert(double_state['hintVisible'], 'Hint should be visible when double doors are disabled')
+      assert_includes(double_state['hint'], 'minimum', 'Hint should reference minimum leaf width')
+      metadata = double_state['validity']
+      refute_nil(metadata, 'Expected validity metadata for double doors')
+      refute(metadata['allowed'], 'Metadata should mark double doors as not allowed')
+      assert(metadata['leafWidthMm'] < metadata['minLeafWidthMm'], 'Leaf width should be below minimum')
+      tab_index = double_state['tabIndex']
+      assert(tab_index.nil? || tab_index <= -1, 'Disabled radio should not be focusable')
+      assert_includes(
+        narrow_state['announcement'],
+        'Double doors disabled',
+        'Live region should announce when double doors are unavailable'
+      )
+
+      await_js('AICabinetsTest.setTopCount(1)')
+      wide_state = await_js('AICabinetsTest.requestDoubleValidity()')
+      wide_double = wide_state.dig('baySnapshot', 'double')
+      refute_nil(wide_double, 'Expected double-door snapshot data after widening bay')
+      refute(wide_double['disabled'], 'Double door option should be enabled after widening bay')
+      refute(wide_double['hintVisible'], 'Hint should hide when double doors become available')
+      wide_metadata = wide_double['validity']
+      assert(wide_metadata, 'Expected validity metadata when enabled')
+      assert(wide_metadata['allowed'], 'Metadata should mark double doors as allowed')
+      assert(wide_metadata['leafWidthMm'] >= wide_metadata['minLeafWidthMm'], 'Leaf width should meet minimum when enabled')
+      assert_includes(
+        wide_state['announcement'],
+        'Double doors available',
+        'Live region should announce when double doors become available'
+      )
+    end
+  end
+
   private
 
   def run_dialog_test(&block)
