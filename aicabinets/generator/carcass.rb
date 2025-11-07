@@ -636,7 +636,13 @@ module AICabinets
           layout.warnings.each do |message|
             warn("AI Cabinets: #{message}")
           end
-          @partition_bay_ranges_mm = layout.bay_ranges_mm
+          bay_ranges_mm = layout.bay_ranges_mm
+          @partition_bay_ranges_mm =
+            if layout.axis == :z
+              bay_ranges_mm.reverse
+            else
+              bay_ranges_mm
+            end
           if @partition_bay_ranges_mm.empty?
             left = interior_left_face_mm
             right = interior_right_face_mm
@@ -744,8 +750,8 @@ module AICabinets
 
           normalized = normalize_hash(raw_partitions)
           raw_bays = Array(normalized[:bays])
-          count = ranges.length
           axis = partition_axis
+          count = ranges.length
 
           Array.new(count) do |index|
             bounds_start_mm, bounds_end_mm = ranges[index]

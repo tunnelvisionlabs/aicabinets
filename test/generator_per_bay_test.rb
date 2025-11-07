@@ -9,6 +9,7 @@ $LOAD_PATH.unshift(File.expand_path('..', __dir__))
 
 require 'aicabinets/generator/shelves'
 require 'aicabinets/generator/fronts'
+require 'aicabinets/generator/partitions'
 
 class GeneratorPerBayTest < Minitest::Test
   class FakeBay
@@ -40,7 +41,8 @@ class GeneratorPerBayTest < Minitest::Test
                 :door_top_reveal_mm, :door_bottom_reveal_mm, :door_center_reveal_mm,
                 :door_thickness_mm, :height_mm, :toe_kick_height_mm,
                 :toe_kick_depth_mm, :width_mm, :panel_thickness_mm,
-                :partition_thickness_mm, :partition_orientation
+                :partition_thickness_mm, :partition_orientation,
+                :partition_left_faces_mm
 
     attr_accessor :front_mode
 
@@ -53,7 +55,8 @@ class GeneratorPerBayTest < Minitest::Test
                    width_mm: 0.0, front_mode: :empty,
                    panel_thickness_mm: 0.0,
                    partition_thickness_mm: nil,
-                   partition_orientation: :vertical)
+                   partition_orientation: :vertical,
+                   partition_left_faces_mm: [])
       @partition_bays = partition_bays
       @shelf_thickness_mm = shelf_thickness_mm
       @interior_clear_height_mm = interior_clear_height_mm
@@ -73,6 +76,7 @@ class GeneratorPerBayTest < Minitest::Test
       @panel_thickness_mm = panel_thickness_mm
       @partition_thickness_mm = partition_thickness_mm || panel_thickness_mm
       @partition_orientation = partition_orientation
+      @partition_left_faces_mm = Array(partition_left_faces_mm)
     end
   end
 
@@ -178,8 +182,8 @@ class GeneratorPerBayTest < Minitest::Test
 
   def test_fronts_plan_layout_supports_horizontal_orientation
     bays = [
-      FakeBay.new(index: 0, start_mm: 100.0, end_mm: 360.0, door_mode: :left, leaf: true, axis: :z),
-      FakeBay.new(index: 1, start_mm: 360.0, end_mm: 700.0, door_mode: :double, leaf: true, axis: :z)
+      FakeBay.new(index: 0, start_mm: 360.0, end_mm: 700.0, door_mode: :left, leaf: true, axis: :z),
+      FakeBay.new(index: 1, start_mm: 100.0, end_mm: 360.0, door_mode: :double, leaf: true, axis: :z)
     ]
 
     params = FakeParams.new(
@@ -205,15 +209,47 @@ class GeneratorPerBayTest < Minitest::Test
 
     single = placements.find { |placement| placement.bay_index == 0 }
     refute_nil(single)
-    assert_in_delta(886.0, single.width_mm, 1.0e-6)
-    assert_in_delta(105.0, single.bottom_z_mm, 1.0e-6)
-    assert_in_delta(255.0, single.height_mm, 1.0e-6)
+    assert_in_delta(894.0, single.width_mm, 1.0e-6)
+    assert_in_delta(3.0, single.x_start_mm, 1.0e-6)
+    assert_in_delta(351.0, single.bottom_z_mm, 1.0e-6)
+    assert_in_delta(357.0, single.height_mm, 1.0e-6)
 
     doubles = placements.select { |placement| placement.bay_index == 1 }
     assert_equal(2, doubles.length)
     doubles.sort_by!(&:x_start_mm)
-    assert_in_delta(360.0, doubles.first.bottom_z_mm, 1.0e-6)
-    # Top bay subtracts the configured top reveal from its height
-    assert_in_delta(330.0, doubles.first.height_mm, 1.0e-6)
+    first, second = doubles
+    assert_in_delta(87.0, first.bottom_z_mm, 1.0e-6)
+    assert_in_delta(282.0, first.height_mm, 1.0e-6)
+    assert_in_delta(3.0, first.x_start_mm, 1.0e-6)
+    assert_in_delta(445.0, first.width_mm, 1.0e-6)
+    assert_in_delta(452.0, second.x_start_mm, 1.0e-6)
+    assert_in_delta(445.0, second.width_mm, 1.0e-6)
+    gap = second.x_start_mm - (first.x_start_mm + first.width_mm)
+    assert_in_delta(4.0, gap, 1.0e-6)
+  end
+
+  def test_partitions_plan_layout_supports_horizontal_orientation
+    params = FakeParams.new(
+      partition_bays: [],
+      partition_left_faces_mm: [360.0],
+      partition_orientation: :horizontal,
+      partition_thickness_mm: 18.0,
+      interior_depth_mm: 550.0,
+      interior_clear_height_mm: 700.0,
+      interior_bottom_z_mm: 90.0,
+      width_mm: 900.0,
+      panel_thickness_mm: 18.0
+    )
+
+    placements = AICabinets::Generator::Partitions.plan_layout(params)
+    assert_equal(1, placements.length)
+    placement = placements.first
+    assert_equal(:horizontal, placement.orientation)
+    assert_in_delta(360.0, placement.bottom_z_mm, 1.0e-6)
+    assert_in_delta(18.0, placement.thickness_mm, 1.0e-6)
+    assert_in_delta(864.0, placement.width_mm, 1.0e-6)
+    assert_in_delta(550.0, placement.depth_mm, 1.0e-6)
+    assert_in_delta(18.0, placement.x_offset_mm, 1.0e-6)
+    assert_in_delta(0.0, placement.y_offset_mm, 1.0e-6)
   end
 end
