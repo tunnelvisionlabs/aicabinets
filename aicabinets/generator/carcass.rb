@@ -600,6 +600,7 @@ module AICabinets
             [@interior_top_z_mm - @interior_bottom_z_mm, 0.0].max
 
           @front_mode = normalize_front(params_mm[:front])
+          @global_fronts_shelves_state = normalize_hash(params_mm[:fronts_shelves_state])
 
           thickness_override = coerce_positive_numeric(params_mm[:door_thickness_mm])
           @door_thickness_mm =
@@ -801,17 +802,22 @@ module AICabinets
           shelf_value =
             if bay_hash.key?(:shelf_count)
               bay_hash[:shelf_count]
-            else
+            elsif fronts_state.key?(:shelf_count)
               fronts_state[:shelf_count]
             end
 
-          coerce_non_negative_integer(shelf_value) || 0
+          result = coerce_non_negative_integer(shelf_value)
+          return result unless result.nil?
+
+          default_bay_shelf_count
         end
 
         def extract_door_mode(bay_hash, fronts_state)
           return bay_hash[:door_mode] if bay_hash.key?(:door_mode)
 
-          fronts_state[:door_mode]
+          return fronts_state[:door_mode] if fronts_state.key?(:door_mode)
+
+          default_bay_door_mode
         end
 
         def extract_subpartition_count(sub_state, sub_config)
@@ -868,6 +874,30 @@ module AICabinets
           }
 
           mappings.fetch(text, :none)
+        end
+
+        def default_bay_shelf_count
+          return @default_bay_shelf_count if defined?(@default_bay_shelf_count)
+
+          count =
+            if @global_fronts_shelves_state.key?(:shelf_count)
+              coerce_non_negative_integer(@global_fronts_shelves_state[:shelf_count])
+            end
+
+          @default_bay_shelf_count = count || 0
+        end
+
+        def default_bay_door_mode
+          return @default_bay_door_mode if defined?(@default_bay_door_mode)
+
+          candidate =
+            if @global_fronts_shelves_state.key?(:door_mode)
+              @global_fronts_shelves_state[:door_mode]
+            else
+              @front_mode
+            end
+
+          @default_bay_door_mode = candidate
         end
 
         class PartitionBay
