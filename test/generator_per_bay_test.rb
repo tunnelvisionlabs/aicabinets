@@ -211,21 +211,24 @@ class GeneratorPerBayTest < Minitest::Test
     refute_nil(single)
     assert_in_delta(894.0, single.width_mm, 1.0e-6)
     assert_in_delta(3.0, single.x_start_mm, 1.0e-6)
-    assert_in_delta(351.0, single.bottom_z_mm, 1.0e-6)
-    assert_in_delta(357.0, single.height_mm, 1.0e-6)
+    assert_in_delta(362.0, single.bottom_z_mm, 1.0e-6)
+    assert_in_delta(346.0, single.height_mm, 1.0e-6)
 
     doubles = placements.select { |placement| placement.bay_index == 1 }
     assert_equal(2, doubles.length)
     doubles.sort_by!(&:x_start_mm)
     first, second = doubles
     assert_in_delta(87.0, first.bottom_z_mm, 1.0e-6)
-    assert_in_delta(282.0, first.height_mm, 1.0e-6)
+    assert_in_delta(271.0, first.height_mm, 1.0e-6)
     assert_in_delta(3.0, first.x_start_mm, 1.0e-6)
     assert_in_delta(445.0, first.width_mm, 1.0e-6)
     assert_in_delta(452.0, second.x_start_mm, 1.0e-6)
     assert_in_delta(445.0, second.width_mm, 1.0e-6)
     gap = second.x_start_mm - (first.x_start_mm + first.width_mm)
     assert_in_delta(4.0, gap, 1.0e-6)
+
+    vertical_gap = single.bottom_z_mm - (first.bottom_z_mm + first.height_mm)
+    assert_in_delta(4.0, vertical_gap, 1.0e-6)
   end
 
   def test_partitions_plan_layout_supports_horizontal_orientation

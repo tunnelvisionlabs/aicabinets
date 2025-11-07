@@ -148,7 +148,9 @@ module AICabinets
             params: params,
             bay: bay,
             bounds: bounds,
-            total_bays: total_bays
+            total_bays: total_bays,
+            front_presence: front_presence,
+            orientation: orientation
           )
           next unless vertical_bounds
 
@@ -351,14 +353,14 @@ module AICabinets
       end
       private_class_method :door_vertical_bounds
 
-      def bay_vertical_bounds(params:, bay:, bounds:, total_bays:)
-        orientation = partition_orientation(params)
+      def bay_vertical_bounds(params:, bay:, bounds:, total_bays:, front_presence:, orientation:)
         if orientation == :horizontal && bounds.axis == :z
           vertical_bounds_for_horizontal_bay(
             params: params,
             bay: bay,
             bounds: bounds,
             total_bays: total_bays,
+            front_presence: front_presence,
             orientation: orientation
           )
         else
@@ -367,11 +369,12 @@ module AICabinets
       end
       private_class_method :bay_vertical_bounds
 
-      def vertical_bounds_for_horizontal_bay(params:, bay:, bounds:, total_bays:, orientation:)
+      def vertical_bounds_for_horizontal_bay(params:, bay:, bounds:, total_bays:, front_presence:, orientation:)
         opening_bottom_mm, opening_top_mm = bay_vertical_opening_bounds(
           params: params,
           bounds: bounds,
           total_bays: total_bays,
+          front_presence: front_presence,
           orientation: orientation
         )
 
@@ -380,6 +383,7 @@ module AICabinets
           bay_index: bay.index,
           total_bays: total_bays,
           side: :bottom,
+          front_presence: front_presence,
           orientation: orientation
         )
         top_reveal_mm = bay_vertical_edge_reveal_mm(
@@ -387,6 +391,7 @@ module AICabinets
           bay_index: bay.index,
           total_bays: total_bays,
           side: :top,
+          front_presence: front_presence,
           orientation: orientation
         )
 
@@ -403,7 +408,7 @@ module AICabinets
       end
       private_class_method :vertical_bounds_for_horizontal_bay
 
-      def bay_vertical_opening_bounds(params:, bounds:, total_bays:, orientation:)
+      def bay_vertical_opening_bounds(params:, bounds:, total_bays:, front_presence:, orientation:)
         return [bounds.interior_bottom_z_mm, bounds.interior_top_z_mm] unless orientation == :horizontal
 
         bottom_extension_mm = bay_vertical_extension_mm(
@@ -411,6 +416,7 @@ module AICabinets
           bay_index: bounds.bay_index,
           total_bays: total_bays,
           side: :bottom,
+          front_presence: front_presence,
           orientation: orientation
         )
         top_extension_mm = bay_vertical_extension_mm(
@@ -418,6 +424,7 @@ module AICabinets
           bay_index: bounds.bay_index,
           total_bays: total_bays,
           side: :top,
+          front_presence: front_presence,
           orientation: orientation
         )
 
@@ -428,36 +435,74 @@ module AICabinets
       end
       private_class_method :bay_vertical_opening_bounds
 
-      def bay_vertical_extension_mm(params:, bay_index:, total_bays:, side:, orientation:)
+      def bay_vertical_extension_mm(params:, bay_index:, total_bays:, side:, front_presence:, orientation:)
         return 0.0 unless orientation == :horizontal
 
         case side
         when :top
           return params.panel_thickness_mm.to_f if bay_index.zero?
 
-          interior_partition_half_thickness_mm(params)
+          neighbor_index = bay_index - 1
+          return interior_partition_half_thickness_mm(params) unless adjacent_fronts?(front_presence, bay_index, neighbor_index)
+
+          0.0
         when :bottom
           return params.panel_thickness_mm.to_f if bay_index == total_bays - 1
 
-          interior_partition_half_thickness_mm(params)
+          neighbor_index = bay_index + 1
+          return interior_partition_half_thickness_mm(params) unless adjacent_fronts?(front_presence, bay_index, neighbor_index)
+
+          0.0
         else
           0.0
         end
       end
       private_class_method :bay_vertical_extension_mm
 
-      def bay_vertical_edge_reveal_mm(params:, bay_index:, total_bays:, side:, orientation:)
-        bottom_index = orientation == :horizontal ? total_bays - 1 : 0
-        top_index = orientation == :horizontal ? 0 : total_bays - 1
+      def adjacent_fronts?(front_presence, bay_index, neighbor_index)
+        return false unless neighbor_index&.between?(0, front_presence.length - 1)
+
+        front_presence[bay_index] && front_presence[neighbor_index]
+      end
+      private_class_method :adjacent_fronts?
+
+      def bay_vertical_edge_reveal_mm(params:, bay_index:, total_bays:, side:, front_presence:, orientation:)
+        unless orientation == :horizontal
+          case side
+          when :bottom
+            return params.door_bottom_reveal_mm.to_f if bay_index.zero?
+          when :top
+            return params.door_top_reveal_mm.to_f if bay_index == total_bays - 1
+          end
+          return 0.0
+        end
+
+        bottom_index = total_bays - 1
+        top_index = 0
+        center_reveal_mm = params.door_center_reveal_mm.to_f
 
         case side
         when :bottom
           return params.door_bottom_reveal_mm.to_f if bay_index == bottom_index
+
+          neighbor_index = bay_index + 1
+          if neighbor_index < total_bays && front_presence[bay_index] && front_presence[neighbor_index]
+            return center_reveal_mm / 2.0
+          end
+
+          0.0
         when :top
           return params.door_top_reveal_mm.to_f if bay_index == top_index
-        end
 
-        0.0
+          neighbor_index = bay_index - 1
+          if neighbor_index >= 0 && front_presence[bay_index] && front_presence[neighbor_index]
+            return center_reveal_mm / 2.0
+          end
+
+          0.0
+        else
+          0.0
+        end
       end
       private_class_method :bay_vertical_edge_reveal_mm
 
