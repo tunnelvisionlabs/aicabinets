@@ -47,6 +47,8 @@ TestUp is SketchUp's Minitest runner. To execute the AI Cabinets smoke tests:
 
 The suite currently verifies the extension namespace loads, the helper utilities reset the active model cleanly, and shared tolerances work for geometry assertions.
 
+UI dialog tests also stream DevTools console errors back to TestUp. The `TC_DialogConsoleErrors` case opens the Insert dialog, performs a basic interaction, and asserts that no `console.error`, `window.onerror`, or unhandled Promise rejection occurred; dedicated fixtures exercise failure scenarios. Warnings are recorded for review but do not fail the suite.
+
 To print the effective defaults (shipped JSON merged with user overrides), run:
 
 ```sh

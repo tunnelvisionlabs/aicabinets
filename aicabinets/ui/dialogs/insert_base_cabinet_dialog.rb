@@ -5,6 +5,7 @@ require 'json'
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
 require 'aicabinets/ui/localization'
+require 'aicabinets/ui/dialog_console_bridge'
 require 'aicabinets/ui_visibility'
 require 'aicabinets/door_mode_rules'
 
@@ -15,7 +16,8 @@ module AICabinets
         module_function
 
         Localization = AICabinets::UI::Localization
-        private_constant :Localization
+        ConsoleBridge = AICabinets::UI::DialogConsoleBridge
+        private_constant :Localization, :ConsoleBridge
 
         INSERT_DIALOG_TITLE = 'AI Cabinets — Insert Base Cabinet'
         EDIT_DIALOG_TITLE = 'AI Cabinets — Edit Base Cabinet'
@@ -102,10 +104,12 @@ module AICabinets
           }
 
           dialog = ::UI::HtmlDialog.new(options)
+          ConsoleBridge.register_dialog(dialog)
           attach_callbacks(dialog)
           set_dialog_file(dialog)
           dialog.set_on_closed do
             cancel_active_placement(dialog)
+            ConsoleBridge.unregister_dialog(dialog)
             @dialog = nil
           end
           dialog
@@ -953,6 +957,9 @@ module AICabinets
           end
           dialog.add_action_callback('ui_partitions_changed') do |_context, payload|
             handle_ui_partitions_changed(dialog, payload)
+          end
+          dialog.add_action_callback('__aicabinets_report_console_event') do |_context, payload|
+            ConsoleBridge.record_event(dialog, payload)
           end
           dialog.add_action_callback('__aicabinets_test_eval') do |_context, payload|
             handle_test_eval_payload(payload)
