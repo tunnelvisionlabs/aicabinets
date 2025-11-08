@@ -27,6 +27,14 @@
     door_mode_right: 'Right hinge',
     door_mode_double: 'Double',
     door_mode_double_disabled_hint: 'Bay too narrow for double doors.',
+    door_mode_double_disabled_due_to_min_hint:
+      'Double doors disabled: each leaf would be %{leaf} (minimum %{min}).',
+    door_mode_double_disabled_due_to_min_threshold:
+      'Double doors disabled: minimum leaf width %{min}.',
+    door_mode_double_disabled_due_to_min_announcement:
+      'Double doors disabled: each leaf would be under %{min}.',
+    door_mode_double_available_due_to_min:
+      'Double doors available: each leaf meets the %{min} minimum.',
     apply_to_all_label: 'Apply to all',
     copy_left_to_right_label: 'Copy L→R',
     apply_to_all_announcement: 'Copied bay %{source} settings to all bays.',

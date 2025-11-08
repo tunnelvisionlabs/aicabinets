@@ -117,7 +117,7 @@ class GeneratorPerBayTest < Minitest::Test
     bays = [
       FakeBay.new(index: 0, start_mm: 18.0, end_mm: 218.0, door_mode: :none, leaf: true),
       FakeBay.new(index: 1, start_mm: 236.0, end_mm: 468.0, door_mode: :left, leaf: true),
-      FakeBay.new(index: 2, start_mm: 486.0, end_mm: 782.0, door_mode: :double, leaf: true)
+      FakeBay.new(index: 2, start_mm: 486.0, end_mm: 886.0, door_mode: :double, leaf: true)
     ]
 
     params = FakeParams.new(
@@ -130,7 +130,7 @@ class GeneratorPerBayTest < Minitest::Test
       height_mm: 720.0,
       toe_kick_height_mm: 100.0,
       toe_kick_depth_mm: 50.0,
-      width_mm: 800.0,
+      width_mm: 904.0,
       front_mode: :empty,
       panel_thickness_mm: 18.0
     )
@@ -149,8 +149,8 @@ class GeneratorPerBayTest < Minitest::Test
     assert_equal(2, double.length)
     double.sort_by!(&:x_start_mm)
     assert_in_delta(479.0, double[0].x_start_mm, 1.0e-6)
-    assert_in_delta(157.5, double[0].width_mm, 1.0e-6)
-    assert_in_delta(157.5, double[1].width_mm, 1.0e-6)
+    assert_in_delta(209.5, double[0].width_mm, 1.0e-6)
+    assert_in_delta(209.5, double[1].width_mm, 1.0e-6)
     gap = double[1].x_start_mm - (double[0].x_start_mm + double[0].width_mm)
     assert_in_delta(4.0, gap, 1.0e-6)
   end
@@ -178,6 +178,38 @@ class GeneratorPerBayTest < Minitest::Test
 
     placements = AICabinets::Generator::Fronts.plan_layout(params)
     assert_empty(placements)
+  end
+
+  def test_fronts_plan_layout_skips_double_when_leaf_below_minimum
+    min_leaf_mm = AICabinets::Generator::Fronts.min_double_leaf_width_mm
+    bay_width_mm = (min_leaf_mm * 1.5)
+    bays = [
+      FakeBay.new(
+        index: 0,
+        start_mm: 18.0,
+        end_mm: 18.0 + bay_width_mm,
+        door_mode: :double,
+        leaf: true
+      )
+    ]
+
+    params = FakeParams.new(
+      partition_bays: bays,
+      door_edge_reveal_mm: 0.0,
+      door_top_reveal_mm: 0.0,
+      door_bottom_reveal_mm: 0.0,
+      door_center_reveal_mm: 2.0,
+      door_thickness_mm: 19.0,
+      height_mm: 720.0,
+      toe_kick_height_mm: 90.0,
+      toe_kick_depth_mm: 50.0,
+      width_mm: 18.0 + bay_width_mm + 18.0,
+      front_mode: :empty,
+      panel_thickness_mm: 18.0
+    )
+
+    placements = AICabinets::Generator::Fronts.plan_layout(params)
+    assert_empty(placements, 'Expected no double-door placements when below minimum leaf width')
   end
 
   def test_fronts_plan_layout_supports_horizontal_orientation

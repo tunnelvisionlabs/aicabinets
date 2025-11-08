@@ -4,6 +4,7 @@ require 'sketchup.rb'
 
 Sketchup.require('aicabinets/generator/bay_bounds')
 Sketchup.require('aicabinets/ops/units')
+Sketchup.require('aicabinets/defaults')
 
 module AICabinets
   module Generator
@@ -18,6 +19,65 @@ module AICabinets
       REVEAL_TOP_MM = 2.0
       REVEAL_BOTTOM_MM = 2.0
       MIN_DIMENSION_MM = 1.0e-3
+
+      def effective_double_leaf_width_mm(bay_interior_width_mm:, overlay_mm:, reveal_mm:, door_gap_mm:)
+        width_mm = bay_interior_width_mm.to_f
+        overlay_total_mm = [overlay_mm.to_f, 0.0].max
+        reveal_total_mm = [reveal_mm.to_f, 0.0].max
+        gap_mm = [door_gap_mm.to_f, 0.0].max
+
+        usable_width_mm = width_mm + overlay_total_mm - reveal_total_mm - gap_mm
+        return 0.0 if usable_width_mm <= MIN_DIMENSION_MM
+
+        usable_width_mm / 2.0
+      end
+
+      def double_allowed?(bay_interior_width_mm:, overlay_mm:, reveal_mm:, door_gap_mm:, min_leaf_width_mm: nil,
+                          leaf_width_mm: nil)
+        minimum_mm = min_leaf_width_mm
+        minimum_mm = min_double_leaf_width_mm if minimum_mm.nil? || minimum_mm <= MIN_DIMENSION_MM
+
+        candidate_mm = leaf_width_mm ||
+                       effective_double_leaf_width_mm(
+                         bay_interior_width_mm: bay_interior_width_mm,
+                         overlay_mm: overlay_mm,
+                         reveal_mm: reveal_mm,
+                         door_gap_mm: door_gap_mm
+                       )
+
+        candidate_mm >= minimum_mm - MIN_DIMENSION_MM
+      end
+
+      def min_double_leaf_width_mm
+        value = extract_min_leaf_width_mm(AICabinets::Defaults.load_effective_mm)
+        return value if value && value > MIN_DIMENSION_MM
+
+        extract_min_leaf_width_mm(AICabinets::Defaults.load_mm) || 0.0
+      rescue StandardError
+        0.0
+      end
+
+      def extract_min_leaf_width_mm(container)
+        return nil unless container.is_a?(Hash)
+
+        constraints = container[:constraints] || container['constraints'] || {}
+        value = constraints[:min_door_leaf_width_mm] || constraints['min_door_leaf_width_mm']
+        numeric =
+          case value
+          when Numeric
+            value.to_f
+          when String
+            Float(value)
+          else
+            nil
+          end
+        return nil if numeric.nil? || numeric <= MIN_DIMENSION_MM
+
+        numeric
+      rescue ArgumentError
+        nil
+      end
+      private_class_method :extract_min_leaf_width_mm
 
       DoorPlacement = Struct.new(
         :name,
@@ -217,7 +277,12 @@ module AICabinets
             bottom_z_mm: vertical_bounds[:bottom_z_mm]
           )]
         when :double
-          usable_width_mm = clear_width_mm - center_gap_mm
+          opening_width_mm = opening_right_mm - opening_left_mm
+          overlay_total_mm = [opening_width_mm - bay.width_mm.to_f, 0.0].max
+          reveal_total_mm = left_reveal_mm + right_reveal_mm
+          gap_mm = center_gap_mm.to_f
+
+          usable_width_mm = bay.width_mm.to_f + overlay_total_mm - reveal_total_mm - gap_mm
           if usable_width_mm <= MIN_DIMENSION_MM
             warn_skip("Skipped double doors for bay #{bay.index + 1} because the gap exceeded the width.")
             return []
@@ -226,6 +291,27 @@ module AICabinets
           leaf_width_mm = usable_width_mm / 2.0
           if leaf_width_mm <= MIN_DIMENSION_MM
             warn_skip("Skipped double doors for bay #{bay.index + 1} because each leaf would be too narrow.")
+            return []
+          end
+
+          min_leaf_width_mm = min_double_leaf_width_mm
+          allowed = double_allowed?(
+            bay_interior_width_mm: bay.width_mm.to_f,
+            overlay_mm: overlay_total_mm,
+            reveal_mm: reveal_total_mm,
+            door_gap_mm: gap_mm,
+            min_leaf_width_mm: min_leaf_width_mm,
+            leaf_width_mm: leaf_width_mm
+          )
+          unless allowed
+            warn_skip(
+              format(
+                'Skipped double doors for bay %<index>d because each leaf (%<leaf>.3f mm) falls below the %<min>.3f mm minimum.',
+                index: bay.index + 1,
+                leaf: leaf_width_mm,
+                min: min_leaf_width_mm
+              )
+            )
             return []
           end
 
@@ -301,6 +387,26 @@ module AICabinets
           leaf_width_mm = usable_width_mm / 2.0
           if leaf_width_mm <= MIN_DIMENSION_MM
             warn_skip('Skipped double doors because each leaf would be too narrow.')
+            return []
+          end
+
+          min_leaf_width_mm = min_double_leaf_width_mm
+          allowed = double_allowed?(
+            bay_interior_width_mm: params.width_mm.to_f,
+            overlay_mm: 0.0,
+            reveal_mm: left_reveal_mm + right_reveal_mm,
+            door_gap_mm: center_gap_mm,
+            min_leaf_width_mm: min_leaf_width_mm,
+            leaf_width_mm: leaf_width_mm
+          )
+          unless allowed
+            warn_skip(
+              format(
+                'Skipped double doors because each leaf (%<leaf>.3f mm) falls below the %<min>.3f mm minimum.',
+                leaf: leaf_width_mm,
+                min: min_leaf_width_mm
+              )
+            )
             return []
           end
 

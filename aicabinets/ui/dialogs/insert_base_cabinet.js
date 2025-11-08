@@ -49,7 +49,48 @@
     enabled: window.__AICABINETS_TEST__ === true,
     readyPromise: null,
     readyResolve: null,
-    lastLiveRegion: ''
+    lastLiveRegion: '',
+    pendingDoubleValidity: [],
+    waitForDoubleValidity: function waitForDoubleValidity(index) {
+      if (!this.enabled) {
+        return Promise.resolve();
+      }
+
+      var numeric = Number(index);
+      if (!isFinite(numeric)) {
+        numeric = 0;
+      }
+
+      return new Promise(function (resolve) {
+        testSupport.pendingDoubleValidity.push({ index: numeric, resolve: resolve });
+      });
+    },
+    resolveDoubleValidity: function resolveDoubleValidity(index) {
+      if (!this.enabled || !this.pendingDoubleValidity.length) {
+        return;
+      }
+
+      var numeric = Number(index);
+      if (!isFinite(numeric)) {
+        numeric = 0;
+      }
+
+      for (var i = 0; i < this.pendingDoubleValidity.length; i += 1) {
+        var entry = this.pendingDoubleValidity[i];
+        if (!entry) {
+          continue;
+        }
+        if (entry.index === numeric) {
+          this.pendingDoubleValidity.splice(i, 1);
+          try {
+            entry.resolve();
+          } catch (error) {
+            // Ignore test-mode resolution errors to avoid masking dialog issues.
+          }
+          break;
+        }
+      }
+    }
   };
   if (testSupport.enabled) {
     testSupport.readyPromise = new Promise(function (resolve) {
@@ -702,7 +743,39 @@
     });
   }
 
+  function collectDoubleDoorState(bayController) {
+    if (!bayController) {
+      return null;
+    }
+
+    var input = bayController.doubleDoorInput || null;
+    var hint = bayController.hint || null;
+    var validity = Array.isArray(bayController.doubleValidity)
+      ? bayController.doubleValidity[bayController.selectedIndex]
+      : null;
+
+    return {
+      disabled: input ? input.disabled === true : false,
+      checked: input ? input.checked === true : false,
+      tabIndex: input && typeof input.tabIndex === 'number' ? input.tabIndex : null,
+      hint: hint ? collapseWhitespace(hint.textContent) : '',
+      hintVisible: !!(hint && !hint.hidden && collapseWhitespace(hint.textContent)),
+      validity: validity
+        ? {
+            allowed: validity.allowed !== false,
+            reason: validity.reason || null,
+            leafWidthMm: validity.leafWidthMm,
+            minLeafWidthMm: validity.minLeafWidthMm
+          }
+        : null
+    };
+  }
+
   function collectState() {
+    if (testSupport.enabled && controller && controller.liveAnnouncer) {
+      controller.liveAnnouncer.flush();
+    }
+
     if (!controller) {
       return {
         partition_mode: null,
@@ -759,7 +832,8 @@
         total: bays.length,
         selectedIndex: selectedIndex,
         selected: cloneBayForTest(bays[selectedIndex]),
-        template: cloneBayForTest(controller.bayTemplate)
+        template: cloneBayForTest(controller.bayTemplate),
+        double: collectDoubleDoorState(controller.bayController)
       },
       announcement: testSupport.lastLiveRegion || window.__AICABINETS_LAST_LIVE_REGION__ || ''
     };
@@ -838,6 +912,19 @@
           return collectState();
         });
       },
+      requestDoubleValidity: function requestDoubleValidity() {
+        return whenReady(function (formController) {
+          var index = formController.selectedBayIndex != null ? formController.selectedBayIndex : 0;
+          var wait =
+            testSupport.enabled && typeof testSupport.waitForDoubleValidity === 'function'
+              ? testSupport.waitForDoubleValidity(index)
+              : Promise.resolve();
+          formController.handleRequestBayValidity(index);
+          return wait.then(function () {
+            return collectState();
+          });
+        });
+      },
       getState: function getState() {
         return collectState();
       },
@@ -871,6 +958,17 @@
     this.announceCallback =
       typeof options.onAnnounce === 'function' ? options.onAnnounce : function () {};
     this.translate = typeof options.translate === 'function' ? options.translate : translate;
+    if (typeof options.formatMillimeters === 'function') {
+      this.formatMillimeters = options.formatMillimeters;
+    } else {
+      this.formatMillimeters = function (value) {
+        var numeric = Number(value);
+        if (!isFinite(numeric)) {
+          return '';
+        }
+        return numeric.toFixed(0) + ' mm';
+      };
+    }
 
     this.selectedIndex = 0;
     this.bays = [];
@@ -878,6 +976,7 @@
     this.focusedIndex = 0;
     this.lastRenderedBayCount = 0;
     this.doubleValidity = [];
+    this.lastDoubleEligibility = [];
     this.template = cloneBay(null);
     this.shelfLock = false;
     this.doorLock = false;
@@ -1367,20 +1466,24 @@
 
     options = options || {};
     var previous = this.selectedIndex;
+    var selectionChanged = clamped !== previous;
+    var shouldAnnounce = options.announce !== false;
     this.selectedIndex = clamped;
 
     this.focusedIndex = clamped;
     this.refreshChipAttributes({ focus: options.focus });
 
     this.updateShelfControls();
-    this.updateDoorControls();
+    this.updateDoorControls({
+      announce: shouldAnnounce,
+      force: options.forceAnnounce === true || (shouldAnnounce && selectionChanged)
+    });
     this.updateModeControls();
     this.updateSubpartitionControls();
     this.applyModeSpecificDisabling();
     this.updateActionsVisibility();
 
-    var shouldAnnounce = options.announce !== false;
-    if ((shouldAnnounce && clamped !== previous) || options.forceAnnounce) {
+    if ((shouldAnnounce && selectionChanged) || options.forceAnnounce) {
       this.announce(
         this.translate('bay_selection_status', { index: clamped + 1, total: this.bays.length }),
         { immediate: true }
@@ -1409,7 +1512,8 @@
     this.shelfLock = false;
   };
 
-  BayController.prototype.updateDoorControls = function updateDoorControls() {
+  BayController.prototype.updateDoorControls = function updateDoorControls(options) {
+    options = options || {};
     var bay = this.bays[this.selectedIndex] || this.template;
     var fronts = bay.fronts_shelves_state || {};
     var mode = fronts.door_mode;
@@ -1425,13 +1529,19 @@
       input.checked = input.value === mode;
     });
     this.doorLock = false;
-    this.applyDoubleValidityState();
+    this.applyDoubleValidityState(options);
   };
 
   BayController.prototype.setBays = function setBays(bays, options) {
     options = options || {};
     this.bays = Array.isArray(bays) ? bays.slice() : [];
     this.template = this.bays.length ? cloneBay(this.bays[0]) : cloneBay(null);
+    if (this.doubleValidity.length > this.bays.length) {
+      this.doubleValidity.length = this.bays.length;
+    }
+    if (this.lastDoubleEligibility.length > this.bays.length) {
+      this.lastDoubleEligibility.length = this.bays.length;
+    }
     var desiredIndex = options.selectedIndex != null ? options.selectedIndex : this.selectedIndex;
     desiredIndex = clampSelectedIndex(desiredIndex, this.bays.length);
     this.selectedIndex = desiredIndex;
@@ -1459,7 +1569,7 @@
     this.bays[index] = cloneBay(bay);
     if (index === this.selectedIndex) {
       this.updateShelfControls();
-      this.updateDoorControls();
+      this.updateDoorControls({ announce: false });
       this.updateSubpartitionControls();
       this.updateModeControls();
       this.applyModeSpecificDisabling();
@@ -1751,31 +1861,156 @@
     }
   };
 
-  BayController.prototype.applyDoubleValidityState = function applyDoubleValidityState() {
+  function coerceNumeric(value) {
+    var numeric = Number(value);
+    return isFinite(numeric) ? numeric : null;
+  }
+
+  function sanitizeReason(reason) {
+    if (!reason) {
+      return null;
+    }
+    var text = collapseWhitespace(reason);
+    return text || null;
+  }
+
+  BayController.prototype.setDoubleDoorFocusability = function setDoubleDoorFocusability(
+    enabled
+  ) {
+    var input = this.doubleDoorInput || null;
+    if (!input) {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(input, '__aicOriginalTabIndex')) {
+      input.__aicOriginalTabIndex = input.hasAttribute('tabindex')
+        ? input.getAttribute('tabindex')
+        : null;
+    }
+
+    if (enabled) {
+      var original = input.__aicOriginalTabIndex;
+      if (original == null || original === '') {
+        input.removeAttribute('tabindex');
+      } else {
+        input.setAttribute('tabindex', original);
+      }
+      if (typeof input.tabIndex === 'number' && input.tabIndex < 0) {
+        input.tabIndex = 0;
+      }
+      return;
+    }
+
+    input.setAttribute('tabindex', '-1');
+    input.tabIndex = -1;
+  };
+
+  BayController.prototype.applyDoubleValidityState = function applyDoubleValidityState(options) {
     if (!this.doubleDoorInput) {
       return;
     }
 
-    var validity = this.doubleValidity[this.selectedIndex];
-    if (!validity) {
-      this.doubleDoorInput.disabled = false;
+    options = options || {};
+    var shouldAnnounce = options.announce !== false;
+    var force = options.force === true;
+
+    var bay = this.bays[this.selectedIndex] || this.template;
+    var mode = normalizeBayMode(bay.mode);
+    var frontDisabled = this.buttonsDisabled || mode !== 'fronts_shelves';
+
+    if (frontDisabled) {
+      this.doubleDoorInput.disabled = true;
+      this.setDoubleDoorFocusability(false);
       this.clearHint();
+      this.lastDoubleEligibility[this.selectedIndex] = {
+        allowed: false,
+        key: 'front-disabled'
+      };
       return;
     }
 
-    if (validity.allowed) {
+    var validity = this.doubleValidity[this.selectedIndex] || null;
+    var allowed = !validity || validity.allowed === true;
+    var reason = sanitizeReason(validity && validity.reason);
+    var leafWidthMm = validity ? coerceNumeric(validity.leafWidthMm) : null;
+    var minLeafWidthMm = validity ? coerceNumeric(validity.minLeafWidthMm) : null;
+
+    var previous = this.lastDoubleEligibility[this.selectedIndex] || { allowed: null, key: null };
+    var key = allowed ? 'allowed' : 'disallowed';
+    var announcement = null;
+    var hintText = null;
+
+    if (allowed) {
       this.doubleDoorInput.disabled = false;
+      this.setDoubleDoorFocusability(true);
       this.clearHint();
-      return;
+
+      if (minLeafWidthMm != null) {
+        key = key + '|min=' + minLeafWidthMm;
+        if (shouldAnnounce) {
+          var formattedMinAllowed = this.formatMillimeters(minLeafWidthMm);
+          announcement = this.translate('door_mode_double_available_due_to_min', {
+            min: formattedMinAllowed
+          });
+        }
+      }
+    } else {
+      this.doubleDoorInput.disabled = true;
+      this.setDoubleDoorFocusability(false);
+      var current = this.bays[this.selectedIndex] || {};
+      var fronts = current.fronts_shelves_state || {};
+      if (fronts.door_mode === 'doors_double') {
+        this.handleDoorChange('none');
+      }
+
+      if (reason) {
+        hintText = reason;
+      } else if (minLeafWidthMm != null && leafWidthMm != null) {
+        hintText = this.translate('door_mode_double_disabled_due_to_min_hint', {
+          leaf: this.formatMillimeters(leafWidthMm),
+          min: this.formatMillimeters(minLeafWidthMm)
+        });
+      } else if (minLeafWidthMm != null) {
+        hintText = this.translate('door_mode_double_disabled_due_to_min_threshold', {
+          min: this.formatMillimeters(minLeafWidthMm)
+        });
+      } else {
+        hintText = this.translate('door_mode_double_disabled_hint');
+      }
+      this.showHint(hintText);
+
+      if (minLeafWidthMm != null) {
+        key = key + '|min=' + minLeafWidthMm;
+      }
+      if (leafWidthMm != null) {
+        key = key + '|leaf=' + leafWidthMm;
+      }
+      if (hintText) {
+        key = key + '|hint=' + hintText;
+      }
+
+      if (shouldAnnounce) {
+        if (minLeafWidthMm != null) {
+          announcement = this.translate('door_mode_double_disabled_due_to_min_announcement', {
+            min: this.formatMillimeters(minLeafWidthMm)
+          });
+        } else {
+          announcement = hintText || this.translate('door_mode_double_disabled_hint');
+        }
+      }
     }
 
-    this.doubleDoorInput.disabled = true;
-    var current = this.bays[this.selectedIndex] || {};
-    var fronts = current.fronts_shelves_state || {};
-    if (fronts.door_mode === 'doors_double') {
-      this.handleDoorChange('none');
+    var changed =
+      force ||
+      previous.allowed !== allowed ||
+      previous.key !== key;
+
+    if (changed) {
+      this.lastDoubleEligibility[this.selectedIndex] = { allowed: allowed, key: key };
+      if (shouldAnnounce && announcement) {
+        this.announce(announcement, { immediate: false });
+      }
     }
-    this.showHint(validity.reason || this.translate('door_mode_double_disabled_hint'));
   };
 
   BayController.prototype.applyModeSpecificDisabling = function applyModeSpecificDisabling() {
@@ -1783,6 +2018,7 @@
     var mode = normalizeBayMode(bay.mode);
     var frontDisabled = this.buttonsDisabled || mode !== 'fronts_shelves';
     var subDisabled = this.buttonsDisabled || mode !== 'subpartitions';
+    var self = this;
 
     if (this.decreaseButton) {
       this.decreaseButton.disabled = frontDisabled;
@@ -1794,10 +2030,23 @@
       this.shelfInput.disabled = frontDisabled;
     }
     this.doorInputs.forEach(function (input) {
-      if (input) {
-        input.disabled = frontDisabled;
+      if (!input) {
+        return;
       }
+      if (input === self.doubleDoorInput && !frontDisabled) {
+        return;
+      }
+      input.disabled = frontDisabled;
     });
+    if (this.doubleDoorInput) {
+      if (frontDisabled) {
+        this.doubleDoorInput.disabled = true;
+        this.setDoubleDoorFocusability(false);
+        this.clearHint();
+      } else {
+        this.applyDoubleValidityState({ announce: false });
+      }
+    }
     if (this.subpartitionDecreaseButton) {
       this.subpartitionDecreaseButton.disabled = subDisabled;
     }
@@ -1809,10 +2058,24 @@
     }
   };
 
-  BayController.prototype.setDoubleValidity = function setDoubleValidity(index, allowed, reason) {
-    this.doubleValidity[index] = { allowed: !!allowed, reason: reason || null };
-    if (index === this.selectedIndex) {
-      this.applyDoubleValidityState();
+  BayController.prototype.setDoubleValidity = function setDoubleValidity(index, payload) {
+    var numericIndex = typeof index === 'number' && isFinite(index) ? index : Number(index);
+    if (!isFinite(numericIndex)) {
+      numericIndex = 0;
+    }
+    var entry = payload && typeof payload === 'object' ? payload : {};
+    var normalized = {
+      allowed: entry.allowed !== false,
+      reason: entry.reason || null,
+      leafWidthMm: entry.leaf_width_mm,
+      minLeafWidthMm: entry.min_leaf_width_mm
+    };
+    this.doubleValidity[numericIndex] = normalized;
+    if (numericIndex === this.selectedIndex) {
+      this.applyDoubleValidityState({ announce: true });
+    }
+    if (testSupport.enabled && typeof testSupport.resolveDoubleValidity === 'function') {
+      testSupport.resolveDoubleValidity(numericIndex);
     }
   };
 
@@ -2400,7 +2663,9 @@
       onApplyToAll: this.handleApplyBayToAll.bind(this),
       onCopyLeftToRight: this.handleCopyLeftToRight.bind(this),
       onRequestValidity: this.handleRequestBayValidity.bind(this),
-      onAnnounce: this.handleBayAnnouncement.bind(this)
+      onAnnounce: this.handleBayAnnouncement.bind(this),
+      formatMillimeters: this.lengthService.format.bind(this.lengthService),
+      translate: translate
     });
   }
 
@@ -3083,7 +3348,7 @@
           if (!entry || typeof entry !== 'object') {
             return;
           }
-          this.applyDoubleValidity(index, entry.allowed, entry.reason);
+          this.applyDoubleValidity(index, entry);
         }.bind(this)
       );
     }
@@ -3101,9 +3366,9 @@
     };
   };
 
-  FormController.prototype.applyDoubleValidity = function applyDoubleValidity(index, allowed, reason) {
+  FormController.prototype.applyDoubleValidity = function applyDoubleValidity(index, payload) {
     if (this.bayController) {
-      this.bayController.setDoubleValidity(index, !!allowed, reason || null);
+      this.bayController.setDoubleValidity(index, payload);
     }
   };
 
@@ -4441,13 +4706,14 @@
     pendingBayState.bays[index] = bay;
   };
 
-  namespace.state_set_double_validity = function state_set_double_validity(index, allowed, reason) {
+  namespace.state_set_double_validity = function state_set_double_validity(index, payload) {
+    var data = parsePayload(payload);
     if (controller) {
-      controller.applyDoubleValidity(index, allowed, reason);
+      controller.applyDoubleValidity(index, data);
       return;
     }
 
-    pendingBayValidity.push({ index: index, allowed: allowed, reason: reason });
+    pendingBayValidity.push({ index: index, payload: data });
   };
 
   namespace.toast = function toast(message) {
@@ -4715,7 +4981,7 @@
 
     if (pendingBayValidity.length) {
       pendingBayValidity.forEach(function (entry) {
-        controller.applyDoubleValidity(entry.index, entry.allowed, entry.reason);
+        controller.applyDoubleValidity(entry.index, entry.payload);
       });
       pendingBayValidity = [];
     }

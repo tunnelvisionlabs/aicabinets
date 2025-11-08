@@ -68,9 +68,14 @@ module AICabinets
       partitions: PARTITIONS_FALLBACK
     }.freeze
 
-    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base].freeze
+    FALLBACK_CONSTRAINTS = {
+      min_door_leaf_width_mm: 140.0
+    }.freeze
+
+    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base constraints].freeze
     RECOGNIZED_KEYS = FALLBACK_MM.keys.map(&:to_s).freeze
     RECOGNIZED_PARTITION_KEYS = PARTITIONS_FALLBACK.keys.map(&:to_s).freeze
+    CONSTRAINT_KEYS = FALLBACK_CONSTRAINTS.keys.map(&:to_s).freeze
 
     def load_mm
       raw = read_defaults_file(DEFAULTS_PATH)
@@ -158,7 +163,12 @@ module AICabinets
       container = overrides_container(raw)
       return {} unless container
 
-      sanitize_overrides_body(container)
+      sanitized = sanitize_overrides_body(container)
+
+      constraints = sanitize_overrides_constraints(raw)
+      sanitized[:constraints] = constraints unless constraints.empty?
+
+      sanitized
     end
     private_class_method :sanitize_overrides
 
@@ -176,10 +186,10 @@ module AICabinets
           return nil
         end
 
-        warn_unknown_keys_once(raw, ['cabinet_base'], 'overrides root')
+        warn_unknown_keys_once(raw, ['cabinet_base', 'constraints'], 'overrides root')
         cabinet_base
       else
-        warn_unknown_keys_once(raw, RECOGNIZED_KEYS, 'overrides root')
+        warn_unknown_keys_once(raw, RECOGNIZED_KEYS + ['constraints'], 'overrides root')
         raw
       end
     end
@@ -217,6 +227,24 @@ module AICabinets
       sanitized
     end
     private_class_method :sanitize_overrides_body
+
+    def sanitize_overrides_constraints(raw)
+      return {} unless raw.is_a?(Hash)
+
+      source = raw['constraints'] || raw[:constraints]
+      return {} unless source.is_a?(Hash)
+
+      warn_unknown_keys_once(source, CONSTRAINT_KEYS, 'overrides.constraints')
+
+      FALLBACK_CONSTRAINTS.each_with_object({}) do |(key, fallback), result|
+        string_key = key.to_s
+        next unless source.key?(string_key) || source.key?(key)
+
+        value = source[string_key] || source[key]
+        result[key] = sanitize_numeric_field("overrides.constraints.#{string_key}", value, fallback)
+      end
+    end
+    private_class_method :sanitize_overrides_constraints
 
     def sanitize_overrides_partitions(raw)
       unless raw.is_a?(Hash)
@@ -502,7 +530,12 @@ module AICabinets
         return deep_dup(FALLBACK_MM)
       end
 
-      sanitize_cabinet_base(base_raw)
+      result = sanitize_cabinet_base(base_raw)
+
+      constraints_source = raw['constraints'] || raw[:constraints]
+      result[:constraints] = sanitize_constraints(constraints_source)
+
+      result
     end
     private_class_method :sanitize_defaults
 
@@ -528,6 +561,20 @@ module AICabinets
       end
     end
     private_class_method :sanitize_cabinet_base
+
+    def sanitize_constraints(raw)
+      unless raw.is_a?(Hash)
+        return deep_dup(FALLBACK_CONSTRAINTS)
+      end
+
+      warn_unknown_keys(raw, CONSTRAINT_KEYS, 'defaults.constraints')
+
+      FALLBACK_CONSTRAINTS.each_with_object({}) do |(key, fallback), result|
+        label = "constraints.#{key}"
+        result[key] = sanitize_numeric_field(label, raw[key.to_s], fallback)
+      end
+    end
+    private_class_method :sanitize_constraints
 
     def sanitize_partitions(raw)
       unless raw.is_a?(Hash)
@@ -835,6 +882,11 @@ module AICabinets
       result = deep_dup(defaults)
 
       overrides.each do |key, value|
+        if key == :constraints || key == 'constraints'
+          result[:constraints] = merge_constraints(result[:constraints], value)
+          next
+        end
+
         next unless FALLBACK_MM.key?(key)
 
         result[key] =
@@ -870,6 +922,22 @@ module AICabinets
     end
     private_class_method :merge_partitions
 
+    def merge_constraints(defaults, overrides)
+      base = defaults.is_a?(Hash) ? deep_dup(defaults) : deep_dup(FALLBACK_CONSTRAINTS)
+      return base unless overrides.is_a?(Hash)
+
+      overrides.each do |key, value|
+        symbol = key.to_sym
+        next unless FALLBACK_CONSTRAINTS.key?(symbol)
+
+        label = "overrides.constraints.#{symbol}"
+        base[symbol] = sanitize_numeric_field(label, value, base.fetch(symbol, FALLBACK_CONSTRAINTS[symbol]))
+      end
+
+      base
+    end
+    private_class_method :merge_constraints
+
     def build_overrides_payload(params_mm)
       return {} unless params_mm.is_a?(Hash)
 
@@ -891,7 +959,12 @@ module AICabinets
           end
       end
 
-      { 'cabinet_base' => payload }
+      result = { 'cabinet_base' => payload }
+
+      constraints_payload = build_constraints_payload(params_mm[:constraints] || params_mm['constraints'])
+      result['constraints'] = constraints_payload unless constraints_payload.empty?
+
+      result
     end
     private_class_method :build_overrides_payload
 
@@ -917,6 +990,18 @@ module AICabinets
       end
     end
     private_class_method :build_overrides_partitions
+
+    def build_constraints_payload(value)
+      raw = value.is_a?(Hash) ? value : {}
+
+      FALLBACK_CONSTRAINTS.each_with_object({}) do |(key, _), result|
+        candidate = raw[key] || raw[key.to_s]
+        next if candidate.nil?
+
+        result[key.to_s] = normalize_length_mm(candidate)
+      end
+    end
+    private_class_method :build_constraints_payload
 
     def build_overrides_bays(value)
       array = value.is_a?(Array) ? value : []
@@ -1028,9 +1113,32 @@ module AICabinets
             deep_dup(value)
           end
       end
+      constraints_value = sanitized[:constraints] || sanitized['constraints']
+      result[:constraints] = canonicalize_constraints(constraints_value)
       result
     end
     private_class_method :canonicalize
+
+    def canonicalize_constraints(value)
+      raw = value.is_a?(Hash) ? value : {}
+
+      FALLBACK_CONSTRAINTS.each_with_object({}) do |(key, fallback), result|
+        current = raw[key] || raw[key.to_s]
+        numeric =
+          case current
+          when Numeric
+            current.to_f
+          when String
+            Float(current, exception: false)
+          else
+            nil
+          end
+
+        numeric = fallback if numeric.nil? || numeric <= 0.0
+        result[key] = normalize_length_mm(numeric)
+      end
+    end
+    private_class_method :canonicalize_constraints
 
     def canonicalize_partitions(value)
       raw = value.is_a?(Hash) ? value : {}

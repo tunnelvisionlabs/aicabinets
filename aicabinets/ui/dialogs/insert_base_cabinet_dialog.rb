@@ -271,8 +271,13 @@ module AICabinets
           return [] unless bays.is_a?(Array)
 
           bays.each_with_index.map do |_bay, index|
-            allowed, reason = evaluate_double_validity(params, index)
-            { allowed: allowed, reason: reason }
+            allowed, reason, metadata = evaluate_double_validity(params, index)
+            {
+              allowed: allowed,
+              reason: reason,
+              leaf_width_mm: metadata && metadata[:leaf_width_mm],
+              min_leaf_width_mm: metadata && metadata[:min_leaf_width_mm]
+            }
           end
         end
         private_class_method :build_double_validity
@@ -281,21 +286,35 @@ module AICabinets
         # returned localization key into a user-facing string.
         def evaluate_double_validity(params, index)
           result = AICabinets::DoorModeRules.double_door_validity(params_mm: params, bay_index: index)
-          allowed = result.is_a?(Array) ? result[0] : false
-          reason_value = result.is_a?(Array) ? result[1] : nil
+          if result.is_a?(Array)
+            allowed = result[0]
+            reason_value = result[1]
+            metadata = result[2]
+          else
+            allowed = false
+            reason_value = nil
+            metadata = nil
+          end
           reason =
             case reason_value
             when Symbol
-              Localization.string(reason_value)
+              if reason_value == AICabinets::DoorModeRules::DOUBLE_DISABLED_REASON &&
+                   metadata.is_a?(Hash) &&
+                   metadata[:min_leaf_width_mm]
+                nil
+              else
+                Localization.string(reason_value)
+              end
             when String
               reason_value
             else
               nil
             end
-          [allowed ? true : false, reason]
+          [allowed ? true : false, reason, metadata]
         rescue StandardError => e
           warn("AI Cabinets: Unable to compute double door validity for bay #{index}: #{e.message}")
-          [false, Localization.string(:door_mode_double_disabled_hint)]
+          metadata = { min_leaf_width_mm: nil, leaf_width_mm: nil }
+          [false, Localization.string(:door_mode_double_disabled_hint), metadata]
         end
         private_class_method :evaluate_double_validity
 
@@ -364,17 +383,41 @@ module AICabinets
         end
         private_class_method :deliver_state_update_bay
 
-        def deliver_double_validity(dialog, index, allowed, reason)
-          execute_state_callback(dialog, 'state_set_double_validity', index, allowed ? true : false, reason)
+        def deliver_double_validity(dialog, index, allowed, reason, metadata)
+          payload = {
+            allowed: allowed ? true : false,
+            reason: reason,
+            leaf_width_mm: numeric_or_nil(metadata, :leaf_width_mm),
+            min_leaf_width_mm: numeric_or_nil(metadata, :min_leaf_width_mm)
+          }
+          execute_state_callback(dialog, 'state_set_double_validity', index, payload)
         end
         private_class_method :deliver_double_validity
 
         def deliver_double_validity_for_all(dialog, params)
           build_double_validity(params).each_with_index do |entry, index|
-            deliver_double_validity(dialog, index, entry[:allowed], entry[:reason])
+            deliver_double_validity(dialog, index, entry[:allowed], entry[:reason], entry)
           end
         end
         private_class_method :deliver_double_validity_for_all
+
+        def numeric_or_nil(container, key)
+          return nil unless container.is_a?(Hash)
+
+          value = container[key]
+          value = container[key.to_s] if value.nil? && container.key?(key.to_s)
+          return nil if value.nil?
+
+          case value
+          when Numeric
+            value.to_f
+          when String
+            Float(value, exception: false)
+          else
+            nil
+          end
+        end
+        private_class_method :numeric_or_nil
 
         def deliver_toast(dialog, message)
           return unless message && !message.to_s.empty?
@@ -603,8 +646,8 @@ module AICabinets
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
           if (updated_bays[index] || {})[:mode] == 'fronts_shelves'
-            allowed, reason = evaluate_double_validity(updated_params, index)
-            deliver_double_validity(dialog, index, allowed, reason)
+            allowed, reason, metadata = evaluate_double_validity(updated_params, index)
+            deliver_double_validity(dialog, index, allowed, reason, metadata)
           end
         end
         private_class_method :handle_ui_set_shelf_count
@@ -626,9 +669,9 @@ module AICabinets
           end
 
           if value == 'doors_double'
-            allowed, reason = evaluate_double_validity(params, index)
+            allowed, reason, metadata = evaluate_double_validity(params, index)
             unless allowed
-              deliver_double_validity(dialog, index, allowed, reason)
+              deliver_double_validity(dialog, index, allowed, reason, metadata)
               return
             end
           end
@@ -643,8 +686,8 @@ module AICabinets
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
           if (updated_bays[index] || {})[:mode] == 'fronts_shelves'
-            allowed, reason = evaluate_double_validity(updated_params, index)
-            deliver_double_validity(dialog, index, allowed, reason)
+            allowed, reason, metadata = evaluate_double_validity(updated_params, index)
+            deliver_double_validity(dialog, index, allowed, reason, metadata)
           end
         end
         private_class_method :handle_ui_set_door_mode
@@ -673,8 +716,8 @@ module AICabinets
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
           if mode == 'fronts_shelves'
-            allowed, reason = evaluate_double_validity(updated_params, index)
-            deliver_double_validity(dialog, index, allowed, reason)
+            allowed, reason, metadata = evaluate_double_validity(updated_params, index)
+            deliver_double_validity(dialog, index, allowed, reason, metadata)
           end
         end
         private_class_method :handle_ui_set_bay_mode
@@ -830,8 +873,8 @@ module AICabinets
           return unless index && index >= 0
 
           params = ensure_dialog_params
-          allowed, reason = evaluate_double_validity(params, index)
-          deliver_double_validity(dialog, index, allowed, reason)
+          allowed, reason, metadata = evaluate_double_validity(params, index)
+          deliver_double_validity(dialog, index, allowed, reason, metadata)
         end
         private_class_method :handle_ui_request_validity
 
