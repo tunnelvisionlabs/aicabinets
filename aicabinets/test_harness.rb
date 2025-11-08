@@ -5,6 +5,11 @@ require 'securerandom'
 
 require 'aicabinets/ui/dialogs/insert_base_cabinet_dialog'
 require 'aicabinets/ui/dialog_console_bridge'
+require 'aicabinets/defaults'
+require 'aicabinets/params_sanitizer'
+
+Sketchup.require('aicabinets/ops/insert_base_cabinet')
+Sketchup.require('aicabinets/ops/edit_base_cabinet')
 
 module AICabinets
   module TestHarness
@@ -12,6 +17,8 @@ module AICabinets
     ConsoleBridge = AICabinets::UI::DialogConsoleBridge
     private_constant :ConsoleBridge
     module_function
+
+    TEST_MODE = true unless const_defined?(:TEST_MODE)
 
     def open_dialog_for_tests
       unless defined?(::UI::HtmlDialog)
@@ -359,5 +366,144 @@ module AICabinets
     class EvalError < StandardError; end
     class TimeoutError < StandardError; end
     class SynchronousEvalUnsupportedError < StandardError; end
+
+    def insert!(config:)
+      model = active_model!
+      params = build_params(config)
+      instance = AICabinets::Ops::InsertBaseCabinet.place_at_point!(
+        model: model,
+        point3d: Geom::Point3d.new(0, 0, 0),
+        params_mm: params
+      )
+      [instance.definition, instance]
+    end
+
+    def edit_this_instance!(instance:, config_patch:)
+      validate_instance!(instance)
+
+      model = active_model!
+      selection = model.selection
+      selection.clear
+      selection.add(instance)
+
+      params = merged_params(instance.definition, config_patch)
+      result = AICabinets::Ops::EditBaseCabinet.apply_to_selection!(
+        model: model,
+        params_mm: params,
+        scope: 'instance'
+      )
+      raise "Edit failed: #{result.inspect}" unless result[:ok]
+
+      instance
+    end
+
+    def edit_all_instances!(definition:, config_patch:)
+      validate_definition!(definition)
+
+      instance = definition.instances.find(&:valid?)
+      raise ArgumentError, 'definition has no valid instances' unless instance
+
+      model = active_model!
+      selection = model.selection
+      selection.clear
+      selection.add(instance)
+
+      params = merged_params(definition, config_patch)
+      result = AICabinets::Ops::EditBaseCabinet.apply_to_selection!(
+        model: model,
+        params_mm: params,
+        scope: 'all'
+      )
+      raise "Edit failed: #{result.inspect}" unless result[:ok]
+
+      definition
+    end
+
+    def build_params(config)
+      defaults = AICabinets::Defaults.load_effective_mm
+      merged = deep_copy(defaults)
+      merged = deep_merge(merged, deep_copy(config)) if config
+      sanitized = deep_copy(merged)
+      AICabinets::ParamsSanitizer.sanitize!(sanitized, global_defaults: defaults)
+      sanitized.delete(:scope)
+      sanitized
+    end
+    private_class_method :build_params
+
+    def merged_params(definition, patch)
+      base = definition_params(definition)
+      merged = deep_merge(base, deep_copy(patch))
+      build_params(merged)
+    end
+    private_class_method :merged_params
+
+    def definition_params(definition)
+      validate_definition!(definition)
+
+      dict = definition.attribute_dictionary(
+        AICabinets::Ops::InsertBaseCabinet::DICTIONARY_NAME
+      )
+      return {} unless dict
+
+      json = dict[AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY]
+      return {} unless json.is_a?(String) && !json.empty?
+
+      JSON.parse(json, symbolize_names: true)
+    rescue JSON::ParserError
+      {}
+    end
+    private_class_method :definition_params
+
+    def active_model!
+      model = Sketchup.active_model
+      raise 'No active model available.' unless model.is_a?(Sketchup::Model)
+
+      model
+    end
+    private_class_method :active_model!
+
+    def validate_instance!(instance)
+      unless instance.is_a?(Sketchup::ComponentInstance) && instance.valid?
+        raise ArgumentError, 'instance must be a valid SketchUp::ComponentInstance'
+      end
+    end
+    private_class_method :validate_instance!
+
+    def validate_definition!(definition)
+      unless definition.is_a?(Sketchup::ComponentDefinition) && definition.valid?
+        raise ArgumentError, 'definition must be a valid SketchUp::ComponentDefinition'
+      end
+    end
+    private_class_method :validate_definition!
+
+    def deep_merge(base, patch)
+      return deep_copy(patch) if base.nil?
+      return deep_copy(base) if patch.nil?
+
+      if base.is_a?(Hash) && patch.is_a?(Hash)
+        base.each_with_object({}) do |(key, value), memo|
+          memo[key] = deep_copy(value)
+        end.merge(patch) do |_key, old_value, new_value|
+          deep_merge(old_value, new_value)
+        end
+      elsif base.is_a?(Array) && patch.is_a?(Array)
+        length = [base.length, patch.length].max
+        Array.new(length) do |index|
+          old_value = index < base.length ? base[index] : nil
+          new_value = index < patch.length ? patch[index] : nil
+          new_value.nil? ? deep_copy(old_value) : deep_merge(old_value, new_value)
+        end
+      else
+        deep_copy(patch)
+      end
+    end
+    private_class_method :deep_merge
+
+    def deep_copy(object)
+      Marshal.load(Marshal.dump(object))
+    rescue TypeError
+      object
+    end
+    private_class_method :deep_copy
   end
 end
