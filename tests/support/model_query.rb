@@ -23,7 +23,8 @@ module ModelQuery
   def front_entities(instance:)
     validate_instance(instance)
 
-    entities_in_category(instance.definition.entities, 'Fronts').map do |entity|
+    entities = enumerate_entities(instance.definition.entities)
+    entities_in_category(entities, 'Fronts').map do |entity|
       component_info(entity)
     end
   end
@@ -100,9 +101,13 @@ module ModelQuery
   private_class_method :length_to_mm
 
   def entities_in_category(entities, tag_category)
-    return [] unless entities.respond_to?(:grep)
+    collection = if entities.respond_to?(:grep)
+                   entities
+                 else
+                   Array(entities)
+                 end
 
-    entities.grep(Sketchup::Drawingelement).select do |entity|
+    collection.grep(Sketchup::Drawingelement).select do |entity|
       matches_tag_category?(entity, tag_category)
     end
   end
