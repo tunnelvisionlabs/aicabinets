@@ -1823,6 +1823,37 @@
     return text || null;
   }
 
+  BayController.prototype.setDoubleDoorFocusability = function setDoubleDoorFocusability(
+    enabled
+  ) {
+    var input = this.doubleDoorInput || null;
+    if (!input) {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(input, '__aicOriginalTabIndex')) {
+      input.__aicOriginalTabIndex = input.hasAttribute('tabindex')
+        ? input.getAttribute('tabindex')
+        : null;
+    }
+
+    if (enabled) {
+      var original = input.__aicOriginalTabIndex;
+      if (original == null || original === '') {
+        input.removeAttribute('tabindex');
+      } else {
+        input.setAttribute('tabindex', original);
+      }
+      if (typeof input.tabIndex === 'number' && input.tabIndex < 0) {
+        input.tabIndex = 0;
+      }
+      return;
+    }
+
+    input.setAttribute('tabindex', '-1');
+    input.tabIndex = -1;
+  };
+
   BayController.prototype.applyDoubleValidityState = function applyDoubleValidityState(options) {
     if (!this.doubleDoorInput) {
       return;
@@ -1838,6 +1869,7 @@
 
     if (frontDisabled) {
       this.doubleDoorInput.disabled = true;
+      this.setDoubleDoorFocusability(false);
       this.clearHint();
       this.lastDoubleEligibility[this.selectedIndex] = {
         allowed: false,
@@ -1859,6 +1891,7 @@
 
     if (allowed) {
       this.doubleDoorInput.disabled = false;
+      this.setDoubleDoorFocusability(true);
       this.clearHint();
 
       if (minLeafWidthMm != null) {
@@ -1872,6 +1905,7 @@
       }
     } else {
       this.doubleDoorInput.disabled = true;
+      this.setDoubleDoorFocusability(false);
       var current = this.bays[this.selectedIndex] || {};
       var fronts = current.fronts_shelves_state || {};
       if (fronts.door_mode === 'doors_double') {
@@ -1956,6 +1990,7 @@
     if (this.doubleDoorInput) {
       if (frontDisabled) {
         this.doubleDoorInput.disabled = true;
+        this.setDoubleDoorFocusability(false);
         this.clearHint();
       } else {
         this.applyDoubleValidityState({ announce: false });
