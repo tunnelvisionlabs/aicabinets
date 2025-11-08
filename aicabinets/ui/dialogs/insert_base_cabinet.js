@@ -49,7 +49,48 @@
     enabled: window.__AICABINETS_TEST__ === true,
     readyPromise: null,
     readyResolve: null,
-    lastLiveRegion: ''
+    lastLiveRegion: '',
+    pendingDoubleValidity: [],
+    waitForDoubleValidity: function waitForDoubleValidity(index) {
+      if (!this.enabled) {
+        return Promise.resolve();
+      }
+
+      var numeric = Number(index);
+      if (!isFinite(numeric)) {
+        numeric = 0;
+      }
+
+      return new Promise(function (resolve) {
+        testSupport.pendingDoubleValidity.push({ index: numeric, resolve: resolve });
+      });
+    },
+    resolveDoubleValidity: function resolveDoubleValidity(index) {
+      if (!this.enabled || !this.pendingDoubleValidity.length) {
+        return;
+      }
+
+      var numeric = Number(index);
+      if (!isFinite(numeric)) {
+        numeric = 0;
+      }
+
+      for (var i = 0; i < this.pendingDoubleValidity.length; i += 1) {
+        var entry = this.pendingDoubleValidity[i];
+        if (!entry) {
+          continue;
+        }
+        if (entry.index === numeric) {
+          this.pendingDoubleValidity.splice(i, 1);
+          try {
+            entry.resolve();
+          } catch (error) {
+            // Ignore test-mode resolution errors to avoid masking dialog issues.
+          }
+          break;
+        }
+      }
+    }
   };
   if (testSupport.enabled) {
     testSupport.readyPromise = new Promise(function (resolve) {
@@ -874,8 +915,14 @@
       requestDoubleValidity: function requestDoubleValidity() {
         return whenReady(function (formController) {
           var index = formController.selectedBayIndex != null ? formController.selectedBayIndex : 0;
+          var wait =
+            testSupport.enabled && typeof testSupport.waitForDoubleValidity === 'function'
+              ? testSupport.waitForDoubleValidity(index)
+              : Promise.resolve();
           formController.handleRequestBayValidity(index);
-          return collectState();
+          return wait.then(function () {
+            return collectState();
+          });
         });
       },
       getState: function getState() {
@@ -2012,6 +2059,10 @@
   };
 
   BayController.prototype.setDoubleValidity = function setDoubleValidity(index, payload) {
+    var numericIndex = typeof index === 'number' && isFinite(index) ? index : Number(index);
+    if (!isFinite(numericIndex)) {
+      numericIndex = 0;
+    }
     var entry = payload && typeof payload === 'object' ? payload : {};
     var normalized = {
       allowed: entry.allowed !== false,
@@ -2019,9 +2070,12 @@
       leafWidthMm: entry.leaf_width_mm,
       minLeafWidthMm: entry.min_leaf_width_mm
     };
-    this.doubleValidity[index] = normalized;
-    if (index === this.selectedIndex) {
+    this.doubleValidity[numericIndex] = normalized;
+    if (numericIndex === this.selectedIndex) {
       this.applyDoubleValidityState({ announce: true });
+    }
+    if (testSupport.enabled && typeof testSupport.resolveDoubleValidity === 'function') {
+      testSupport.resolveDoubleValidity(numericIndex);
     }
   };
 
