@@ -21,12 +21,7 @@ module ModelQuery
   end
 
   def front_entities(instance:)
-    validate_instance(instance)
-
-    entities = enumerate_entities(instance.definition.entities)
-    entities_in_category(entities, 'Fronts').map do |entity|
-      component_info(entity)
-    end
+    fronts_by_bay(instance: instance).values.flatten
   end
 
   def tag_name_for(entity)
