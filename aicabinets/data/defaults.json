@@ -20,6 +20,6 @@
     }
   },
   "constraints": {
-    "min_door_leaf_width_mm": 180
+    "min_door_leaf_width_mm": 140
   }
 }

@@ -69,7 +69,7 @@ module AICabinets
     }.freeze
 
     FALLBACK_CONSTRAINTS = {
-      min_door_leaf_width_mm: 180.0
+      min_door_leaf_width_mm: 140.0
     }.freeze
 
     RECOGNIZED_ROOT_KEYS = %w[version cabinet_base constraints].freeze
