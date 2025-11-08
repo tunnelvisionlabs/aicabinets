@@ -47,7 +47,7 @@ class TC_FrontGuardrails < TestUp::TestCase
     warnings = capture_warnings do
       AICabinets::TestHarness.edit_this_instance!(
         instance: instance,
-        config_patch: { front: 'doors_double' }
+        config_patch: front_patch('doors_double')
       )
     end
 
@@ -75,7 +75,25 @@ class TC_FrontGuardrails < TestUp::TestCase
     defaults[:front] = front
     defaults[:partition_mode] = 'none'
     defaults[:door_gap_mm] = 2.0
+    defaults[:fronts_shelves_state] = deep_copy(defaults[:fronts_shelves_state]) || {}
+    defaults[:fronts_shelves_state][:door_mode] = front
+    sync_front_to_partitions!(defaults, front)
     defaults
+  end
+
+  def front_patch(front)
+    {
+      front: front,
+      fronts_shelves_state: { door_mode: front },
+      partitions: {
+        bays: [
+          {
+            door_mode: front,
+            fronts_shelves_state: { door_mode: front }
+          }
+        ]
+      }
+    }
   end
 
   def capture_warnings
@@ -90,5 +108,42 @@ class TC_FrontGuardrails < TestUp::TestCase
 
   def deep_copy(object)
     Marshal.load(Marshal.dump(object))
+  end
+
+  def sync_front_to_partitions!(config, front)
+    partitions = config[:partitions]
+    unless partitions.is_a?(Hash)
+      partitions = {
+        mode: 'none',
+        count: 0,
+        orientation: 'vertical',
+        positions_mm: [],
+        panel_thickness_mm: nil,
+        bays: []
+      }
+      config[:partitions] = partitions
+    end
+
+    partitions[:bays] = Array(partitions[:bays]).map do |bay|
+      bay.is_a?(Hash) ? deep_copy(bay) : {}
+    end
+    partitions[:bays] = [{}] if partitions[:bays].empty?
+
+    partitions[:bays].map! do |bay|
+      bay[:mode] ||= 'fronts_shelves'
+      bay[:door_mode] = front
+
+      state = bay[:fronts_shelves_state]
+      state = state.is_a?(Hash) ? deep_copy(state) : {}
+      state[:door_mode] = front
+      bay[:fronts_shelves_state] = state
+
+      bay
+    end
+
+    partitions[:count] = 0 if partitions[:count].nil?
+    partitions[:mode] ||= 'none'
+    partitions[:orientation] ||= 'vertical'
+    partitions[:positions_mm] ||= []
   end
 end
