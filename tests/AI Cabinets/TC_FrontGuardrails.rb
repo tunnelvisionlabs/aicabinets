@@ -10,7 +10,8 @@ Sketchup.require('aicabinets/defaults')
 Sketchup.require('aicabinets/test_harness')
 
 class TC_FrontGuardrails < TestUp::TestCase
-  WIDTH_MM = 300.0
+  # Width selected so each double-door leaf would fall below the 140 mm guardrail.
+  WIDTH_MM = 280.0
 
   def setup
     AICabinetsTestHelper.clean_model!

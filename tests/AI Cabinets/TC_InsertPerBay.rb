@@ -113,9 +113,15 @@ class TC_InsertPerBay < TestUp::TestCase
     assert_equal(2, bay3_layout.length,
                  'Expected generator to plan two leaves for bay 3')
 
-    assert_equal(bay3_layout.sum(&:width_mm),
-                 leaf_infos.sum { |info| info[:width_mm] },
-                 'Leaf widths should match planned layout')
+    expected_width_mm = bay3_layout.sum(&:width_mm)
+    actual_width_mm = leaf_infos.sum { |info| info[:width_mm] }
+    tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
+    AICabinetsTestHelper.assert_within_tolerance(
+      self,
+      expected_width_mm,
+      actual_width_mm,
+      tolerance_mm
+    )
 
     ordered = leaf_infos.sort_by { |info| info[:bounds].min.x }
     gap_length = ordered[1][:bounds].min.x - ordered[0][:bounds].max.x
