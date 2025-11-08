@@ -921,7 +921,17 @@
               : Promise.resolve();
           formController.handleRequestBayValidity(index);
           return wait.then(function () {
-            return collectState();
+            return new Promise(function (resolve) {
+              if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(function () {
+                  resolve(collectState());
+                });
+              } else {
+                window.setTimeout(function () {
+                  resolve(collectState());
+                }, 0);
+              }
+            });
           });
         });
       },
@@ -1905,6 +1915,22 @@
     input.tabIndex = -1;
   };
 
+  BayController.prototype.setDoubleDoorDisabledState = function setDoubleDoorDisabledState(
+    disabled
+  ) {
+    if (!this.doubleDoorInput) {
+      return;
+    }
+
+    var isDisabled = disabled === true;
+    this.doubleDoorInput.disabled = isDisabled;
+    if (isDisabled) {
+      this.doubleDoorInput.setAttribute('aria-disabled', 'true');
+    } else {
+      this.doubleDoorInput.removeAttribute('aria-disabled');
+    }
+  };
+
   BayController.prototype.applyDoubleValidityState = function applyDoubleValidityState(options) {
     if (!this.doubleDoorInput) {
       return;
@@ -1919,7 +1945,7 @@
     var frontDisabled = this.buttonsDisabled || mode !== 'fronts_shelves';
 
     if (frontDisabled) {
-      this.doubleDoorInput.disabled = true;
+      this.setDoubleDoorDisabledState(true);
       this.setDoubleDoorFocusability(false);
       this.clearHint();
       this.lastDoubleEligibility[this.selectedIndex] = {
@@ -1941,7 +1967,7 @@
     var hintText = null;
 
     if (allowed) {
-      this.doubleDoorInput.disabled = false;
+      this.setDoubleDoorDisabledState(false);
       this.setDoubleDoorFocusability(true);
       this.clearHint();
 
@@ -1955,7 +1981,7 @@
         }
       }
     } else {
-      this.doubleDoorInput.disabled = true;
+      this.setDoubleDoorDisabledState(true);
       this.setDoubleDoorFocusability(false);
       var current = this.bays[this.selectedIndex] || {};
       var fronts = current.fronts_shelves_state || {};
@@ -2040,11 +2066,11 @@
     });
     if (this.doubleDoorInput) {
       if (frontDisabled) {
-        this.doubleDoorInput.disabled = true;
+        this.setDoubleDoorDisabledState(true);
         this.setDoubleDoorFocusability(false);
         this.clearHint();
       } else {
-        this.applyDoubleValidityState({ announce: false });
+        this.applyDoubleValidityState({ announce: false, force: true });
       }
     }
     if (this.subpartitionDecreaseButton) {
@@ -2072,7 +2098,7 @@
     };
     this.doubleValidity[numericIndex] = normalized;
     if (numericIndex === this.selectedIndex) {
-      this.applyDoubleValidityState({ announce: true });
+      this.applyDoubleValidityState({ announce: true, force: true });
     }
     if (testSupport.enabled && typeof testSupport.resolveDoubleValidity === 'function') {
       testSupport.resolveDoubleValidity(numericIndex);

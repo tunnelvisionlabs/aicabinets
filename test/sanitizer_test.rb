@@ -203,6 +203,57 @@ class SanitizerTest < Minitest::Test
     assert_equal('horizontal', sub[:orientation], 'Nested orientation should be perpendicular to parent')
   end
 
+  def test_truncates_excess_bays_when_count_reduced
+    params = {
+      partition_mode: 'vertical',
+      partitions: {
+        count: 1,
+        bays: [
+          {
+            shelf_count: 2,
+            door_mode: 'doors_left',
+            fronts_shelves_state: { shelf_count: 2, door_mode: 'doors_left' }
+          },
+          {
+            shelf_count: 1,
+            door_mode: 'doors_right',
+            fronts_shelves_state: { shelf_count: 1, door_mode: 'doors_right' }
+          },
+          {
+            shelf_count: 9,
+            door_mode: 'doors_double',
+            fronts_shelves_state: { shelf_count: 9, door_mode: 'doors_double' }
+          }
+        ]
+      }
+    }
+
+    sanitized, = sanitize_copy(params)
+
+    bays = sanitized[:partitions][:bays]
+    assert_equal(2, bays.length, 'Sanitizer should trim bays beyond count + 1')
+    assert_equal(2, bays[0][:shelf_count], 'Existing bay values should be preserved for retained indices')
+    assert_equal('doors_right', bays[1][:door_mode], 'Second bay should preserve original door mode')
+  end
+
+  def test_backfills_missing_bays_for_legacy_payload
+    params = {
+      partition_mode: 'vertical',
+      partitions: {
+        count: 2
+      }
+    }
+
+    sanitized, = sanitize_copy(params)
+
+    bays = sanitized[:partitions][:bays]
+    assert_equal(3, bays.length, 'Sanitizer should backfill bays to match count + 1')
+    bays.each do |bay|
+      assert_equal(4, bay[:shelf_count], 'Default shelf count should be backfilled from global defaults')
+      assert_equal('doors_right', bay[:door_mode], 'Default door mode should be backfilled from global defaults')
+    end
+  end
+
   private
 
   def sanitize_copy(params)
