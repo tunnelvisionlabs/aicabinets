@@ -20,6 +20,14 @@ module ModelQuery
     components_by_bay(instance, 'Fronts')
   end
 
+  def front_entities(instance:)
+    validate_instance(instance)
+
+    entities_in_category(instance.definition.entities, 'Fronts').map do |entity|
+      component_info(entity)
+    end
+  end
+
   def tag_name_for(entity)
     return unless entity.respond_to?(:layer)
 

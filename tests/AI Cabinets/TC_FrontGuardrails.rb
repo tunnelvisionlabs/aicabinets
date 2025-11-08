@@ -25,8 +25,9 @@ class TC_FrontGuardrails < TestUp::TestCase
     config = base_config(front: 'doors_double')
 
     warnings = capture_warnings do
-      _definition, _instance = AICabinets::TestHarness.insert!(config: config)
-      assert_equal(0, ModelQuery.count_tagged('AICabinets/Fronts'),
+      _definition, instance = AICabinets::TestHarness.insert!(config: config)
+      fronts = ModelQuery.front_entities(instance: instance)
+      assert_equal(0, fronts.length,
                    'Generator should skip creating double fronts for narrow bays')
       Sketchup.undo
       assert_empty(Sketchup.active_model.entities.grep(Sketchup::ComponentInstance),
@@ -39,7 +40,8 @@ class TC_FrontGuardrails < TestUp::TestCase
 
   def test_edit_skips_double_doors_when_below_minimum_width
     definition, instance = AICabinets::TestHarness.insert!(config: base_config(front: 'doors_left'))
-    assert_equal(1, ModelQuery.count_tagged('AICabinets/Fronts'),
+    fronts = ModelQuery.front_entities(instance: instance)
+    assert_equal(1, fronts.length,
                  'Baseline cabinet should include a single door front')
 
     warnings = capture_warnings do
@@ -49,13 +51,15 @@ class TC_FrontGuardrails < TestUp::TestCase
       )
     end
 
-    assert_equal(0, ModelQuery.count_tagged('AICabinets/Fronts'),
+    fronts_after_edit = ModelQuery.front_entities(instance: instance)
+    assert_equal(0, fronts_after_edit.length,
                  'Edit should remove invalid double doors entirely')
     assert_includes(warnings, 'Skipped double doors',
                     'Expected guardrail warning when skipping double doors on edit')
 
     Sketchup.undo
-    assert_equal(1, ModelQuery.count_tagged('AICabinets/Fronts'),
+    fronts_after_undo = ModelQuery.front_entities(instance: instance)
+    assert_equal(1, fronts_after_undo.length,
                  'Undo should restore the original single door front')
 
     params = AICabinetsTestHelper.params_mm_from_definition(definition)
