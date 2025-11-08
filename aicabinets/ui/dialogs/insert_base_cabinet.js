@@ -731,6 +731,10 @@
   }
 
   function collectState() {
+    if (testSupport.enabled && controller && controller.liveAnnouncer) {
+      controller.liveAnnouncer.flush();
+    }
+
     if (!controller) {
       return {
         partition_mode: null,
