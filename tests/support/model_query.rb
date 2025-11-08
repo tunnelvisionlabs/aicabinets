@@ -41,10 +41,11 @@ module ModelQuery
   def components_by_bay(instance, tag_category)
     validate_instance(instance)
 
-    definition = instance.definition
     result = Hash.new { |hash, key| hash[key] = [] }
 
-    entities_in_category(definition.entities, tag_category).each do |entity|
+    entities = enumerate_entities(instance.definition.entities)
+
+    entities_in_category(entities, tag_category).each do |entity|
       info = component_info(entity)
       result[info[:bay_index]] << info
     end
