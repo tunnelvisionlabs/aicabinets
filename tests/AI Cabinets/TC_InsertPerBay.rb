@@ -35,8 +35,8 @@ class TC_InsertPerBay < TestUp::TestCase
     shelves = shelf_entities(definition)
     refute_empty(shelves, 'Expected shelves to be created for populated bays')
     shelves.each do |entity|
-      assert_equal('AICabinets/Shelves', ModelQuery.tag_name_for(entity),
-                   'Shelves should use the dedicated tag')
+      assert_equal('Shelves', ModelQuery.tag_category_for(entity),
+                   'Shelves should use the dedicated tag category')
     end
 
     fronts_by_bay = ModelQuery.fronts_by_bay(instance: instance)
@@ -45,9 +45,9 @@ class TC_InsertPerBay < TestUp::TestCase
     assert_equal(2, fronts_by_bay.fetch(3, []).length,
                  'Expected a pair of leaves for bay 3')
     fronts_by_bay.values.flatten.each do |info|
-      assert_equal('AICabinets/Fronts',
-                   ModelQuery.tag_name_for(info[:entity]),
-                   'Front leaves should use the dedicated tag')
+      assert_equal('Fronts',
+                   ModelQuery.tag_category_for(info[:entity]),
+                   'Front leaves should use the dedicated tag category')
     end
 
     verify_double_leaf_widths(definition, instance, fronts_by_bay.fetch(3, []))

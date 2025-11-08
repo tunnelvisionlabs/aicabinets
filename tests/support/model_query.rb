@@ -3,21 +3,21 @@
 module ModelQuery
   module_function
 
-  def count_tagged(tag_name)
+  def count_tagged(tag_name_or_category)
     model = Sketchup.active_model
     return 0 unless model.is_a?(Sketchup::Model)
 
     enumerate_entities(model.entities).count do |entity|
-      tag_name_for(entity) == tag_name
+      matches_tag_category?(entity, tag_name_or_category)
     end
   end
 
   def shelves_by_bay(instance:)
-    components_by_bay(instance, 'AICabinets/Shelves')
+    components_by_bay(instance, 'Shelves')
   end
 
   def fronts_by_bay(instance:)
-    components_by_bay(instance, 'AICabinets/Fronts')
+    components_by_bay(instance, 'Fronts')
   end
 
   def tag_name_for(entity)
@@ -30,13 +30,17 @@ module ModelQuery
     name.to_s
   end
 
-  def components_by_bay(instance, tag_name)
+  def tag_category_for(entity)
+    normalize_tag_category(tag_name_for(entity))
+  end
+
+  def components_by_bay(instance, tag_category)
     validate_instance(instance)
 
     definition = instance.definition
     result = Hash.new { |hash, key| hash[key] = [] }
 
-    entities_on_tag(definition.entities, tag_name).each do |entity|
+    entities_in_category(definition.entities, tag_category).each do |entity|
       info = component_info(entity)
       result[info[:bay_index]] << info
     end
@@ -87,14 +91,33 @@ module ModelQuery
   end
   private_class_method :length_to_mm
 
-  def entities_on_tag(entities, tag_name)
+  def entities_in_category(entities, tag_category)
     return [] unless entities.respond_to?(:grep)
 
     entities.grep(Sketchup::Drawingelement).select do |entity|
-      tag_name_for(entity) == tag_name
+      matches_tag_category?(entity, tag_category)
     end
   end
-  private_class_method :entities_on_tag
+  private_class_method :entities_in_category
+
+  def matches_tag_category?(entity, desired)
+    actual = tag_category_for(entity)
+    expected = normalize_tag_category(desired)
+    return false unless actual && expected
+
+    actual.casecmp(expected).zero?
+  end
+  private_class_method :matches_tag_category?
+
+  def normalize_tag_category(name)
+    text = name.to_s.strip
+    return nil if text.empty?
+
+    text = text.sub(%r{\AAICabinets/}i, '')
+    text = text.sub(/\s*\(AI Cabinets(?:\s*\d+)?\)\z/i, '')
+    text.empty? ? nil : text
+  end
+  private_class_method :normalize_tag_category
 
   def enumerate_entities(entities)
     return [] unless entities.respond_to?(:each)
