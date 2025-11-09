@@ -73,6 +73,79 @@ class TC_LayoutModel < TestUp::TestCase
     heights.each do |height|
       AICabinetsTestHelper.assert_within_tolerance(self, 700.0, height, 1.0e-6)
     end
+
+    partitions = result[:partitions]
+    refute_nil(partitions, 'Expected partitions data to be present.')
+    assert_equal('vertical', partitions[:orientation])
+    assert_equal([300.0, 500.0], partitions[:positions_mm])
+  end
+
+  def test_horizontal_partitions_respect_positions
+    params = base_params.merge(
+      width_mm: 762.0,
+      height_mm: 900.0,
+      partitions: {
+        mode: 'positions',
+        positions_mm: [200.0, 500.0],
+        count: 2,
+        orientation: 'horizontal',
+        bays: Array.new(3) { {} }
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    partitions = result[:partitions]
+    refute_nil(partitions, 'Expected partitions data to be present.')
+    assert_equal('horizontal', partitions[:orientation])
+    assert_equal([200.0, 500.0], partitions[:positions_mm])
+  end
+
+  def test_shelves_and_front_styles_are_reported
+    params = base_params.merge(
+      width_mm: 800.0,
+      height_mm: 720.0,
+      partitions: {
+        mode: 'even',
+        count: 1,
+        orientation: 'vertical',
+        bays: [
+          {
+            shelf_count: 2,
+            fronts_shelves_state: { shelf_count: 2, door_mode: 'doors_left' },
+            door_mode: 'doors_left'
+          },
+          {
+            shelves: [{ y_mm: 200.0 }, { y_mm: 500.0 }],
+            fronts_shelves_state: { shelf_count: 0, door_mode: 'doors_double' },
+            door_mode: 'doors_double'
+          }
+        ]
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    shelves = result[:shelves]
+    assert_equal(4, shelves.length, 'Expected shelves to include two per bay (two explicit).')
+    bay_ids = result[:bays].map { |bay| bay[:id] }
+    first_bay_id = bay_ids[0]
+    second_bay_id = bay_ids[1]
+
+    first_bay_shelves = shelves.select { |entry| entry[:bay_id] == first_bay_id }
+    assert_equal(2, first_bay_shelves.length)
+    expected_y = [240.0, 480.0]
+    first_bay_shelves.each_with_index do |entry, index|
+      AICabinetsTestHelper.assert_within_tolerance(self, expected_y[index], entry[:y_mm], 1.0e-6)
+    end
+
+    second_bay_shelves = shelves.select { |entry| entry[:bay_id] == second_bay_id }
+    assert_equal([200.0, 500.0], second_bay_shelves.map { |entry| entry[:y_mm] })
+
+    fronts = result[:fronts]
+    assert_equal(2, fronts.length, 'Expected door fronts to be emitted for door bays.')
+    assert_equal('doors_left', fronts.first[:style])
+    assert_equal('doors_double', fronts.last[:style])
   end
 
   def test_degenerate_zero_bays

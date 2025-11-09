@@ -99,11 +99,54 @@
   stroke-width: var(--lp-hover-stroke-px);
 }
 
-.lp-root .lp-fronts rect {
+.lp-root .lp-fronts [data-role="front"] {
+  pointer-events: none;
+}
+
+.lp-root .lp-fronts .lp-front-rect {
   fill: var(--lp-front-fill);
   stroke: rgba(15, 23, 42, 0.25);
   stroke-width: calc(var(--lp-stroke-px) * 0.75);
   stroke-dasharray: 4 3;
+}
+
+.lp-root .lp-fronts .lp-door-hinge,
+.lp-root .lp-fronts .lp-door-gap {
+  stroke: rgba(15, 23, 42, 0.58);
+  stroke-width: calc(var(--lp-stroke-px) * 0.85);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.lp-root .lp-fronts .lp-door-hinge {
+  stroke-linecap: round;
+}
+
+.lp-root .lp-fronts [data-style="doors_double"] .lp-door-gap {
+  stroke-dasharray: 2 3;
+}
+
+.lp-root .lp-partitions-v,
+.lp-root .lp-partitions-h,
+.lp-root .lp-shelves {
+  pointer-events: none;
+}
+
+.lp-root .lp-partitions-v line,
+.lp-root .lp-partitions-h line {
+  stroke: rgba(15, 23, 42, 0.45);
+  stroke-width: calc(var(--lp-stroke-px) * 0.85);
+  vector-effect: non-scaling-stroke;
+}
+
+.lp-root .lp-partitions-h line {
+  stroke-dasharray: 4 3;
+}
+
+.lp-root .lp-shelves [data-role="bay-shelves"] line {
+  stroke: rgba(15, 23, 42, 0.38);
+  stroke-width: calc(var(--lp-stroke-px) * 0.75);
+  stroke-dasharray: 6 4;
 }
 
 .lp-root .lp-layer-title {

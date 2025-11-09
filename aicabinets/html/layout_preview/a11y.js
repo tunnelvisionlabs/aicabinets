@@ -240,13 +240,22 @@
     var ordinal = entry.index + 1;
     var widthText = formatMeasurement(state, entry.width);
     var heightText = formatMeasurement(state, entry.height);
+    var shelfCount = parseShelfCount(entry.node);
+    var shelfText = buildShelfText(shelfCount);
 
+    var label;
     if (!widthText || !heightText) {
-      return 'Bay ' + String(ordinal);
+      label = 'Bay ' + String(ordinal);
+    } else {
+      var suffix = state.unitLabel ? '' : ' millimeters';
+      label = 'Bay ' + String(ordinal) + ', ' + widthText + ' by ' + heightText + suffix;
     }
 
-    var suffix = state.unitLabel ? '' : ' millimeters';
-    return 'Bay ' + String(ordinal) + ', ' + widthText + ' by ' + heightText + suffix;
+    if (shelfText) {
+      label += ', ' + shelfText;
+    }
+
+    return label;
   }
 
   function formatMeasurement(state, value) {
@@ -267,6 +276,25 @@
 
     var fixed = Number(value).toFixed(3);
     return fixed.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+  }
+
+  function parseShelfCount(node) {
+    if (!node || typeof node.getAttribute !== 'function') {
+      return 0;
+    }
+    var attr = node.getAttribute('data-shelf-count');
+    if (!attr) {
+      return 0;
+    }
+    var count = parseInt(attr, 10);
+    return Number.isFinite(count) && count > 0 ? count : 0;
+  }
+
+  function buildShelfText(count) {
+    if (!Number.isFinite(count) || count <= 0) {
+      return '';
+    }
+    return String(count) + ' shelf' + (count === 1 ? '' : 's');
   }
 
   function updateAriaSelected(state) {
