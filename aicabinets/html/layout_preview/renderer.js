@@ -72,7 +72,8 @@
       activeScope: 'all',
       selectionGuardId: null,
       selectionGuardTimer: null,
-      handleBayClick: null
+      handleBayClick: null,
+      layers: null
     };
 
     var root = document.createElement('div');
@@ -136,6 +137,7 @@
         state.svg = null;
         state.scene = null;
         state.handleBayClick = null;
+        state.layers = null;
         if (moduleState.activeState === state) {
           moduleState.activeState = null;
         }
@@ -168,9 +170,37 @@
 
     applyPaddingTransform(state.scene, model.outer, state.options.padding_frac);
 
-    replaceChildren(state.scene, buildLayers(model));
+    var layers = ensureSceneLayers(state);
+    updateOuterLayer(layers.outer, model.outer);
+    updateBaysLayer(layers.bays, model.bays);
+    updateFrontsLayer(layers.fronts, model.fronts);
 
     applyActiveBayState(state);
+  }
+
+  function ensureSceneLayers(state) {
+    if (!state.layers) {
+      state.layers = {
+        outer: ensureLayer(state.scene, 'lp-outer', 'outer shell'),
+        bays: ensureLayer(state.scene, 'lp-bays', 'bays'),
+        fronts: ensureLayer(state.scene, 'lp-fronts', 'fronts')
+      };
+    }
+    return state.layers;
+  }
+
+  function ensureLayer(scene, className, label) {
+    if (!scene) {
+      return null;
+    }
+
+    var selector = 'g.' + className;
+    var layer = scene.querySelector(selector);
+    if (!layer) {
+      layer = createGroup(className, label);
+      scene.appendChild(layer);
+    }
+    return layer;
   }
 
   function normalizeLayoutModel(layoutModel) {
@@ -265,31 +295,71 @@
     scene.setAttribute('transform', matrix);
   }
 
-  function buildLayers(model) {
-    var fragments = [];
-
-    fragments.push(buildOuterLayer(model.outer));
-    fragments.push(buildBaysLayer(model.bays));
-
-    if (model.fronts.length) {
-      fragments.push(buildFrontsLayer(model.fronts));
+  function updateOuterLayer(group, outer) {
+    if (!group) {
+      return;
     }
 
-    return fragments;
-  }
+    var rect = group.querySelector('rect');
+    if (!rect) {
+      rect = createRect(0, 0, outer.w_mm, outer.h_mm);
+      group.appendChild(rect);
+    }
 
-  function buildOuterLayer(outer) {
-    var group = createGroup('lp-outer', 'outer shell');
-
-    var rect = createRect(0, 0, outer.w_mm, outer.h_mm);
+    rect.setAttribute('x', '0');
+    rect.setAttribute('y', '0');
+    rect.setAttribute('width', formatNumber(outer.w_mm));
+    rect.setAttribute('height', formatNumber(outer.h_mm));
     rect.setAttribute('rx', formatNumber(Math.min(outer.w_mm, outer.h_mm) * 0.012));
-    group.appendChild(rect);
-
-    return group;
   }
 
-  function buildBaysLayer(bays) {
-    var group = createGroup('lp-bays', 'bays');
+  function updateBaysLayer(group, bays) {
+    if (!group) {
+      return;
+    }
+
+    var existing = group.querySelectorAll('[data-role="bay"]');
+    if (existing.length !== bays.length) {
+      rebuildBays(group, bays);
+      return;
+    }
+
+    for (var index = 0; index < bays.length; index += 1) {
+      var bay = bays[index];
+      var wrapper = existing[index];
+      if (!wrapper) {
+        continue;
+      }
+
+      wrapper.setAttribute('data-index', String(index));
+      wrapper.setAttribute('data-id', bay.id || String(index));
+      wrapper.setAttribute('role', 'group');
+      wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
+
+      var rect = wrapper.querySelector('rect');
+      if (!rect) {
+        rect = createRect(bay.x_mm, bay.y_mm, bay.w_mm, bay.h_mm);
+        wrapper.appendChild(rect);
+      }
+
+      rect.setAttribute('x', formatNumber(bay.x_mm));
+      rect.setAttribute('y', formatNumber(bay.y_mm));
+      rect.setAttribute('width', formatNumber(bay.w_mm));
+      rect.setAttribute('height', formatNumber(bay.h_mm));
+      rect.setAttribute('rx', formatNumber(Math.min(bay.w_mm, bay.h_mm) * 0.05));
+
+      var title = wrapper.querySelector('title');
+      if (!title) {
+        title = document.createElementNS(SVG_NS, 'title');
+        wrapper.appendChild(title);
+      }
+      title.textContent = 'Bay ' + String(index + 1);
+    }
+  }
+
+  function rebuildBays(group, bays) {
+    clearLayerChildren(group);
+
     bays.forEach(function (bay, index) {
       var wrapper = document.createElementNS(SVG_NS, 'g');
       wrapper.setAttribute('data-role', 'bay');
@@ -308,17 +378,41 @@
 
       group.appendChild(wrapper);
     });
-    return group;
   }
 
-  function buildFrontsLayer(fronts) {
-    var group = createGroup('lp-fronts', 'fronts');
+  function updateFrontsLayer(group, fronts) {
+    if (!group) {
+      return;
+    }
+
+    var existing = group.querySelectorAll('rect[data-role]');
+    if (existing.length !== fronts.length) {
+      rebuildFronts(group, fronts);
+      return;
+    }
+
+    for (var index = 0; index < fronts.length; index += 1) {
+      var front = fronts[index];
+      var rect = existing[index];
+      if (!rect) {
+        continue;
+      }
+      rect.setAttribute('x', formatNumber(front.x_mm));
+      rect.setAttribute('y', formatNumber(front.y_mm));
+      rect.setAttribute('width', formatNumber(front.w_mm));
+      rect.setAttribute('height', formatNumber(front.h_mm));
+      rect.setAttribute('data-role', front.role || 'front');
+    }
+  }
+
+  function rebuildFronts(group, fronts) {
+    clearLayerChildren(group);
+
     fronts.forEach(function (front) {
       var rect = createRect(front.x_mm, front.y_mm, front.w_mm, front.h_mm);
       rect.setAttribute('data-role', front.role || 'front');
       group.appendChild(rect);
     });
-    return group;
   }
 
   function createGroup(className, label) {
@@ -330,6 +424,21 @@
       group.appendChild(title);
     }
     return group;
+  }
+
+  function clearLayerChildren(group) {
+    if (!group) {
+      return;
+    }
+
+    var title = group.querySelector('title');
+    while (group.firstChild) {
+      group.removeChild(group.firstChild);
+    }
+
+    if (title) {
+      group.appendChild(title);
+    }
   }
 
   function capitalize(text) {
@@ -357,17 +466,6 @@
     }
     var fixed = number.toFixed(3);
     return fixed.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
-  }
-
-  function replaceChildren(node, children) {
-    while (node.firstChild) {
-      node.removeChild(node.firstChild);
-    }
-    children.forEach(function (child) {
-      if (child) {
-        node.appendChild(child);
-      }
-    });
   }
 
   function onRootClick(state, event) {
