@@ -6,6 +6,9 @@
   --lp-stroke-px: 1.5px;
   --lp-hover-stroke-px: calc(var(--lp-stroke-px) * 1.5);
   --lp-active-color: #1f7aec;
+  --lp-focus-ring-width: calc(var(--lp-stroke-px) * 1.9);
+  --lp-focus-ring-color: rgba(37, 99, 235, 0.95);
+  --lp-focus-ring-fill: rgba(37, 99, 235, 0.16);
   --lp-outer-stroke: rgba(17, 24, 39, 0.38);
   --lp-bay-stroke: rgba(17, 24, 39, 0.65);
   --lp-bay-fill: rgba(255, 255, 255, 0.78);
@@ -61,17 +64,27 @@
   fill: rgba(31, 122, 236, 0.22);
 }
 
-.lp-root [data-role="bay"]:hover > rect {
+.lp-root [data-role="bay"]:hover:not(.is-focused) > rect {
   stroke: var(--lp-active-color);
   stroke-width: var(--lp-hover-stroke-px);
   fill: var(--lp-bay-hover-fill);
 }
 
-.lp-root [data-role="bay"]:focus-visible > rect {
+.lp-root [data-role="bay"].is-focused:not(.is-active) > rect,
+.lp-root [data-role="bay"]:focus-visible:not(.is-active) > rect {
+  stroke: var(--lp-focus-ring-color);
+  stroke-width: var(--lp-focus-ring-width);
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+  fill: var(--lp-focus-ring-fill);
   outline: none;
-  stroke: var(--lp-active-color);
-  stroke-width: var(--lp-hover-stroke-px);
-  fill: var(--lp-bay-hover-fill);
+}
+
+.lp-root [data-role="bay"].is-active.is-focused > rect,
+.lp-root [data-role="bay"].is-active:focus-visible > rect {
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 0 var(--lp-focus-ring-color)) drop-shadow(0 0 4px rgba(37, 99, 235, 0.35));
 }
 
 .lp-root.scope-single [data-role="bay"].is-deemphasized > rect {

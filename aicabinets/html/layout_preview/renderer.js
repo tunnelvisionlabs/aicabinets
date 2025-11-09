@@ -73,13 +73,16 @@
       selectionGuardId: null,
       selectionGuardTimer: null,
       handleBayClick: null,
-      layers: null
+      layers: null,
+      a11yHandle: null,
+      a11yOptions: options && options.a11y ? options.a11y : null
     };
 
     var root = document.createElement('div');
     root.className = 'lp-root';
     root.setAttribute('role', 'img');
     root.setAttribute('aria-label', 'Cabinet front preview');
+    root.setAttribute('tabindex', '0');
     applyCssVariables(root, opts);
 
     var svg = document.createElementNS(SVG_NS, 'svg');
@@ -175,6 +178,7 @@
     updateBaysLayer(layers.bays, model.bays);
     updateFrontsLayer(layers.fronts, model.fronts);
 
+    applyA11yBindings(state);
     applyActiveBayState(state);
   }
 
@@ -335,6 +339,8 @@
       wrapper.setAttribute('data-id', bay.id || String(index));
       wrapper.setAttribute('role', 'group');
       wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
+      wrapper.setAttribute('data-w-mm', formatNumber(bay.w_mm));
+      wrapper.setAttribute('data-h-mm', formatNumber(bay.h_mm));
 
       var rect = wrapper.querySelector('rect');
       if (!rect) {
@@ -367,6 +373,8 @@
       wrapper.setAttribute('role', 'group');
       wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
       wrapper.setAttribute('data-id', bay.id || String(index));
+      wrapper.setAttribute('data-w-mm', formatNumber(bay.w_mm));
+      wrapper.setAttribute('data-h-mm', formatNumber(bay.h_mm));
 
       var rect = createRect(bay.x_mm, bay.y_mm, bay.w_mm, bay.h_mm);
       rect.setAttribute('rx', formatNumber(Math.min(bay.w_mm, bay.h_mm) * 0.05));
@@ -539,6 +547,59 @@
       var deemphasize = scope === 'single' && activeId !== null && !isActive;
       toggleClass(bayNode, 'is-active', isActive);
       toggleClass(bayNode, 'is-deemphasized', deemphasize);
+      if (isActive) {
+        bayNode.setAttribute('aria-selected', 'true');
+      } else {
+        bayNode.setAttribute('aria-selected', 'false');
+      }
+    }
+
+    notifyA11yActive(state);
+  }
+
+  function applyA11yBindings(state) {
+    if (!state || !state.root) {
+      return;
+    }
+
+    var module = window.LayoutPreview && window.LayoutPreview.a11y;
+    if (!module || typeof module.init !== 'function') {
+      return;
+    }
+
+    var options = state.a11yOptions || null;
+    var handle = module.init(state.root, options || {});
+    if (handle && typeof handle.updateBays === 'function') {
+      handle.updateBays();
+    } else if (typeof module.updateBays === 'function') {
+      try {
+        module.updateBays(state.root);
+      } catch (error) {
+        if (window.console && typeof window.console.warn === 'function') {
+          window.console.warn('LayoutPreview.a11y.updateBays failed:', error);
+        }
+      }
+    }
+
+    state.a11yHandle = handle || state.a11yHandle || null;
+  }
+
+  function notifyA11yActive(state) {
+    if (!state) {
+      return;
+    }
+
+    var module = window.LayoutPreview && window.LayoutPreview.a11y;
+    if (!module || typeof module.setActiveBay !== 'function') {
+      return;
+    }
+
+    try {
+      module.setActiveBay(state.activeBayId, state.root || null);
+    } catch (error) {
+      if (window.console && typeof window.console.warn === 'function') {
+        window.console.warn('LayoutPreview.a11y.setActiveBay failed:', error);
+      }
     }
   }
 
