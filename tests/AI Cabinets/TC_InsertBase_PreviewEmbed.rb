@@ -136,12 +136,18 @@ class TC_InsertBase_PreviewEmbed < TestUp::TestCase
     AICabinets::Features.enable_layout_preview!
     open_dialog
     ensure_dialog_ready
+    await_js('AICabinetsTest.setPartitionMode("vertical")')
+    await_js('AICabinetsTest.setTopCount(2)')
+    pump_events
     await_js(PREVIEW_READY_SCRIPT)
 
     svg_count = fetch_svg_count
     assert(svg_count >= 1, 'Preview should render at least one <svg> element when enabled.')
 
     assert_equal(0, selected_bay_index, 'Initial selected bay should be the first bay.')
+
+    initial_state = fetch_preview_state
+    assert(initial_state['bayCount'] >= 3, 'Preview test expects at least three bays to exercise selection sync.')
 
     click_bay('bay-2')
     pump_events
@@ -257,18 +263,25 @@ class TC_InsertBase_PreviewEmbed < TestUp::TestCase
       (function () {
         var id = #{id_json};
         var selector = '[data-role="layout-preview-container"] [data-role="bay"][data-id="' + id + '"]';
+        var nodes = document.querySelectorAll('[data-role="layout-preview-container"] [data-role="bay"]');
+        var ids = [];
+        for (var index = 0; index < nodes.length; index += 1) {
+          ids.push(nodes[index].getAttribute('data-id'));
+        }
         var element = document.querySelector(selector);
         if (!element) {
-          return false;
+          return { ok: false, ids: ids };
         }
         element.dispatchEvent(new Event('click', { bubbles: true }));
-        return true;
+        return { ok: true, ids: ids };
       })()
     JAVASCRIPT
     result = await_js(script)
-    return true if result
+    return true if result && result['ok']
 
-    message = "Preview bay #{identifier.inspect} was not found; unable to simulate click."
+    ids = result && result['ids'].is_a?(Array) ? result['ids'].compact : []
+    description = ids.empty? ? 'no bays were located' : "available bays: #{ids.map(&:inspect).join(', ')}"
+    message = "Preview bay #{identifier.inspect} was not found; unable to simulate click (#{description})."
     flunk(message)
   end
 
