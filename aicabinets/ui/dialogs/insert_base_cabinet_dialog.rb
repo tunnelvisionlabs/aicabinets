@@ -261,7 +261,7 @@ module AICabinets
           return [] unless bays.is_a?(Array)
 
           bays.each_with_index.map do |bay, index|
-            layout_preview_normalize_identifier(bay[:id] || bay['id']) || (index + 1).to_s
+            layout_preview_normalize_identifier(bay[:id] || bay['id']) || format('bay-%d', index + 1)
           end
         end
         private_class_method :layout_preview_extract_bay_ids
@@ -288,7 +288,7 @@ module AICabinets
 
           bays = fetch_bays_array(params)
           bay = bays[index]
-          layout_preview_normalize_identifier(layout_preview_identifier_for(bay, index)) || (index + 1).to_s
+          layout_preview_normalize_identifier(layout_preview_identifier_for(bay, index)) || format('bay-%d', index + 1)
         end
         private_class_method :layout_preview_active_bay_identifier
 
@@ -355,9 +355,9 @@ module AICabinets
         private_class_method :layout_preview_index_for_identifier
 
         def layout_preview_identifier_for(bay, index)
-          return index + 1 unless bay.is_a?(Hash)
+          return format('bay-%d', index + 1) unless bay.is_a?(Hash)
 
-          bay[:id] || bay['id'] || (index + 1)
+          bay[:id] || bay['id'] || format('bay-%d', index + 1)
         end
         private_class_method :layout_preview_identifier_for
 
