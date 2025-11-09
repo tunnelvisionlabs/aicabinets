@@ -55,6 +55,12 @@
   transition: stroke 120ms ease, stroke-width 120ms ease, fill 120ms ease;
 }
 
+.lp-root [data-role="bay"].is-active > rect {
+  stroke: var(--lp-active-color);
+  stroke-width: var(--lp-hover-stroke-px);
+  fill: rgba(31, 122, 236, 0.22);
+}
+
 .lp-root [data-role="bay"]:hover > rect {
   stroke: var(--lp-active-color);
   stroke-width: var(--lp-hover-stroke-px);
@@ -66,6 +72,18 @@
   stroke: var(--lp-active-color);
   stroke-width: var(--lp-hover-stroke-px);
   fill: var(--lp-bay-hover-fill);
+}
+
+.lp-root.scope-single [data-role="bay"].is-deemphasized > rect {
+  fill: rgba(148, 163, 184, 0.18);
+  stroke: rgba(71, 85, 105, 0.48);
+  stroke-width: var(--lp-stroke-px);
+}
+
+.lp-root.scope-single [data-role="bay"].is-deemphasized.is-active > rect {
+  fill: rgba(31, 122, 236, 0.22);
+  stroke: var(--lp-active-color);
+  stroke-width: var(--lp-hover-stroke-px);
 }
 
 .lp-root .lp-fronts rect {

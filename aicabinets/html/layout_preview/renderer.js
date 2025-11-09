@@ -50,6 +50,11 @@
     return opts;
   }
 
+  var moduleState = {
+    activeState: null,
+    requestHandler: null
+  };
+
   function render(containerEl, layoutModel, options) {
     if (!containerEl || typeof containerEl !== 'object') {
       throw new Error('LayoutPreview.render requires a container element.');
@@ -62,7 +67,12 @@
       root: null,
       svg: null,
       scene: null,
-      options: opts
+      options: opts,
+      activeBayId: null,
+      activeScope: 'all',
+      selectionGuardId: null,
+      selectionGuardTimer: null,
+      handleBayClick: null
     };
 
     var root = document.createElement('div');
@@ -96,19 +106,39 @@
     state.svg = svg;
     state.scene = scene;
 
+    state.handleBayClick = function handleBayClick(event) {
+      onRootClick(state, event);
+    };
+    root.addEventListener('click', state.handleBayClick, false);
+
     update(state, layoutModel);
+
+    moduleState.activeState = state;
 
     return {
       update: function updateLayout(nextModel) {
         update(state, nextModel);
       },
+      setActiveBay: function setActiveBayForController(bayId, opts) {
+        return setActiveBayForState(state, bayId, opts);
+      },
       destroy: function destroy() {
-        if (state.root && state.root.parentNode === containerEl) {
-          containerEl.removeChild(state.root);
+        if (state.root) {
+          if (state.handleBayClick) {
+            state.root.removeEventListener('click', state.handleBayClick, false);
+          }
+          if (state.root.parentNode === containerEl) {
+            containerEl.removeChild(state.root);
+          }
         }
+        clearSelectionGuard(state);
         state.root = null;
         state.svg = null;
         state.scene = null;
+        state.handleBayClick = null;
+        if (moduleState.activeState === state) {
+          moduleState.activeState = null;
+        }
       }
     };
   }
@@ -139,6 +169,8 @@
     applyPaddingTransform(state.scene, model.outer, state.options.padding_frac);
 
     replaceChildren(state.scene, buildLayers(model));
+
+    applyActiveBayState(state);
   }
 
   function normalizeLayoutModel(layoutModel) {
@@ -264,9 +296,7 @@
       wrapper.setAttribute('data-index', String(index));
       wrapper.setAttribute('role', 'group');
       wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
-      if (bay.id) {
-        wrapper.setAttribute('data-id', bay.id);
-      }
+      wrapper.setAttribute('data-id', bay.id || String(index));
 
       var rect = createRect(bay.x_mm, bay.y_mm, bay.w_mm, bay.h_mm);
       rect.setAttribute('rx', formatNumber(Math.min(bay.w_mm, bay.h_mm) * 0.05));
@@ -340,7 +370,217 @@
     });
   }
 
+  function onRootClick(state, event) {
+    if (!state || !state.root) {
+      return;
+    }
+
+    var bayNode = findBayNode(event && event.target, state.root);
+    if (!bayNode) {
+      return;
+    }
+
+    var bayIdentifier = extractBayIdentifier(bayNode);
+    var normalizedId = normalizeBayId(bayIdentifier);
+
+    activateBayFromInteraction(state, normalizedId);
+
+    if (!shouldSuppressSelectionRequest(state, normalizedId)) {
+      dispatchRequestSelectBay(bayIdentifier);
+    }
+  }
+
+  function activateBayFromInteraction(state, bayId) {
+    if (!state) {
+      return false;
+    }
+
+    state.activeBayId = bayId;
+    applyActiveBayState(state);
+    return true;
+  }
+
+  function setActiveBayForState(state, bayId, opts) {
+    if (!state) {
+      return false;
+    }
+
+    var normalizedId = normalizeBayId(bayId);
+    var scope = normalizeScope(opts && opts.scope);
+
+    if (scope) {
+      state.activeScope = scope;
+    }
+
+    state.activeBayId = normalizedId;
+    registerSelectionGuard(state, normalizedId);
+    applyActiveBayState(state);
+    return true;
+  }
+
+  function applyActiveBayState(state) {
+    if (!state || !state.root) {
+      return;
+    }
+
+    var root = state.root;
+    var activeId = state.activeBayId;
+    var scope = state.activeScope || 'all';
+
+    if (scope === 'single') {
+      root.classList.add('scope-single');
+    } else {
+      root.classList.remove('scope-single');
+    }
+
+    var bays = root.querySelectorAll('[data-role="bay"]');
+    for (var index = 0; index < bays.length; index += 1) {
+      var bayNode = bays[index];
+      var nodeId = normalizeBayId(extractBayIdentifier(bayNode));
+      var isActive = activeId !== null && nodeId === activeId;
+      var deemphasize = scope === 'single' && activeId !== null && !isActive;
+      toggleClass(bayNode, 'is-active', isActive);
+      toggleClass(bayNode, 'is-deemphasized', deemphasize);
+    }
+  }
+
+  function toggleClass(element, className, force) {
+    if (!element || typeof element.classList === 'undefined') {
+      return;
+    }
+
+    if (typeof element.classList.toggle === 'function') {
+      element.classList.toggle(className, !!force);
+      return;
+    }
+
+    if (force) {
+      element.className = element.className + ' ' + className;
+    } else {
+      element.className = element.className.replace(new RegExp('\\b' + className + '\\b', 'g'), '').trim();
+    }
+  }
+
+  function findBayNode(node, root) {
+    var current = node;
+    while (current && current !== root) {
+      if (current.getAttribute && current.getAttribute('data-role') === 'bay') {
+        return current;
+      }
+      current = current.parentNode;
+    }
+    if (current && current.getAttribute && current.getAttribute('data-role') === 'bay') {
+      return current;
+    }
+    return null;
+  }
+
+  function extractBayIdentifier(node) {
+    if (!node || typeof node.getAttribute !== 'function') {
+      return null;
+    }
+    var identifier = node.getAttribute('data-id');
+    if (identifier == null || identifier === '') {
+      identifier = node.getAttribute('data-index');
+    }
+    return identifier;
+  }
+
+  function normalizeBayId(value) {
+    if (value == null) {
+      return null;
+    }
+    var text = String(value);
+    return text.length ? text : null;
+  }
+
+  function normalizeScope(value) {
+    if (value === 'single' || value === 'all') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      var lowered = value.toLowerCase();
+      if (lowered === 'single' || lowered === 'all') {
+        return lowered;
+      }
+    }
+    return null;
+  }
+
+  function registerSelectionGuard(state, bayId) {
+    clearSelectionGuard(state);
+    if (!state || bayId === null) {
+      return;
+    }
+    state.selectionGuardId = bayId;
+    state.selectionGuardTimer = window.setTimeout(function () {
+      clearSelectionGuard(state);
+    }, 180);
+  }
+
+  function clearSelectionGuard(state) {
+    if (!state) {
+      return;
+    }
+    if (state.selectionGuardTimer !== null) {
+      window.clearTimeout(state.selectionGuardTimer);
+    }
+    state.selectionGuardTimer = null;
+    state.selectionGuardId = null;
+  }
+
+  function shouldSuppressSelectionRequest(state, bayId) {
+    if (!state) {
+      return false;
+    }
+    if (state.selectionGuardId === null || bayId === null) {
+      return false;
+    }
+    return state.selectionGuardId === bayId;
+  }
+
+  function dispatchRequestSelectBay(bayId) {
+    var handler = moduleState.requestHandler;
+    if (typeof handler === 'function') {
+      try {
+        handler(bayId);
+        return;
+      } catch (error) {
+        if (window && window.console && typeof window.console.error === 'function') {
+          window.console.error('LayoutPreview.onRequestSelectBay failed:', error);
+        }
+      }
+    }
+
+    if (window.sketchup && typeof window.sketchup.requestSelectBay === 'function') {
+      try {
+        window.sketchup.requestSelectBay(bayId);
+      } catch (error2) {
+        if (window.console && typeof window.console.warn === 'function') {
+          window.console.warn('LayoutPreview.requestSelectBay bridge failed:', error2);
+        }
+      }
+    }
+  }
+
   window.LayoutPreview = {
-    render: render
+    render: render,
+    setActiveBay: function setActiveBayGlobal(bayId, opts) {
+      if (!moduleState.activeState) {
+        return false;
+      }
+      return setActiveBayForState(moduleState.activeState, bayId, opts);
+    }
   };
+
+  Object.defineProperty(window.LayoutPreview, 'onRequestSelectBay', {
+    get: function getOnRequestSelectBay() {
+      return moduleState.requestHandler;
+    },
+    set: function setOnRequestSelectBay(callback) {
+      if (typeof callback === 'function' || callback === null) {
+        moduleState.requestHandler = callback;
+      }
+    }
+  });
 })();

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en" data-dialog-id="layout-preview-dialog">
+  <head>
+    <meta charset="utf-8" />
+    <title>Layout Preview</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="renderer.css" />
+    <script src="../../ui/dialogs/console_bridge.js"></script>
+    <script src="renderer.js"></script>
+    <script src="dialog.js" defer></script>
+  </head>
+  <body>
+    <main class="lp-dialog" aria-label="Cabinet layout preview">
+      <section class="lp-dialog-stage" aria-live="polite">
+        <div data-role="layout-preview-host" class="lp-host"></div>
+      </section>
+    </main>
+  </body>
+</html>
