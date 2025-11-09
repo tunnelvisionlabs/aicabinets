@@ -10,6 +10,7 @@
   };
 
   var EPSILON_MM = 1.0e-3;
+  var CABINET_BAY_ID = 'cabinet';
 
   function clampPadding(value) {
     if (!isFinite(value)) {
@@ -179,7 +180,7 @@
     updateOuterLayer(layers.outer, model.outer);
     var shelfCounts = buildShelfCounts(model.shelves);
     updateBaysLayer(layers.bays, model.bays, shelfCounts);
-    updateShelvesLayer(layers.shelves, model.shelves, model.bays);
+    updateShelvesLayer(layers.shelves, model.shelves, model.bays, model.outer);
     updatePartitionsLayer(layers.partitionsV, model.partitions, model.outer, 'vertical');
     updatePartitionsLayer(layers.partitionsH, model.partitions, model.outer, 'horizontal');
     updateFrontsLayer(layers.fronts, model.fronts);
@@ -578,7 +579,7 @@
     return counts;
   }
 
-  function updateShelvesLayer(group, shelves, bays) {
+  function updateShelvesLayer(group, shelves, bays, outer) {
     if (!group) {
       return;
     }
@@ -592,9 +593,13 @@
 
     var bayMap = buildBayMap(bays);
     var grouped = groupShelvesByBay(shelves);
+    var cabinetBay = buildCabinetBay(outer);
 
     Object.keys(grouped).forEach(function (bayId) {
       var bay = bayMap[bayId];
+      if (!bay && cabinetBay && bayId === cabinetBay.id) {
+        bay = cabinetBay;
+      }
       if (!bay) {
         return;
       }
@@ -636,6 +641,23 @@
         group.appendChild(wrapper);
       }
     });
+  }
+
+  function buildCabinetBay(outer) {
+    if (!outer || !isFinite(outer.w_mm) || !isFinite(outer.h_mm)) {
+      return null;
+    }
+    if (outer.w_mm <= 0 || outer.h_mm <= 0) {
+      return null;
+    }
+
+    return {
+      id: CABINET_BAY_ID,
+      x_mm: 0,
+      y_mm: 0,
+      w_mm: outer.w_mm,
+      h_mm: outer.h_mm
+    };
   }
 
   function buildBayMap(bays) {

@@ -4,6 +4,7 @@ module AICabinets
   module Layout
     module Model
       EPS_MM = 1.0e-3
+      CABINET_BAY_ID = 'cabinet'
 
       module_function
 
@@ -19,7 +20,10 @@ module AICabinets
         outer_height_mm = dimension_mm(params[:height_mm])
 
         partitions_hash = partitions_to_hash(params[:partitions])
-        bay_specs = extract_bay_specs(partitions_hash)
+        partition_mode = normalize_partition_mode(params, partitions_hash)
+        partitions_active = partitions_active?(partition_mode)
+
+        bay_specs = partitions_active ? extract_bay_specs(partitions_hash) : []
         orientation = normalize_orientation(partitions_hash[:orientation])
 
         bay_rects, normalization_warning =
@@ -30,10 +34,17 @@ module AICabinets
           bay_rects,
           outer_width_mm,
           outer_height_mm,
-          orientation
+          orientation,
+          partitions_active
         )
 
-        shelves = build_shelves(bay_specs, bay_rects)
+        shelves = build_shelves(
+          params,
+          bay_specs,
+          bay_rects,
+          outer_height_mm,
+          partitions_active
+        )
         fronts = build_fronts(params, bay_specs, bay_rects, outer_width_mm, outer_height_mm)
 
         {
@@ -110,10 +121,14 @@ module AICabinets
       end
       private_class_method :extract_bay_specs
 
-      def build_partitions_info(partitions_hash, bay_rects, outer_width_mm, outer_height_mm, orientation = nil)
+      def build_partitions_info(partitions_hash, bay_rects, outer_width_mm, outer_height_mm, orientation = nil,
+                                partitions_active = true)
         orientation ||= normalize_orientation(partitions_hash[:orientation])
-        positions_mm =
-          partition_positions(partitions_hash, bay_rects, orientation, outer_width_mm, outer_height_mm)
+        positions_mm = if partitions_active
+                         partition_positions(partitions_hash, bay_rects, orientation, outer_width_mm, outer_height_mm)
+                       else
+                         []
+                       end
 
         {
           orientation: orientation,
@@ -195,7 +210,11 @@ module AICabinets
       end
       private_class_method :duplicate_position?
 
-      def build_shelves(bay_specs, bay_rects)
+      def build_shelves(params, bay_specs, bay_rects, outer_height_mm, partitions_active)
+        unless partitions_active && !bay_rects.empty?
+          return build_cabinet_shelves(params, outer_height_mm)
+        end
+
         shelves = []
         bay_rects.each_with_index do |bay, index|
           bay_id = bay[:id] || format('bay-%d', index + 1)
@@ -216,6 +235,18 @@ module AICabinets
         shelves
       end
       private_class_method :build_shelves
+
+      def build_cabinet_shelves(params, outer_height_mm)
+        count = extract_global_shelf_count(params)
+        integer = count.to_i
+        return [] if integer <= 0 || outer_height_mm <= 0.0
+
+        bay = { y_mm: 0.0, h_mm: outer_height_mm }
+        preview_shelf_positions_from_count(bay, integer).map do |position|
+          { bay_id: CABINET_BAY_ID, y_mm: position }
+        end
+      end
+      private_class_method :build_cabinet_shelves
 
       def explicit_shelf_positions(spec, bay)
         candidates = []
@@ -272,6 +303,30 @@ module AICabinets
         0
       end
       private_class_method :extract_shelf_count
+
+      def extract_global_shelf_count(params)
+        return 0 unless params.is_a?(Hash)
+
+        if params.key?(:shelf_count)
+          return normalize_count(params[:shelf_count])
+        end
+        if params.key?('shelf_count')
+          return normalize_count(params['shelf_count'])
+        end
+
+        state = hash_or_nil(params[:fronts_shelves_state]) || hash_or_nil(params['fronts_shelves_state'])
+        return 0 unless state.is_a?(Hash)
+
+        if state.key?(:shelf_count)
+          return normalize_count(state[:shelf_count])
+        end
+        if state.key?('shelf_count')
+          return normalize_count(state['shelf_count'])
+        end
+
+        0
+      end
+      private_class_method :extract_global_shelf_count
 
       def preview_shelf_positions_from_count(bay, count)
         integer = count.to_i
@@ -520,6 +575,25 @@ module AICabinets
       end
       private_class_method :normalize_identifier
 
+      def normalize_partition_mode(params, partitions_hash)
+        mode = nil
+        if partitions_hash.is_a?(Hash)
+          mode = partitions_hash[:mode] || partitions_hash['mode']
+        end
+        if (mode.nil? || mode.to_s.strip.empty?) && params.is_a?(Hash)
+          mode = params[:partition_mode] || params['partition_mode']
+        end
+
+        text = mode.to_s.strip.downcase
+        text.empty? ? 'none' : text
+      end
+      private_class_method :normalize_partition_mode
+
+      def partitions_active?(mode)
+        mode != 'none'
+      end
+      private_class_method :partitions_active?
+
       def dimension_mm(value)
         return 0.0 if value.nil?
 
@@ -537,6 +611,14 @@ module AICabinets
         value.is_a?(Hash) ? value : nil
       end
       private_class_method :hash_or_nil
+
+      def normalize_count(value)
+        number = value.to_s.to_i
+        number.negative? ? 0 : number
+      rescue NoMethodError
+        0
+      end
+      private_class_method :normalize_count
 
       def clamp(value, min_value, max_value)
         [[value, max_value].min, min_value].max

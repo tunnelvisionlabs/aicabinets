@@ -228,26 +228,45 @@ class TC_LayoutModel < TestUp::TestCase
     assert_equal({ w_mm: 600.0, h_mm: 700.0 }, result[:outer])
   end
 
-  def test_degenerate_single_bay_matches_outer
+  def test_ignores_bay_specs_when_partition_mode_none
     params = base_params.merge(
-      width_mm: 500.0,
-      height_mm: 640.0,
+      width_mm: 860.0,
+      height_mm: 720.0,
+      fronts_shelves_state: { door_mode: 'doors_double', shelf_count: 2 },
       partitions: {
         mode: 'none',
         count: 0,
         orientation: 'vertical',
-        bays: [{}]
+        bays: [
+          {
+            id: 'legacy-bay',
+            door_mode: 'doors_left',
+            shelves: [{ y_mm: 200.0 }],
+            fronts_shelves_state: { shelf_count: 3, door_mode: 'doors_left' }
+          }
+        ]
       }
     )
 
     result = AICabinets::Layout::Model.build(params)
 
-    assert_equal(1, result[:bays].length)
-    bay = result[:bays].first
-    AICabinetsTestHelper.assert_within_tolerance(self, 500.0, bay[:w_mm], 1.0e-6)
-    AICabinetsTestHelper.assert_within_tolerance(self, 640.0, bay[:h_mm], 1.0e-6)
-    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, bay[:x_mm], 1.0e-6)
-    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, bay[:y_mm], 1.0e-6)
+    assert_empty(result[:bays], 'Expected bay specs to be ignored when partition mode is none.')
+
+    fronts = result[:fronts]
+    assert_equal(1, fronts.length, 'Expected a single global door front to render.')
+    front = fronts.first
+    assert_equal('doors_double', front[:style])
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:x_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:y_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 860.0, front[:w_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 720.0, front[:h_mm], 1.0e-6)
+
+    shelves = result[:shelves]
+    assert_equal(2, shelves.length, 'Expected global shelves to reflect the top-level shelf count.')
+    bay_ids = shelves.map { |entry| entry[:bay_id] }.uniq
+    assert_equal(['cabinet'], bay_ids)
+    expected_positions = [240.0, 480.0]
+    assert_equal(expected_positions, shelves.map { |entry| entry[:y_mm] })
   end
 
   def test_normalizes_when_width_sum_deviates

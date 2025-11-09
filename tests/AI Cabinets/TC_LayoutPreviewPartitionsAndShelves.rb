@@ -112,7 +112,10 @@ class TC_LayoutPreviewPartitionsAndShelves < TestUp::TestCase
       outer: { w_mm: 820, h_mm: 720 },
       bays: [],
       partitions: { orientation: 'vertical', positions_mm: [] },
-      shelves: [],
+      shelves: [
+        { bay_id: 'cabinet', y_mm: 240 },
+        { bay_id: 'cabinet', y_mm: 480 }
+      ],
       fronts: [
         { id: 'front-door', role: 'door', style: 'doors_left', x_mm: 0, y_mm: 0, w_mm: 820, h_mm: 720 }
       ]
@@ -125,6 +128,15 @@ class TC_LayoutPreviewPartitionsAndShelves < TestUp::TestCase
     initial_doors = Array(initial_state[:doors] || initial_state['doors'])
     assert_equal(1, initial_doors.length, 'Expected one door overlay for base model.')
     assert_equal('doors_left', initial_doors.first[:style] || initial_doors.first['style'])
+
+    initial_shelves = Array(initial_state[:shelves] || initial_state['shelves'])
+    assert_equal(1, initial_shelves.length, 'Expected cabinet shelves group to render.')
+    cabinet_shelves = initial_shelves.first
+    assert_equal('cabinet', cabinet_shelves[:bayId] || cabinet_shelves['bayId'])
+    assert_equal(
+      [240.0, 480.0],
+      normalize_numeric_array(cabinet_shelves[:yPositions] || cabinet_shelves['yPositions'])
+    )
 
     open_model = base_model.merge(fronts: [])
     assert(render_layout(open_model), 'Expected LayoutPreviewDialog.renderLayout to succeed for open model update.')
