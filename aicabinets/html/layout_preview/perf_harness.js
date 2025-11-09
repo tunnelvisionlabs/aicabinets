@@ -58,7 +58,8 @@
     memory_drift_mb: null,
     started_at: null,
     completed_at: null,
-    seed: null
+    seed: null,
+    raf_period_ms: null
   };
 
   window.__lp_metrics__ = metrics;
@@ -89,7 +90,30 @@
     resetMetrics();
     applyFixture(state.fixtureKey);
     updateMetricsDisplay();
+    calibrateRafPeriod();
     notifyReady();
+  }
+
+  function calibrateRafPeriod() {
+    if (typeof window.requestAnimationFrame !== 'function') {
+      metrics.raf_period_ms = null;
+      return Promise.resolve(null);
+    }
+
+    return new Promise(function (resolve) {
+      try {
+        window.requestAnimationFrame(function (startTime) {
+          window.requestAnimationFrame(function (endTime) {
+            var period = Math.max(0, Number(endTime) - Number(startTime));
+            metrics.raf_period_ms = period;
+            resolve(period);
+          });
+        });
+      } catch (error) {
+        metrics.raf_period_ms = null;
+        resolve(null);
+      }
+    });
   }
 
   function registerUiHandlers() {
@@ -190,6 +214,7 @@
     var seed = typeof (config && config.seed) === 'number' ? config.seed : Date.now();
 
     applyFixture(fixtureKey);
+    calibrateRafPeriod();
     resetMetrics();
     metrics.iteration_target = clamp(iterations, 30, 600);
     metrics.iteration_count = 0;
@@ -559,6 +584,7 @@
         update: metrics.update_samples.length,
         frame: metrics.frame_samples.length
       },
+      raf_period_ms: metrics.raf_period_ms,
       node_counts: metrics.node_counts,
       node_drift: metrics.node_drift,
       memory_drift_mb: metrics.memory_drift_mb,

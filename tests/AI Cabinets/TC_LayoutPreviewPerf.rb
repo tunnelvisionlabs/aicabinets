@@ -65,6 +65,12 @@ class TC_LayoutPreviewPerf < TestUp::TestCase
     assert_operator(update_median, :<=, 100.0, 'Median update should be ≤ 100 ms.')
     assert_operator(update_p95, :<=, 200.0, '95th percentile update should stay near 2× the median.')
 
+    raf_period = metrics[:raf_period_ms]
+    if raf_period && raf_period.to_f > 20.0
+      formatted = format('%.1f', raf_period.to_f)
+      skip("requestAnimationFrame cadence is throttled (~#{formatted} ms); frame metrics are not reliable in this run.")
+    end
+
     frame_median = metrics.dig(:medians, :frame_ms).to_f
     frame_p95 = metrics.dig(:p95, :frame_ms).to_f
     assert_operator(frame_median, :<=, 16.0, 'Median frame cost should be ≤ 16 ms.')
