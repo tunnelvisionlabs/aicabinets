@@ -240,19 +240,21 @@
       }
     }
 
+    var PREVIEW_ASSET_BASE = '../../html/layout_preview/';
+
     function loadAssets() {
       if (state.loadPromise) {
         return state.loadPromise;
       }
-      state.loadPromise = loadStylesheet('../layout_preview/renderer.css')
+      state.loadPromise = loadStylesheet(PREVIEW_ASSET_BASE + 'renderer.css')
         .then(function () {
-          return loadScript('../layout_preview/renderer.js');
+          return loadScript(PREVIEW_ASSET_BASE + 'renderer.js');
         })
         .then(function () {
-          return loadScript('../layout_preview/a11y.js');
+          return loadScript(PREVIEW_ASSET_BASE + 'a11y.js');
         })
         .then(function () {
-          return loadScript('../layout_preview/host.js');
+          return loadScript(PREVIEW_ASSET_BASE + 'host.js');
         })
         .catch(function (error) {
           state.loadPromise = null;
