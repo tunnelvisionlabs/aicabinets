@@ -34,13 +34,7 @@
         }
       }
 
-      if (window.sketchup && typeof window.sketchup.requestSelectBay === 'function') {
-        try {
-          window.sketchup.requestSelectBay(bayId);
-        } catch (error) {
-          logError('requestSelectBay', error);
-        }
-      }
+      forwardSelectRequest(bayId);
     };
 
     if (container.classList && !container.classList.contains('lp-host')) {
@@ -97,6 +91,72 @@
     if (window.console && typeof window.console.warn === 'function') {
       window.console.warn('LayoutPreviewHost ' + context + ' failed:', error);
     }
+  }
+
+  function forwardSelectRequest(bayId) {
+    var bridge = findSketchupBridge();
+    if (bridge && typeof bridge.requestSelectBay === 'function') {
+      try {
+        bridge.requestSelectBay(bayId);
+        return true;
+      } catch (error) {
+        logError('requestSelectBay', error);
+      }
+    }
+
+    if (window.parent && typeof window.parent.postMessage === 'function') {
+      try {
+        window.parent.postMessage({ type: 'aicabinets/requestSelectBay', bayId: bayId }, '*');
+        return true;
+      } catch (error) {
+        logError('postMessage', error);
+      }
+    }
+
+    if (window.sketchup && typeof window.sketchup.requestSelectBay === 'function') {
+      try {
+        window.sketchup.requestSelectBay(bayId);
+        return true;
+      } catch (error) {
+        logError('requestSelectBay-local', error);
+      }
+    }
+
+    return false;
+  }
+
+  function findSketchupBridge() {
+    var candidates = [];
+    try {
+      if (window.parent && window.parent !== window) {
+        candidates.push(window.parent);
+      }
+    } catch (error) {
+      // Accessing window.parent can throw for cross-origin frames; ignore and continue.
+    }
+
+    try {
+      if (window.top && window.top !== window && window.top !== window.parent) {
+        candidates.push(window.top);
+      }
+    } catch (error) {
+      // Ignore cross-origin violations; continue to local candidate.
+    }
+
+    candidates.push(window);
+
+    for (var i = 0; i < candidates.length; i += 1) {
+      var candidate = candidates[i];
+      try {
+        if (candidate && candidate.sketchup && typeof candidate.sketchup.requestSelectBay === 'function') {
+          return candidate.sketchup;
+        }
+      } catch (error) {
+        // Accessing candidate.sketchup may throw; continue to next candidate.
+      }
+    }
+
+    return null;
   }
 
   window.LayoutPreviewHost = {

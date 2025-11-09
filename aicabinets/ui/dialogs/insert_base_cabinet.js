@@ -11,6 +11,32 @@
     }
   }
 
+  function ensurePreviewMessageBridge() {
+    if (window.__AICABINETS_PREVIEW_MESSAGE_HANDLER__) {
+      return;
+    }
+
+    var handler = function handlePreviewMessage(event) {
+      if (!event) {
+        return;
+      }
+
+      var data = event.data;
+      if (!data || typeof data !== 'object') {
+        return;
+      }
+
+      if (data.type === 'aicabinets/requestSelectBay') {
+        invokeSketchUp('requestSelectBay', data.bayId);
+      }
+    };
+
+    window.__AICABINETS_PREVIEW_MESSAGE_HANDLER__ = handler;
+    window.addEventListener('message', handler);
+  }
+
+  ensurePreviewMessageBridge();
+
   function requestSketchUpFocus() {
     if (typeof window.blur !== 'function') {
       return;
