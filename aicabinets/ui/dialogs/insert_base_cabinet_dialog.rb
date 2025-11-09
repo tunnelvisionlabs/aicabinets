@@ -339,6 +339,12 @@ module AICabinets
             return index if candidate == normalized
           end
 
+          suffix_number = layout_preview_identifier_suffix_number(normalized)
+          if suffix_number
+            numeric_index = suffix_number - 1
+            return numeric_index if numeric_index >= 0 && numeric_index < bays.length
+          end
+
           if normalized.match?(/^-?\d+$/)
             numeric = normalized.to_i - 1
             return numeric if numeric >= 0 && numeric < bays.length
@@ -362,6 +368,18 @@ module AICabinets
           text.empty? ? nil : text
         end
         private_class_method :layout_preview_normalize_identifier
+
+        def layout_preview_identifier_suffix_number(text)
+          return nil unless text.is_a?(String)
+
+          match = text.match(/(?:^|[^0-9])(\d+)\z/)
+          return nil unless match
+
+          match[1].to_i
+        rescue ArgumentError
+          nil
+        end
+        private_class_method :layout_preview_identifier_suffix_number
 
         def set_dialog_context(mode:, prefill: nil, selection: nil)
           dialog_context[:mode] = mode
