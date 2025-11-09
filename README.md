@@ -95,6 +95,8 @@ After installing the extension, launch its placeholder action from **Extensions 
 
 ## Partition Options
 
+See [Per-bay shelves & doors](docs/user-guide.md#per-bay-shelves--doors) for a task-focused walk-through of the bay chips, Fronts & Shelves editor, Sub-partitions, Insert/Edit scope, and the double-door guardrail.
+
 Generated base cabinets accept a `partitions` payload to divide the interior into bays.
 
 - `partition_mode` drives the top-level orientation (`vertical` or `horizontal`). When `partition_mode` is `none`, the sanitizer forces `partitions.count` to `0` and `bays` to a single entry.
