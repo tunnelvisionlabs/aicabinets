@@ -101,6 +101,41 @@ class TC_LayoutModel < TestUp::TestCase
     assert_equal([200.0, 500.0], partitions[:positions_mm])
   end
 
+  def test_horizontal_partitions_build_rows
+    params = base_params.merge(
+      width_mm: 900.0,
+      height_mm: 900.0,
+      partitions: {
+        mode: 'positions',
+        positions_mm: [300.0, 650.0],
+        count: 2,
+        orientation: 'horizontal',
+        bays: Array.new(3) { {} }
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    bays = result[:bays]
+    assert_equal(3, bays.length, 'Expected three horizontal bays.')
+
+    heights = bays.map { |bay| bay[:h_mm] }
+    expected = [300.0, 350.0, 250.0]
+    heights.each_with_index do |height, index|
+      AICabinetsTestHelper.assert_within_tolerance(self, expected[index], height, 1.0e-6)
+    end
+
+    widths = bays.map { |bay| bay[:w_mm] }
+    widths.each do |width|
+      AICabinetsTestHelper.assert_within_tolerance(self, 900.0, width, 1.0e-6)
+    end
+
+    y_positions = bays.map { |bay| bay[:y_mm] }
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, y_positions[0], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 300.0, y_positions[1], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 650.0, y_positions[2], 1.0e-6)
+  end
+
   def test_shelves_and_front_styles_are_reported
     params = base_params.merge(
       width_mm: 800.0,
@@ -146,6 +181,33 @@ class TC_LayoutModel < TestUp::TestCase
     assert_equal(2, fronts.length, 'Expected door fronts to be emitted for door bays.')
     assert_equal('doors_left', fronts.first[:style])
     assert_equal('doors_double', fronts.last[:style])
+  end
+
+  def test_global_front_style_used_when_no_partitions
+    params = base_params.merge(
+      width_mm: 840.0,
+      height_mm: 720.0,
+      fronts_shelves_state: { door_mode: 'doors_right' },
+      partitions: {
+        mode: 'none',
+        count: 0,
+        orientation: 'vertical',
+        bays: []
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    assert_empty(result[:bays], 'Expected no bay rectangles when none are defined.')
+
+    fronts = result[:fronts]
+    assert_equal(1, fronts.length, 'Expected global door front to be emitted.')
+    front = fronts.first
+    assert_equal('doors_right', front[:style])
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:x_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:y_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 840.0, front[:w_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 720.0, front[:h_mm], 1.0e-6)
   end
 
   def test_degenerate_zero_bays
@@ -214,7 +276,8 @@ class TC_LayoutModel < TestUp::TestCase
       AICabinets::Layout::Model::EPS_MM
     )
     refute_empty(result[:warnings])
-    assert(result[:warnings].first.include?('Normalized bay widths'), 'Expected normalization warning')
+    warning = result[:warnings].first
+    assert(warning.include?('Normalized bay'), 'Expected normalization warning')
   end
 
   private

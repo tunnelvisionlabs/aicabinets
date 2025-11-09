@@ -139,10 +139,6 @@
   vector-effect: non-scaling-stroke;
 }
 
-.lp-root .lp-partitions-h line {
-  stroke-dasharray: 4 3;
-}
-
 .lp-root .lp-shelves [data-role="bay-shelves"] line {
   stroke: rgba(15, 23, 42, 0.38);
   stroke-width: calc(var(--lp-stroke-px) * 0.75);

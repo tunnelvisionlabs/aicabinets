@@ -20,19 +20,21 @@ module AICabinets
 
         partitions_hash = partitions_to_hash(params[:partitions])
         bay_specs = extract_bay_specs(partitions_hash)
+        orientation = normalize_orientation(partitions_hash[:orientation])
 
         bay_rects, normalization_warning =
-          build_bays(partitions_hash, bay_specs, outer_width_mm, outer_height_mm)
+          build_bays(partitions_hash, bay_specs, outer_width_mm, outer_height_mm, orientation)
 
         partitions_info = build_partitions_info(
           partitions_hash,
           bay_rects,
           outer_width_mm,
-          outer_height_mm
+          outer_height_mm,
+          orientation
         )
 
         shelves = build_shelves(bay_specs, bay_rects)
-        fronts = build_fronts(bay_specs, bay_rects)
+        fronts = build_fronts(params, bay_specs, bay_rects, outer_width_mm, outer_height_mm)
 
         {
           outer: {
@@ -54,29 +56,44 @@ module AICabinets
       end
       private_class_method :build_warnings
 
-      def build_bays(partitions, bay_specs, outer_width_mm, outer_height_mm)
+      def build_bays(partitions, bay_specs, outer_width_mm, outer_height_mm, orientation)
         bay_count = bay_specs.length
 
-        return [[], nil] if bay_count.zero? || outer_width_mm <= 0.0
+        return [[], nil] if bay_count.zero? || outer_width_mm <= 0.0 || outer_height_mm <= 0.0
 
-        widths_mm = compute_initial_widths(partitions, bay_specs, outer_width_mm)
-        widths_mm = adjust_widths_count(widths_mm, bay_count)
-        widths_mm = sanitize_widths(widths_mm)
+        axis_length_mm = orientation == 'horizontal' ? outer_height_mm : outer_width_mm
 
-        widths_mm, warning = normalize_widths(widths_mm, outer_width_mm)
+        spans_mm = compute_initial_spans(partitions, bay_specs, axis_length_mm, orientation)
+        spans_mm = adjust_span_count(spans_mm, bay_count)
+        spans_mm = sanitize_spans(spans_mm)
+
+        spans_mm, warning = normalize_spans(spans_mm, axis_length_mm)
 
         rectangles = []
         cursor = 0.0
-        widths_mm.each_with_index do |width_mm, index|
-          rectangles << {
-            id: bay_identifier(bay_specs[index], index),
-            role: 'bay',
-            x_mm: cursor,
-            y_mm: 0.0,
-            w_mm: width_mm,
-            h_mm: outer_height_mm
-          }
-          cursor += width_mm
+        spans_mm.each_with_index do |span_mm, index|
+          bay_id = bay_identifier(bay_specs[index], index)
+
+          if orientation == 'horizontal'
+            rectangles << {
+              id: bay_id,
+              role: 'bay',
+              x_mm: 0.0,
+              y_mm: cursor,
+              w_mm: outer_width_mm,
+              h_mm: span_mm
+            }
+          else
+            rectangles << {
+              id: bay_id,
+              role: 'bay',
+              x_mm: cursor,
+              y_mm: 0.0,
+              w_mm: span_mm,
+              h_mm: outer_height_mm
+            }
+          end
+          cursor += span_mm
         end
 
         [rectangles, warning]
@@ -93,8 +110,8 @@ module AICabinets
       end
       private_class_method :extract_bay_specs
 
-      def build_partitions_info(partitions_hash, bay_rects, outer_width_mm, outer_height_mm)
-        orientation = normalize_orientation(partitions_hash[:orientation])
+      def build_partitions_info(partitions_hash, bay_rects, outer_width_mm, outer_height_mm, orientation = nil)
+        orientation ||= normalize_orientation(partitions_hash[:orientation])
         positions_mm =
           partition_positions(partitions_hash, bay_rects, orientation, outer_width_mm, outer_height_mm)
 
@@ -270,12 +287,33 @@ module AICabinets
       end
       private_class_method :preview_shelf_positions_from_count
 
-      def build_fronts(bay_specs, bay_rects)
+      def build_fronts(params, bay_specs, bay_rects, outer_width_mm, outer_height_mm)
         fronts = []
+
+        fallback_style = extract_global_door_style(params)
+        fallback_available = !fallback_style.nil?
+
+        if bay_rects.empty?
+          if fallback_available && outer_width_mm.positive? && outer_height_mm.positive?
+            fronts << {
+              id: 'cabinet-door',
+              role: 'door',
+              style: fallback_style,
+              x_mm: 0.0,
+              y_mm: 0.0,
+              w_mm: outer_width_mm,
+              h_mm: outer_height_mm
+            }
+          end
+          return fronts
+        end
 
         bay_rects.each_with_index do |bay, index|
           spec = bay_specs[index] || {}
           style = extract_door_style(spec)
+          if style.nil? && fallback_available && !door_mode_explicit?(spec)
+            style = fallback_style
+          end
           next if style.nil?
 
           identifier = bay[:id] || format('bay-%d', index + 1)
@@ -293,6 +331,18 @@ module AICabinets
         fronts
       end
       private_class_method :build_fronts
+
+      def door_mode_explicit?(spec)
+        return false unless spec.is_a?(Hash)
+
+        if spec.key?(:door_mode) || spec.key?('door_mode')
+          true
+        else
+          state = hash_or_nil(spec[:fronts_shelves_state]) || hash_or_nil(spec['fronts_shelves_state'])
+          state && (state.key?(:door_mode) || state.key?('door_mode'))
+        end
+      end
+      private_class_method :door_mode_explicit?
 
       def extract_door_style(spec)
         door_mode =
@@ -315,33 +365,59 @@ module AICabinets
       end
       private_class_method :extract_door_style
 
-      def compute_initial_widths(partitions, bay_specs, outer_width_mm)
-        hints = widths_from_hints(bay_specs)
+      def extract_global_door_style(params)
+        state =
+          if params.is_a?(Hash)
+            hash_or_nil(params[:fronts_shelves_state]) || hash_or_nil(params['fronts_shelves_state'])
+          end
+
+        door_mode = state && (state[:door_mode] || state['door_mode'])
+        if door_mode.nil? && params.is_a?(Hash)
+          door_mode = params[:door_mode] || params['door_mode']
+        end
+        normalized = door_mode.to_s.strip
+        return nil if normalized.empty?
+
+        case normalized.downcase
+        when 'doors_left', 'doors_right', 'doors_double'
+          normalized.downcase
+        else
+          nil
+        end
+      end
+      private_class_method :extract_global_door_style
+
+      def compute_initial_spans(partitions, bay_specs, axis_length_mm, orientation)
+        hints = spans_from_hints(bay_specs, orientation)
         return hints if hints
 
         mode = partitions[:mode].to_s.strip.downcase
         bay_count = bay_specs.length
 
-        return widths_from_positions(partitions, bay_count, outer_width_mm) if mode == 'positions'
+        return spans_from_positions(partitions, bay_count, axis_length_mm) if mode == 'positions'
 
-        even_widths(bay_count, outer_width_mm)
+        even_spans(bay_count, axis_length_mm)
       end
-      private_class_method :compute_initial_widths
+      private_class_method :compute_initial_spans
 
-      def widths_from_hints(bay_specs)
+      def spans_from_hints(bay_specs, orientation)
         hints = bay_specs.map do |bay|
           layout = hash_or_nil(bay[:layout]) || hash_or_nil(bay['layout'])
-          width = layout && (layout[:width_mm] || layout['width_mm'])
-          width ? dimension_mm(width) : nil
+          next nil unless layout
+
+          key = orientation == 'horizontal' ? :height_mm : :width_mm
+          string_key = key.to_s
+          length = layout[key] || layout[string_key]
+          length ? dimension_mm(length) : nil
         end
 
         return nil if hints.compact.empty?
 
         hints.map { |value| value || 0.0 }
       end
-      private_class_method :widths_from_hints
+      private_class_method :spans_from_hints
 
-      def widths_from_positions(partitions, bay_count, outer_width_mm)
+      def spans_from_positions(partitions, bay_count, axis_length_mm)
         positions = Array(partitions[:positions_mm])
         numeric = positions.map { |value| dimension_mm(value) }.compact
         sorted = numeric.sort
@@ -349,12 +425,12 @@ module AICabinets
 
         boundaries = [0.0]
         trimmed.each do |position|
-          clamped = clamp(position, 0.0, outer_width_mm)
+          clamped = clamp(position, 0.0, axis_length_mm)
           next if (clamped - boundaries.last).abs <= EPS_MM
 
           boundaries << clamped
         end
-        boundaries << outer_width_mm unless (boundaries.last - outer_width_mm).abs <= EPS_MM
+        boundaries << axis_length_mm unless (boundaries.last - axis_length_mm).abs <= EPS_MM
 
         widths = []
         boundaries.each_cons(2) do |left, right|
@@ -362,17 +438,17 @@ module AICabinets
         end
         widths
       end
-      private_class_method :widths_from_positions
+      private_class_method :spans_from_positions
 
-      def even_widths(bay_count, outer_width_mm)
+      def even_spans(bay_count, axis_length_mm)
         return [] if bay_count <= 0
 
-        width = bay_count.positive? ? outer_width_mm.to_f / bay_count : 0.0
+        width = bay_count.positive? ? axis_length_mm.to_f / bay_count : 0.0
         Array.new(bay_count, width)
       end
-      private_class_method :even_widths
+      private_class_method :even_spans
 
-      def adjust_widths_count(widths, bay_count)
+      def adjust_span_count(widths, bay_count)
         widths = Array(widths)
         if widths.length > bay_count
           widths.first(bay_count)
@@ -382,36 +458,36 @@ module AICabinets
           widths
         end
       end
-      private_class_method :adjust_widths_count
+      private_class_method :adjust_span_count
 
-      def sanitize_widths(widths)
+      def sanitize_spans(widths)
         widths.map do |width|
           value = width.to_f
           value.negative? ? 0.0 : value
         end
       end
-      private_class_method :sanitize_widths
+      private_class_method :sanitize_spans
 
-      def normalize_widths(widths, outer_width_mm)
+      def normalize_spans(widths, axis_length_mm)
         sum = widths.sum
-        difference = outer_width_mm - sum
+        difference = axis_length_mm - sum
         return [widths, nil] if difference.abs <= EPS_MM
 
         if sum <= EPS_MM
-          recalculated = even_widths(widths.length, outer_width_mm)
-          message = format('Normalized bay widths to sum to outer.w_mm (delta %.3f mm).', difference)
+          recalculated = even_spans(widths.length, axis_length_mm)
+          message = format('Normalized bay spans to sum to axis length (delta %.3f mm).', difference)
           return [recalculated, message]
         end
 
-        scale = outer_width_mm / sum
+        scale = axis_length_mm / sum
         scaled = widths.map { |width| width * scale }
-        correction = outer_width_mm - scaled.sum
+        correction = axis_length_mm - scaled.sum
         scaled[-1] = scaled[-1] + correction if scaled.any?
 
-        message = format('Normalized bay widths to sum to outer.w_mm (delta %.3f mm).', difference)
+        message = format('Normalized bay spans to sum to axis length (delta %.3f mm).', difference)
         [scaled, message]
       end
-      private_class_method :normalize_widths
+      private_class_method :normalize_spans
 
       def bay_identifier(bay_spec, index)
         id = bay_spec[:id] || bay_spec['id']

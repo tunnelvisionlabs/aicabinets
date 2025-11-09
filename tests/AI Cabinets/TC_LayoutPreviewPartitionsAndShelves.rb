@@ -104,6 +104,41 @@ class TC_LayoutPreviewPartitionsAndShelves < TestUp::TestCase
     assert_empty(errors, build_console_failure_message(errors))
   end
 
+  def test_front_layout_updates_without_partitions
+    ensure_dialog_ready
+    AICabinets::UI::DialogConsoleBridge.drain_events(@dialog)
+
+    base_model = {
+      outer: { w_mm: 820, h_mm: 720 },
+      bays: [],
+      partitions: { orientation: 'vertical', positions_mm: [] },
+      shelves: [],
+      fronts: [
+        { id: 'front-door', role: 'door', style: 'doors_left', x_mm: 0, y_mm: 0, w_mm: 820, h_mm: 720 }
+      ]
+    }
+
+    assert(render_layout(base_model), 'Expected LayoutPreviewDialog.renderLayout to succeed for base model.')
+
+    initial_state = await_eval(dom_state_script)
+    refute_nil(initial_state, 'Expected DOM state snapshot for base model.')
+    initial_doors = Array(initial_state[:doors] || initial_state['doors'])
+    assert_equal(1, initial_doors.length, 'Expected one door overlay for base model.')
+    assert_equal('doors_left', initial_doors.first[:style] || initial_doors.first['style'])
+
+    open_model = base_model.merge(fronts: [])
+    assert(render_layout(open_model), 'Expected LayoutPreviewDialog.renderLayout to succeed for open model update.')
+
+    open_state = await_eval(dom_state_script)
+    refute_nil(open_state, 'Expected DOM state snapshot after removing door.')
+    open_doors = Array(open_state[:doors] || open_state['doors'])
+    assert_equal(0, open_doors.length, 'Expected no door overlays after switching to open front.')
+
+    events = AICabinets::UI::DialogConsoleBridge.drain_events(@dialog)
+    errors = events.select { |event| event[:level] == 'error' }
+    assert_empty(errors, build_console_failure_message(errors))
+  end
+
   private
 
   def ensure_dialog_ready
