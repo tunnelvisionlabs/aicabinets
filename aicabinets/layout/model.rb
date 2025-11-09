@@ -169,11 +169,34 @@ module AICabinets
 
       def bay_identifier(bay_spec, index)
         id = bay_spec[:id] || bay_spec['id']
-        return id unless id.nil?
+        normalized = normalize_identifier(id, index)
+        return normalized unless normalized.nil?
 
-        index + 1
+        format('bay-%d', index + 1)
       end
       private_class_method :bay_identifier
+
+      def normalize_identifier(identifier, index)
+        case identifier
+        when nil
+          nil
+        when String
+          text = identifier.strip
+          return nil if text.empty?
+
+          text
+        when Numeric
+          value = identifier.to_i
+          value = index + 1 if value <= 0
+          format('bay-%d', value)
+        else
+          text = identifier.to_s.strip
+          return nil if text.empty?
+
+          text
+        end
+      end
+      private_class_method :normalize_identifier
 
       def dimension_mm(value)
         return 0.0 if value.nil?
