@@ -265,7 +265,11 @@ class TC_InsertBase_PreviewEmbed < TestUp::TestCase
         return true;
       })()
     JAVASCRIPT
-    await_js(script)
+    result = await_js(script)
+    return true if result
+
+    message = "Preview bay #{identifier.inspect} was not found; unable to simulate click."
+    flunk(message)
   end
 
   def pump_events(delay = 0.1)
