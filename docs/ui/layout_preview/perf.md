@@ -17,7 +17,7 @@ Issue #203.
    `window.__lp_metrics__` for programmatic assertions.
 
 The harness uses the new `LayoutPreviewCtrl` to debounce parameter changes, memoize
-layout models by param hash, and minimise DOM churn during re-rendering. Each update
+layout models by param hash, and minimize DOM churn during re-rendering. Each update
 emits:
 
 - `update_ms`: time from params received → DOM applied (median ≤ 100 ms target).
@@ -40,7 +40,7 @@ emits:
 
 The console logs a one-line summary after each run. Example:
 
-```
+```text
 [LayoutPreviewPerf] Completed 300 iterations (fixture: stress12) — median 78.4 ms (p95 109.7 ms); frame median 11.6 ms (p95 15.8 ms).
 ```
 
