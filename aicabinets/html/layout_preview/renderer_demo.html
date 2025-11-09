@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" data-dialog-id="layout-preview-renderer">
+  <head>
+    <meta charset="utf-8" />
+    <title>Layout Preview Renderer Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="renderer.css" />
+    <script src="../../ui/dialogs/console_bridge.js"></script>
+    <script src="renderer.js"></script>
+  </head>
+  <body>
+    <main class="lp-demo-panel">
+      <header class="lp-demo-header">
+        <h1>Layout Preview Renderer</h1>
+        <p class="lp-demo-note">
+          The renderer consumes a <code>LayoutModel</code> expressed in millimeters and outputs inline SVG that fits its host
+          while preserving aspect ratio. Hover any bay to preview hover weight. Resize the pane to observe the auto-fit scaling.
+        </p>
+      </header>
+      <section class="lp-demo-controls" aria-label="Preview states">
+        <button type="button" data-layout-key="empty">No bays</button>
+        <button type="button" data-layout-key="single">Single bay</button>
+        <button type="button" data-layout-key="triple">Triple bays</button>
+      </section>
+      <section class="lp-demo-stage">
+        <div id="layout-preview-host" class="lp-host"></div>
+      </section>
+      <p class="lp-demo-note">
+        CSS variables control stroke widths and the hover tint: try overriding <code>--lp-stroke-px</code>,
+        <code>--lp-hover-stroke-px</code>, or <code>--lp-active-color</code> in DevTools to verify stable strokes.
+      </p>
+    </main>
+    <script>
+      (function () {
+        'use strict';
+
+        var host = document.getElementById('layout-preview-host');
+        if (!host) {
+          return;
+        }
+
+        var layouts = {
+          empty: {
+            outer: { w_mm: 762, h_mm: 762 },
+            bays: [],
+            fronts: []
+          },
+          single: {
+            outer: { w_mm: 762, h_mm: 762 },
+            bays: [
+              { id: 'bay-0', role: 'bay', x_mm: 0, y_mm: 0, w_mm: 762, h_mm: 762 }
+            ],
+            fronts: []
+          },
+          triple: {
+            outer: { w_mm: 914, h_mm: 762 },
+            bays: [
+              { id: 'bay-0', role: 'bay', x_mm: 0, y_mm: 0, w_mm: 305, h_mm: 762 },
+              { id: 'bay-1', role: 'bay', x_mm: 305, y_mm: 0, w_mm: 305, h_mm: 762 },
+              { id: 'bay-2', role: 'bay', x_mm: 610, y_mm: 0, w_mm: 304, h_mm: 762 }
+            ],
+            fronts: [
+              { id: 'door-left', role: 'door', x_mm: 0, y_mm: 0, w_mm: 305, h_mm: 762 },
+              { id: 'drawer-stack', role: 'drawer_group', x_mm: 305, y_mm: 0, w_mm: 305, h_mm: 762 },
+              { id: 'door-right', role: 'door', x_mm: 610, y_mm: 0, w_mm: 304, h_mm: 762 }
+            ]
+          }
+        };
+
+        var controller = window.LayoutPreview && typeof window.LayoutPreview.render === 'function'
+          ? window.LayoutPreview.render(host, layouts.triple, { padding_frac: 0.06, stroke_px: 1.6 })
+          : null;
+
+        var activeKey = 'triple';
+
+        function setActiveButton(key) {
+          var buttons = document.querySelectorAll('[data-layout-key]');
+          for (var index = 0; index < buttons.length; index += 1) {
+            var button = buttons[index];
+            if (button.getAttribute('data-layout-key') === key) {
+              button.setAttribute('data-state', 'active');
+            } else {
+              button.removeAttribute('data-state');
+            }
+          }
+        }
+
+        function applyLayout(key) {
+          if (!controller || !layouts[key]) {
+            return;
+          }
+          controller.update(layouts[key]);
+          activeKey = key;
+          setActiveButton(key);
+        }
+
+        document.addEventListener('click', function (event) {
+          var target = event.target;
+          if (!target || target.tagName !== 'BUTTON') {
+            return;
+          }
+
+          var key = target.getAttribute('data-layout-key');
+          if (key && layouts[key]) {
+            applyLayout(key);
+          }
+        });
+
+        setActiveButton(activeKey);
+
+        function notifyReady() {
+          if (window.sketchup && typeof window.sketchup.layout_preview_demo_ready === 'function') {
+            window.sketchup.layout_preview_demo_ready('ready');
+          }
+        }
+
+        notifyReady();
+      })();
+    </script>
+  </body>
+</html>
