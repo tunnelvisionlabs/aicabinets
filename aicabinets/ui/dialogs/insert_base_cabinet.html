@@ -61,7 +61,18 @@
       ></div>
 
       <main class="dialog__content" role="main">
-        <form class="form" data-role="insert-form" novalidate>
+        <div class="dialog__layout" data-role="dialog-layout">
+          <section
+            class="layout-preview"
+            data-role="layout-preview-pane"
+            aria-label="Cabinet layout preview"
+            hidden
+          >
+            <h2 class="layout-preview__title">Layout preview</h2>
+            <div class="layout-preview__canvas" data-role="layout-preview-container"></div>
+          </section>
+
+          <form class="form" data-role="insert-form" novalidate>
           <section class="dialog__scope is-hidden" data-role="scope-section">
             <div class="scope-toggle__group" data-role="scope-controls">
               <fieldset class="scope-toggle" data-field="scope">
@@ -484,7 +495,8 @@
 
             </div>
           </section>
-        </form>
+          </form>
+        </div>
       </main>
 
       <footer class="dialog__footer">

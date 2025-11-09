@@ -336,7 +336,8 @@
       }
 
       wrapper.setAttribute('data-index', String(index));
-      wrapper.setAttribute('data-id', bay.id || String(index));
+      var fallbackId = 'bay-' + String(index + 1);
+      wrapper.setAttribute('data-id', bay.id || fallbackId);
       wrapper.setAttribute('role', 'group');
       wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
       wrapper.setAttribute('data-w-mm', formatNumber(bay.w_mm));
@@ -372,7 +373,8 @@
       wrapper.setAttribute('data-index', String(index));
       wrapper.setAttribute('role', 'group');
       wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
-      wrapper.setAttribute('data-id', bay.id || String(index));
+      var fallbackId = 'bay-' + String(index + 1);
+      wrapper.setAttribute('data-id', bay.id || fallbackId);
       wrapper.setAttribute('data-w-mm', formatNumber(bay.w_mm));
       wrapper.setAttribute('data-h-mm', formatNumber(bay.h_mm));
 
