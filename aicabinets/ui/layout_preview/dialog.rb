@@ -20,7 +20,10 @@ module AICabinets
         attr_reader :dialog, :form
 
         def initialize(dialog, form:)
-          raise ArgumentError, 'dialog must be a UI::HtmlDialog' unless html_dialog?(dialog)
+          unless html_dialog?(dialog)
+            raise ArgumentError,
+                  'dialog must be a UI::HtmlDialog or test double responding to add_action_callback/execute_script'
+          end
           raise ArgumentError, 'form must respond to #select_bay' unless form.respond_to?(:select_bay)
 
           @dialog = dialog
@@ -149,7 +152,13 @@ module AICabinets
         end
 
         def html_dialog?(object)
-          defined?(UI::HtmlDialog) && object.is_a?(UI::HtmlDialog)
+          return false unless object
+
+          if defined?(UI::HtmlDialog) && object.is_a?(UI::HtmlDialog)
+            true
+          else
+            object.respond_to?(:add_action_callback) && object.respond_to?(:execute_script)
+          end
         end
       end
     end
