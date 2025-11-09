@@ -1,0 +1,202 @@
+{
+  "outer": {
+    "w_mm": 3378,
+    "h_mm": 762
+  },
+  "bays": [
+    {
+      "id": "bay-0",
+      "role": "bay",
+      "x_mm": 0,
+      "y_mm": 0,
+      "w_mm": 254,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-1",
+      "role": "bay",
+      "x_mm": 254,
+      "y_mm": 0,
+      "w_mm": 279,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-2",
+      "role": "bay",
+      "x_mm": 533,
+      "y_mm": 0,
+      "w_mm": 229,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-3",
+      "role": "bay",
+      "x_mm": 762,
+      "y_mm": 0,
+      "w_mm": 305,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-4",
+      "role": "bay",
+      "x_mm": 1067,
+      "y_mm": 0,
+      "w_mm": 330,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-5",
+      "role": "bay",
+      "x_mm": 1397,
+      "y_mm": 0,
+      "w_mm": 279,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-6",
+      "role": "bay",
+      "x_mm": 1676,
+      "y_mm": 0,
+      "w_mm": 254,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-7",
+      "role": "bay",
+      "x_mm": 1930,
+      "y_mm": 0,
+      "w_mm": 330,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-8",
+      "role": "bay",
+      "x_mm": 2260,
+      "y_mm": 0,
+      "w_mm": 305,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-9",
+      "role": "bay",
+      "x_mm": 2565,
+      "y_mm": 0,
+      "w_mm": 279,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-10",
+      "role": "bay",
+      "x_mm": 2844,
+      "y_mm": 0,
+      "w_mm": 229,
+      "h_mm": 762
+    },
+    {
+      "id": "bay-11",
+      "role": "bay",
+      "x_mm": 3073,
+      "y_mm": 0,
+      "w_mm": 305,
+      "h_mm": 762
+    }
+  ],
+  "fronts": [
+    {
+      "id": "front-0",
+      "role": "door",
+      "x_mm": 0,
+      "y_mm": 0,
+      "w_mm": 254,
+      "h_mm": 762
+    },
+    {
+      "id": "front-1",
+      "role": "drawer",
+      "x_mm": 254,
+      "y_mm": 0,
+      "w_mm": 279,
+      "h_mm": 762
+    },
+    {
+      "id": "front-2",
+      "role": "door",
+      "x_mm": 533,
+      "y_mm": 0,
+      "w_mm": 229,
+      "h_mm": 762
+    },
+    {
+      "id": "front-3",
+      "role": "door",
+      "x_mm": 762,
+      "y_mm": 0,
+      "w_mm": 305,
+      "h_mm": 762
+    },
+    {
+      "id": "front-4",
+      "role": "drawer",
+      "x_mm": 1067,
+      "y_mm": 0,
+      "w_mm": 330,
+      "h_mm": 762
+    },
+    {
+      "id": "front-5",
+      "role": "door",
+      "x_mm": 1397,
+      "y_mm": 0,
+      "w_mm": 279,
+      "h_mm": 762
+    },
+    {
+      "id": "front-6",
+      "role": "door",
+      "x_mm": 1676,
+      "y_mm": 0,
+      "w_mm": 254,
+      "h_mm": 762
+    },
+    {
+      "id": "front-7",
+      "role": "drawer",
+      "x_mm": 1930,
+      "y_mm": 0,
+      "w_mm": 330,
+      "h_mm": 762
+    },
+    {
+      "id": "front-8",
+      "role": "door",
+      "x_mm": 2260,
+      "y_mm": 0,
+      "w_mm": 305,
+      "h_mm": 762
+    },
+    {
+      "id": "front-9",
+      "role": "door",
+      "x_mm": 2565,
+      "y_mm": 0,
+      "w_mm": 279,
+      "h_mm": 762
+    },
+    {
+      "id": "front-10",
+      "role": "drawer",
+      "x_mm": 2844,
+      "y_mm": 0,
+      "w_mm": 229,
+      "h_mm": 762
+    },
+    {
+      "id": "front-11",
+      "role": "door",
+      "x_mm": 3073,
+      "y_mm": 0,
+      "w_mm": 305,
+      "h_mm": 762
+    }
+  ]
+}
