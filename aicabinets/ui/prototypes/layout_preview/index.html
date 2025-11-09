@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Dialog Layout Preview Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      --preview-bg: #f8fafc;
+      --preview-stroke: #1f2933;
+      --preview-divider: rgba(31, 41, 51, 0.6);
+      --preview-front-hint: #94a3b8;
+      --preview-hover: rgba(59, 130, 246, 0.08);
+      --preview-active-fill: rgba(59, 130, 246, 0.15);
+      --preview-active-stroke: #2c5282;
+      --preview-focus-ring: #2563eb;
+      --preview-letterbox: #f8fafc;
+      background: #e2e8f0;
+      min-height: 100%;
+    }
+
+    body {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, rgba(148, 163, 184, 0.25), transparent 55%), #e2e8f0;
+      color: #1f2933;
+    }
+
+    main {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+      padding: 32px;
+      display: grid;
+      gap: 24px;
+      max-width: 960px;
+      width: min(92vw, 960px);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+    }
+
+    label {
+      font-weight: 600;
+    }
+
+    select {
+      font-size: 1rem;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #cbd5f5;
+      min-width: 220px;
+      background: #f8fafc;
+    }
+
+    .preview-shell {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .preview-stage {
+      flex: 1 1 320px;
+      max-width: 520px;
+      background: var(--preview-bg);
+      padding: 16px;
+      border-radius: 14px;
+      box-sizing: border-box;
+      position: relative;
+      min-width: 260px;
+      min-height: 220px;
+    }
+
+    .preview-inner {
+      position: relative;
+      width: 100%;
+      height: clamp(180px, 36vw, 360px);
+    }
+
+    .drawing-layer {
+      position: absolute;
+      inset: 0;
+    }
+
+    .preview-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .option-layer {
+      position: absolute;
+      inset: 0;
+      outline: none;
+    }
+
+    .bay-option {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      border: none;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+      outline: none;
+      border-radius: 8px;
+      transition: background-color 120ms ease;
+    }
+
+    .bay-option::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 0 solid transparent;
+      transition: border 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .bay-option[data-state="active"]::before {
+      background: var(--preview-active-fill);
+      border-color: var(--preview-active-stroke);
+      border-width: var(--active-stroke-width, 4px);
+    }
+
+    .bay-option[data-state="hover"]::before {
+      background: var(--preview-hover);
+    }
+
+    .option-layer[data-focused="true"] .bay-option[data-state="active"]::after {
+      content: "";
+      position: absolute;
+      inset: clamp(2px, 0.02 * var(--draw-width, 360px), 10px);
+      border-radius: inherit;
+      border: 2px dashed var(--preview-focus-ring);
+      pointer-events: none;
+    }
+
+    .bay-option[data-state="divider"] {
+      pointer-events: none;
+    }
+
+    .legend {
+      flex: 1 1 240px;
+      background: #f1f5f9;
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .legend h2 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .legend ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .legend li {
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 768px) {
+      main {
+        padding: 24px;
+      }
+
+      .preview-stage {
+        flex: 1 1 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Front Layout Preview — Interaction Prototype</h1>
+      <p>Select a configuration and interact with the preview area. The preview honors keyboard navigation, hover, and click selection.</p>
+    </header>
+    <div class="controls">
+      <label for="config-select">Sample configuration</label>
+      <select id="config-select">
+        <option value="single">Single bay — drawer stack</option>
+        <option value="quad">Four bays — sink combo</option>
+      </select>
+    </div>
+    <div class="preview-shell">
+      <section class="preview-stage" aria-labelledby="preview-heading">
+        <div class="preview-inner">
+          <div class="drawing-layer">
+            <svg class="preview-canvas" viewBox="0 0 100 100" aria-hidden="true"></svg>
+            <div class="option-layer" role="listbox" tabindex="0" aria-label="Cabinet bay preview"></div>
+          </div>
+        </div>
+      </section>
+      <aside class="legend">
+        <h2 id="preview-heading">Behavior cheatsheet</h2>
+        <ul>
+          <li><strong>Click</strong> inside a bay to select it.</li>
+          <li><strong>Arrow keys</strong> move the selection left/right.</li>
+          <li><strong>Home/End</strong> jump to the first or last bay.</li>
+          <li><strong>Enter/Space</strong> confirm the focused bay (emits <code>baychange</code>).</li>
+          <li>Tooltips follow the hovered bay and announce width fractions.</li>
+        </ul>
+      </aside>
+    </div>
+  </main>
+  <script>
+    const MIN_HIT_PX = 44;
+    const configs = {
+      single: {
+        id: "single",
+        label: "Single bay — drawer stack",
+        width_mm: 762,
+        height_mm: 914,
+        bays: [
+          { id: "BAY_SINGLE", label: "Bay 1", fraction: 1 }
+        ],
+        frontHints: [0.42, 0.72]
+      },
+      quad: {
+        id: "quad",
+        label: "Four bays — sink combo",
+        width_mm: 1828,
+        height_mm: 914,
+        bays: [
+          { id: "BAY_L", label: "Bay 1", fraction: 0.22 },
+          { id: "BAY_CL", label: "Bay 2", fraction: 0.28 },
+          { id: "BAY_CR", label: "Bay 3", fraction: 0.26 },
+          { id: "BAY_R", label: "Bay 4", fraction: 0.24 }
+        ],
+        frontHints: [0.38, 0.68]
+      }
+    };
+
+    const state = {
+      config: configs.single,
+      index: 0,
+      hasFocus: false
+    };
+
+    const selectEl = document.querySelector('#config-select');
+    const optionLayer = document.querySelector('.option-layer');
+    const svg = document.querySelector('.preview-canvas');
+    const drawingLayer = document.querySelector('.drawing-layer');
+    const previewInner = document.querySelector('.preview-inner');
+
+    selectEl.addEventListener('change', () => {
+      const nextConfig = configs[selectEl.value];
+      state.config = nextConfig;
+      state.index = 0;
+      render();
+      announceChange();
+    });
+
+    optionLayer.addEventListener('focus', () => {
+      state.hasFocus = true;
+      optionLayer.dataset.focused = 'true';
+    });
+
+    optionLayer.addEventListener('blur', () => {
+      state.hasFocus = false;
+      delete optionLayer.dataset.focused;
+    });
+
+    optionLayer.addEventListener('keydown', (event) => {
+      if (!state.config) return;
+      const maxIndex = state.config.bays.length - 1;
+      let handled = true;
+      switch (event.key) {
+        case 'ArrowLeft':
+          if (state.index > 0) {
+            setIndex(state.index - 1, { announce: false });
+          }
+          break;
+        case 'ArrowRight':
+          if (state.index < maxIndex) {
+            setIndex(state.index + 1, { announce: false });
+          }
+          break;
+        case 'Home':
+          setIndex(0, { announce: false });
+          break;
+        case 'End':
+          setIndex(maxIndex, { announce: false });
+          break;
+        case 'Enter':
+        case ' ': // Space
+          announceChange();
+          break;
+        default:
+          handled = false;
+      }
+      if (handled) {
+        event.preventDefault();
+      }
+    });
+
+    optionLayer.addEventListener('click', (event) => {
+      const target = event.target.closest('.bay-option');
+      if (!target) return;
+      const index = Number(target.dataset.index);
+      setIndex(index, { announce: true });
+    });
+
+    optionLayer.addEventListener('pointerdown', () => {
+      optionLayer.focus();
+    });
+
+    optionLayer.addEventListener('mousemove', (event) => {
+      const target = event.target.closest('.bay-option');
+      if (!target) {
+        clearHover();
+        return;
+      }
+      setHover(Number(target.dataset.index));
+    });
+
+    optionLayer.addEventListener('mouseleave', clearHover);
+
+    optionLayer.addEventListener('baychange', (event) => {
+      console.info('baychange', event.detail);
+    });
+
+    window.addEventListener('resize', () => {
+      render();
+    });
+
+    function setIndex(index, { announce }) {
+      if (index < 0 || index >= state.config.bays.length) return;
+      state.index = index;
+      renderOverlays();
+      updateFocusRing();
+      clearHover();
+      if (announce) {
+        announceChange();
+      }
+    }
+
+    function announceChange() {
+      const activeBay = state.config.bays[state.index];
+      const detail = { index: state.index, id: activeBay.id };
+      const changeEvent = new CustomEvent('baychange', {
+        bubbles: true,
+        detail
+      });
+      optionLayer.dispatchEvent(changeEvent);
+    }
+
+    function setHover(index) {
+      for (const element of optionLayer.querySelectorAll('.bay-option')) {
+        const elementIndex = Number(element.dataset.index);
+        if (elementIndex === state.index) {
+          element.dataset.state = 'active';
+        } else if (elementIndex === index) {
+          element.dataset.state = 'hover';
+        } else {
+          element.dataset.state = 'idle';
+        }
+      }
+    }
+
+    function clearHover() {
+      for (const element of optionLayer.querySelectorAll('.bay-option')) {
+        const elementIndex = Number(element.dataset.index);
+        element.dataset.state = elementIndex === state.index ? 'active' : 'idle';
+      }
+    }
+
+    function render() {
+      renderFrame();
+      renderOverlays();
+      updateFocusRing();
+      clearHover();
+    }
+
+    function renderFrame() {
+      const config = state.config;
+      const innerWidth = previewInner.clientWidth;
+      const innerHeight = previewInner.clientHeight;
+      const minWidth = 240;
+      const minHeight = 180;
+      const maxWidth = 480;
+      const maxHeight = 360;
+      const availableWidth = clamp(innerWidth, minWidth, maxWidth);
+      const availableHeight = clamp(innerHeight, minHeight, maxHeight);
+      const aspect = config.width_mm / config.height_mm;
+      let drawWidth = availableWidth;
+      let drawHeight = drawWidth / aspect;
+      if (drawHeight > availableHeight) {
+        drawHeight = availableHeight;
+        drawWidth = drawHeight * aspect;
+      }
+      const offsetX = (availableWidth - drawWidth) / 2;
+      const offsetY = (availableHeight - drawHeight) / 2;
+
+      drawingLayer.style.width = `${drawWidth}px`;
+      drawingLayer.style.height = `${drawHeight}px`;
+      drawingLayer.style.left = `${offsetX + (innerWidth - availableWidth) / 2}px`;
+      drawingLayer.style.top = `${offsetY + (innerHeight - availableHeight) / 2}px`;
+      drawingLayer.style.position = 'absolute';
+
+      optionLayer.style.setProperty('--draw-width', `${drawWidth}px`);
+
+      svg.setAttribute('width', drawWidth);
+      svg.setAttribute('height', drawHeight);
+      svg.setAttribute('viewBox', `0 0 ${drawWidth} ${drawHeight}`);
+
+      const outerRadius = Math.min(12, drawWidth * 0.02);
+      const outerStroke = Math.max(2, Math.round(0.008 * drawWidth));
+      const dividerStroke = outerStroke * 0.6;
+      const hintStroke = Math.max(1, outerStroke * 0.4);
+
+      const edges = cumulativeEdges(config.bays);
+      const verticalLines = edges.slice(1, -1).map((edge) => {
+        const x = edge * drawWidth;
+        return `<line class="divider" x1="${x}" y1="0" x2="${x}" y2="${drawHeight}" stroke-width="${dividerStroke}" />`;
+      }).join('');
+
+      const hints = (config.frontHints || []).map((hint) => {
+        const y = drawHeight * hint;
+        return `<line class="front-hint" x1="0" y1="${y}" x2="${drawWidth}" y2="${y}" stroke-width="${hintStroke}" stroke-dasharray="12 8" />`;
+      }).join('');
+
+      svg.innerHTML = `
+        <rect class="outer-frame" x="0" y="0" width="${drawWidth}" height="${drawHeight}" rx="${outerRadius}" ry="${outerRadius}" stroke-width="${outerStroke}" />
+        ${verticalLines}
+        ${hints}
+      `;
+
+      svg.querySelector('.outer-frame').setAttribute('fill', 'white');
+      svg.querySelector('.outer-frame').setAttribute('stroke', 'var(--preview-stroke)');
+      svg.querySelectorAll('.divider').forEach((line) => {
+        line.setAttribute('stroke', 'var(--preview-divider)');
+      });
+      svg.querySelectorAll('.front-hint').forEach((line) => {
+        line.setAttribute('stroke', 'var(--preview-front-hint)');
+      });
+
+      optionLayer.style.setProperty('--active-stroke-width', `${outerStroke * 1.3}px`);
+    }
+
+    function renderOverlays() {
+      const config = state.config;
+      const drawWidth = parseFloat(optionLayer.style.getPropertyValue('--draw-width')) || 360;
+      const drawHeight = parseFloat(svg.getAttribute('height')) || 240;
+      const edges = cumulativeEdges(config.bays);
+      const overlays = [];
+
+      for (let i = 0; i < config.bays.length; i += 1) {
+        const start = edges[i] * drawWidth;
+        const end = edges[i + 1] * drawWidth;
+        const center = (start + end) / 2;
+        const actualWidth = end - start;
+        const hitWidth = Math.max(actualWidth, MIN_HIT_PX);
+        let overlayStart = center - hitWidth / 2;
+        let overlayEnd = center + hitWidth / 2;
+
+        overlayStart = Math.max(0, overlayStart);
+        overlayEnd = Math.min(drawWidth, overlayEnd);
+
+        if (overlayEnd - overlayStart < MIN_HIT_PX) {
+          const adjust = MIN_HIT_PX - (overlayEnd - overlayStart);
+          overlayStart = Math.max(0, overlayStart - adjust / 2);
+          overlayEnd = Math.min(drawWidth, overlayEnd + adjust / 2);
+        }
+
+        if (overlays.length) {
+          const prev = overlays[overlays.length - 1];
+          if (overlayStart < prev.end) {
+            const shift = prev.end - overlayStart;
+            overlayStart += shift;
+            overlayEnd += shift;
+            if (overlayEnd > drawWidth) {
+              const overflow = overlayEnd - drawWidth;
+              overlayStart -= overflow;
+              overlayEnd -= overflow;
+            }
+          }
+        }
+
+        overlays.push({ index: i, start, end, overlayStart, overlayEnd, actualWidth, center });
+      }
+
+      optionLayer.innerHTML = '';
+      overlays.forEach((overlay) => {
+        const bay = config.bays[overlay.index];
+        const element = document.createElement('div');
+        element.className = 'bay-option';
+        element.dataset.index = overlay.index;
+        element.style.left = `${overlay.overlayStart}px`;
+        element.style.width = `${overlay.overlayEnd - overlay.overlayStart}px`;
+        element.style.borderRadius = `${Math.min(10, (overlay.overlayEnd - overlay.overlayStart) * 0.1)}px`;
+        const positionLabel = describePosition(overlay.index, config.bays.length);
+        const widthPercent = (bay.fraction * 100).toFixed(0);
+        element.title = `${bay.label} – ${positionLabel}`;
+        element.setAttribute('role', 'option');
+        element.setAttribute('tabindex', '-1');
+        element.setAttribute('aria-selected', overlay.index === state.index ? 'true' : 'false');
+        element.setAttribute('aria-label', `${bay.label}, ${positionLabel}, width ${widthPercent} percent of cabinet`);
+        element.setAttribute('aria-description', `${bay.label} – ${positionLabel}`);
+        element.dataset.state = overlay.index === state.index ? 'active' : 'idle';
+        element.id = `bay-option-${config.id}-${overlay.index}`;
+        optionLayer.appendChild(element);
+      });
+
+      const activeEl = optionLayer.querySelector(`.bay-option[data-index="${state.index}"]`);
+      if (activeEl) {
+        optionLayer.setAttribute('aria-activedescendant', activeEl.id);
+      } else {
+        optionLayer.removeAttribute('aria-activedescendant');
+      }
+    }
+
+    function updateFocusRing() {
+      if (state.hasFocus) {
+        optionLayer.dataset.focused = 'true';
+      } else {
+        delete optionLayer.dataset.focused;
+      }
+    }
+
+    function cumulativeEdges(bays) {
+      const edges = [0];
+      let total = 0;
+      bays.forEach((bay) => {
+        total += bay.fraction;
+        edges.push(total);
+      });
+      return edges;
+    }
+
+    function describePosition(index, count) {
+      if (count === 1) return 'Single';
+      const names = ['Left', 'Center Left', 'Center', 'Center Right', 'Right'];
+      if (count === 2) {
+        return index === 0 ? 'Left' : 'Right';
+      }
+      if (count === 3) {
+        return ['Left', 'Center', 'Right'][index];
+      }
+      if (index < names.length) {
+        return names[index];
+      }
+      return `Middle ${index + 1}`;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    render();
+    announceChange();
+  </script>
+</body>
+</html>
