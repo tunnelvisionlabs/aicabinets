@@ -52,6 +52,63 @@ body {
   gap: 24px;
 }
 
+.dialog__layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+body.has-layout-preview .dialog__layout {
+  flex-direction: column;
+}
+
+@media (min-width: 640px) {
+  body.has-layout-preview .dialog__layout {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+.layout-preview {
+  display: none;
+  flex: 0 0 280px;
+  max-width: 360px;
+  padding: 12px 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background-color: rgba(255, 255, 255, 0.92);
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  flex-direction: column;
+  gap: 12px;
+}
+
+body.has-layout-preview .layout-preview {
+  display: flex;
+}
+
+body.has-layout-preview .form {
+  flex: 1 1 auto;
+}
+
+.layout-preview__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.layout-preview__canvas {
+  flex: 1 1 auto;
+  min-height: 220px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background-color: rgba(248, 250, 252, 0.95);
+  overflow: hidden;
+  display: flex;
+}
+
 .dialog__scope {
   display: flex;
   flex-direction: column;

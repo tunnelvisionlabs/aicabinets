@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'digest'
 
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
@@ -8,6 +9,9 @@ require 'aicabinets/ui/localization'
 require 'aicabinets/ui/dialog_console_bridge'
 require 'aicabinets/ui_visibility'
 require 'aicabinets/door_mode_rules'
+require 'aicabinets/features'
+require 'aicabinets/layout/model'
+require 'aicabinets/ui/layout_preview/dialog_host'
 
 module AICabinets
   module UI
@@ -110,6 +114,7 @@ module AICabinets
           dialog.set_on_closed do
             cancel_active_placement(dialog)
             ConsoleBridge.unregister_dialog(dialog)
+            destroy_layout_preview_host
             @dialog = nil
           end
           dialog
@@ -141,9 +146,222 @@ module AICabinets
         private_class_method :dialog_state
 
         def reset_dialog_state!
+          destroy_layout_preview_host
           @dialog_state = {}
         end
         private_class_method :reset_dialog_state!
+
+        def layout_preview_state
+          dialog_state[:layout_preview] ||= {
+            host: nil,
+            param_signature: nil,
+            bay_ids: [],
+            last_model_json: nil
+          }
+        end
+        private_class_method :layout_preview_state
+
+        def layout_preview_enabled?
+          AICabinets::Features.layout_preview?
+        end
+        private_class_method :layout_preview_enabled?
+
+        def ensure_layout_preview_host(dialog)
+          state = layout_preview_state
+
+          unless layout_preview_enabled?
+            state[:host] = AICabinets::UI::LayoutPreview::NullDialogHost.new
+            return state[:host]
+          end
+
+          host = state[:host]
+          return host if host && host.dialog == dialog
+
+          state[:host] = AICabinets::UI::LayoutPreview::DialogHost.new(dialog) do |bay_identifier, host_instance|
+            handle_layout_preview_select(dialog, bay_identifier, host_instance)
+          end
+        rescue StandardError => e
+          warn("AI Cabinets: Unable to initialize layout preview host: #{e.message}")
+          state[:host] = AICabinets::UI::LayoutPreview::NullDialogHost.new
+        end
+        private_class_method :ensure_layout_preview_host
+
+        def destroy_layout_preview_host
+          state = dialog_state
+          host = state[:layout_preview] && state[:layout_preview][:host]
+          host&.destroy
+        ensure
+          if state[:layout_preview]
+            state[:layout_preview][:host] = nil
+            state[:layout_preview][:param_signature] = nil
+            state[:layout_preview][:bay_ids] = []
+            state[:layout_preview][:last_model_json] = nil
+          end
+        end
+        private_class_method :destroy_layout_preview_host
+
+        def sync_layout_preview(dialog, update_model: true, update_selection: true)
+          unless layout_preview_enabled?
+            destroy_layout_preview_host
+            return
+          end
+
+          host = ensure_layout_preview_host(dialog)
+          return unless host
+
+          params = ensure_dialog_params
+          state = layout_preview_state
+
+          update_layout_preview_model(host, state, params) if update_model
+          sync_layout_preview_selection(host, state, params) if update_selection
+        end
+        private_class_method :sync_layout_preview
+
+        def update_layout_preview_model(host, state, params)
+          return unless host
+
+          signature = layout_preview_params_signature(params)
+          return if signature && signature == state[:param_signature]
+
+          model = build_layout_preview_model(params, signature)
+          json = JSON.generate(model)
+          return if state[:last_model_json] == json
+
+          host.update(json)
+          state[:last_model_json] = json
+          state[:param_signature] = signature
+          state[:bay_ids] = layout_preview_extract_bay_ids(model)
+        rescue StandardError => e
+          warn("AI Cabinets: Failed to refresh layout preview: #{e.message}")
+        end
+        private_class_method :update_layout_preview_model
+
+        def build_layout_preview_model(params, signature)
+          layout_params = deep_copy_params(params)
+          model = AICabinets::Layout::Model.build(layout_params)
+          meta = model[:meta] ||= {}
+          meta[:param_hash] = signature if signature
+          model
+        end
+        private_class_method :build_layout_preview_model
+
+        def layout_preview_params_signature(params)
+          return nil unless params.is_a?(Hash)
+
+          serialized = JSON.generate(params)
+          Digest::SHA1.hexdigest(serialized)
+        rescue StandardError => e
+          warn("AI Cabinets: Failed to hash layout params: #{e.message}")
+          nil
+        end
+        private_class_method :layout_preview_params_signature
+
+        def layout_preview_extract_bay_ids(model)
+          bays = model[:bays]
+          return [] unless bays.is_a?(Array)
+
+          bays.each_with_index.map do |bay, index|
+            layout_preview_normalize_identifier(bay[:id] || bay['id']) || (index + 1).to_s
+          end
+        end
+        private_class_method :layout_preview_extract_bay_ids
+
+        def sync_layout_preview_selection(host, state, params)
+          return unless host
+
+          bays = state[:bay_ids]
+          count = bays.length
+          index = AICabinets::UiVisibility.clamp_selected_index(selected_bay_index, count.positive? ? count : 1)
+          bay_id = layout_preview_active_bay_identifier(params, index, state)
+          scope = layout_preview_scope_for(params)
+          host.set_active_bay(bay_id, scope: scope)
+        rescue StandardError => e
+          warn("AI Cabinets: Failed to synchronize preview selection: #{e.message}")
+        end
+        private_class_method :sync_layout_preview_selection
+
+        def layout_preview_active_bay_identifier(params, index, state)
+          bay_ids = state[:bay_ids]
+          if bay_ids[index]
+            return bay_ids[index]
+          end
+
+          bays = fetch_bays_array(params)
+          bay = bays[index]
+          layout_preview_normalize_identifier(layout_preview_identifier_for(bay, index)) || (index + 1).to_s
+        end
+        private_class_method :layout_preview_active_bay_identifier
+
+        def layout_preview_scope_for(params)
+          scope_value =
+            if params.is_a?(Hash)
+              params[:scope] || params['scope']
+            end
+
+          if scope_value.to_s.strip.downcase == 'all'
+            return 'all'
+          end
+
+          bays = fetch_bays_array(params)
+          bays.length > 1 ? 'single' : 'all'
+        rescue StandardError
+          'all'
+        end
+        private_class_method :layout_preview_scope_for
+
+        def handle_layout_preview_select(_dialog, bay_identifier, host)
+          params = ensure_dialog_params
+          state = layout_preview_state
+
+          index = layout_preview_index_for_identifier(state, params, bay_identifier)
+          return if index.nil?
+
+          set_selected_bay_index(index)
+          sync_layout_preview_selection(host, state, params)
+
+          active_id = layout_preview_active_bay_identifier(params, index, state)
+          host.select_form_bay(index, bay_id: active_id, focus: true, emit: false)
+        end
+        private_class_method :handle_layout_preview_select
+
+        def layout_preview_index_for_identifier(state, params, identifier)
+          normalized = layout_preview_normalize_identifier(identifier)
+          return nil if normalized.nil?
+
+          ids = state[:bay_ids]
+          if ids.include?(normalized)
+            return ids.index(normalized)
+          end
+
+          bays = fetch_bays_array(params)
+          bays.each_with_index do |bay, index|
+            candidate = layout_preview_normalize_identifier(layout_preview_identifier_for(bay, index))
+            return index if candidate == normalized
+          end
+
+          if normalized.match?(/^-?\d+$/)
+            numeric = normalized.to_i - 1
+            return numeric if numeric >= 0 && numeric < bays.length
+          end
+
+          nil
+        end
+        private_class_method :layout_preview_index_for_identifier
+
+        def layout_preview_identifier_for(bay, index)
+          return index + 1 unless bay.is_a?(Hash)
+
+          bay[:id] || bay['id'] || (index + 1)
+        end
+        private_class_method :layout_preview_identifier_for
+
+        def layout_preview_normalize_identifier(value)
+          return nil if value.nil?
+
+          text = value.to_s.strip
+          text.empty? ? nil : text
+        end
+        private_class_method :layout_preview_normalize_identifier
 
         def set_dialog_context(mode:, prefill: nil, selection: nil)
           dialog_context[:mode] = mode
@@ -495,10 +713,11 @@ module AICabinets
 
         def handle_ui_init_ready(dialog)
           deliver_bay_state(dialog)
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_init_ready
 
-        def handle_ui_select_bay(payload)
+        def handle_ui_select_bay(dialog, payload)
           data = parse_payload(payload)
           index = extract_index(data)
           return unless index
@@ -507,6 +726,7 @@ module AICabinets
           bays = fetch_bays_array(params)
           clamped = AICabinets::UiVisibility.clamp_selected_index(index, bays.length)
           set_selected_bay_index(clamped)
+          sync_layout_preview(dialog, update_model: false, update_selection: true)
         end
         private_class_method :handle_ui_select_bay
 
@@ -537,6 +757,7 @@ module AICabinets
 
           updated_params = ensure_dialog_params
           deliver_state_bays_changed(dialog, updated_params)
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_set_partition_mode
 
@@ -556,6 +777,7 @@ module AICabinets
 
           updated_params = ensure_dialog_params
           deliver_state_bays_changed(dialog, updated_params)
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_set_partitions_count
 
@@ -593,6 +815,7 @@ module AICabinets
           set_selected_bay_index(clamped)
 
           deliver_state_bays_changed(dialog, updated_params)
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_partitions_changed
 
@@ -617,6 +840,7 @@ module AICabinets
 
           updated_params = ensure_dialog_params
           deliver_state_bays_changed(dialog, updated_params)
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_set_partitions_layout
 
@@ -649,6 +873,7 @@ module AICabinets
             allowed, reason, metadata = evaluate_double_validity(updated_params, index)
             deliver_double_validity(dialog, index, allowed, reason, metadata)
           end
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_set_shelf_count
 
@@ -689,6 +914,7 @@ module AICabinets
             allowed, reason, metadata = evaluate_double_validity(updated_params, index)
             deliver_double_validity(dialog, index, allowed, reason, metadata)
           end
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_set_door_mode
 
@@ -719,6 +945,7 @@ module AICabinets
             allowed, reason, metadata = evaluate_double_validity(updated_params, index)
             deliver_double_validity(dialog, index, allowed, reason, metadata)
           end
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_set_bay_mode
 
@@ -746,6 +973,7 @@ module AICabinets
           updated_params = ensure_dialog_params
           updated_bays = fetch_bays_array(updated_params)
           deliver_state_update_bay(dialog, index, updated_bays[index])
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_set_subpartition_count
 
@@ -804,6 +1032,7 @@ module AICabinets
             message = format(template, count: skipped)
             deliver_toast(dialog, message)
           end
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_apply_to_all
 
@@ -864,6 +1093,7 @@ module AICabinets
             message = format(template, count: skipped)
             deliver_toast(dialog, message)
           end
+          sync_layout_preview(dialog)
         end
         private_class_method :handle_ui_copy_left_to_right
 
@@ -956,7 +1186,7 @@ module AICabinets
           end
 
           dialog.add_action_callback('ui_select_bay') do |_context, payload|
-            handle_ui_select_bay(payload)
+            handle_ui_select_bay(dialog, payload)
           end
 
           dialog.add_action_callback('ui_set_shelf_count') do |_context, payload|
@@ -1012,6 +1242,14 @@ module AICabinets
           end
         end
         private_class_method :attach_callbacks
+
+        def layout_preview_test_host
+          return nil unless test_mode?
+
+          state = dialog_state
+          host = state[:layout_preview] && state[:layout_preview][:host]
+          host if host.is_a?(AICabinets::UI::LayoutPreview::DialogHost)
+        end
 
         def deliver_units_bootstrap(dialog)
           payload = JSON.generate(current_unit_settings)
@@ -1080,6 +1318,7 @@ module AICabinets
           dialog.execute_script(script)
           store_dialog_params(defaults)
           deliver_bay_state(dialog)
+          sync_layout_preview(dialog)
         end
         private_class_method :deliver_insert_defaults
 
@@ -1103,6 +1342,7 @@ module AICabinets
           dialog.execute_script(script)
           store_dialog_params(prefill)
           deliver_bay_state(dialog)
+          sync_layout_preview(dialog)
         end
         private_class_method :deliver_edit_prefill
 
