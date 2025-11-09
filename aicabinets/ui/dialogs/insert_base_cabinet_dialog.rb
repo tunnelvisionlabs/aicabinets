@@ -1258,6 +1258,12 @@ module AICabinets
           dialog.add_action_callback('__aicabinets_test_boot') do |_context, phase|
             handle_test_boot_event(dialog, phase)
           end
+
+          # Ensure the selection bridge registers the HtmlDialog callback before
+          # the preview pane attempts to invoke it. This guarantees
+          # `window.sketchup.requestSelectBay` is available for iframe bridges
+          # and postMessage relays as soon as the dialog boots.
+          ensure_layout_preview_host(dialog)
         end
         private_class_method :attach_callbacks
 
