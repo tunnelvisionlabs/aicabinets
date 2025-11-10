@@ -128,11 +128,12 @@ module AICabinets
         end
 
         def enable_test_mode!
+          reset_state!
           state[:test_mode] = true
         end
 
         def disable_test_mode!
-          state[:test_mode] = false
+          reset_state!
         end
 
         def test_mode?
@@ -397,6 +398,11 @@ module AICabinets
       @state ||= {}
     end
     private_class_method :state
+
+    def reset_state!
+      @state = {}
+    end
+    private_class_method :reset_state!
 
     def update_highlight_ui(enabled)
       dialog = current_dialog
