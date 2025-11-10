@@ -503,15 +503,17 @@ module AICabinets
     def length_to_mm(value)
       return unless value
 
-      if value.respond_to?(:to_mm)
+      converted = if defined?(Sketchup::Length) && value.is_a?(Sketchup::Length)
+                    value.to_mm.to_f
+                  elsif value.is_a?(Numeric)
+                    value.to_f
+                  end
+
+      if !converted && value.respond_to?(:to_mm)
         converted = value.to_mm.to_f
-      elsif value.is_a?(Numeric)
-        converted = value.to_f
-      else
-        return
       end
 
-      return unless converted.finite?
+      return unless converted&.finite?
 
       converted
     end
