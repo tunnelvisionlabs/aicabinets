@@ -1,0 +1,19 @@
+{
+  "outer": { "w_mm": 762, "h_mm": 762 },
+  "bays": [
+    { "id": "bay-left", "role": "bay", "x_mm": 0, "y_mm": 0, "w_mm": 254, "h_mm": 762 },
+    { "id": "bay-center", "role": "bay", "x_mm": 254, "y_mm": 0, "w_mm": 254, "h_mm": 762 },
+    { "id": "bay-right", "role": "bay", "x_mm": 508, "y_mm": 0, "w_mm": 254, "h_mm": 762 }
+  ],
+  "partitions": { "orientation": "vertical", "positions_mm": [254, 508] },
+  "shelves": [
+    { "bay_id": "bay-left", "y_mm": 254 },
+    { "bay_id": "bay-left", "y_mm": 508 },
+    { "bay_id": "bay-right", "y_mm": 381 }
+  ],
+  "fronts": [
+    { "id": "front-left", "role": "door", "style": "doors_left", "x_mm": 0, "y_mm": 0, "w_mm": 254, "h_mm": 762 },
+    { "id": "front-center", "role": "drawer_group", "x_mm": 254, "y_mm": 0, "w_mm": 254, "h_mm": 762 },
+    { "id": "front-right", "role": "door", "style": "doors_right", "x_mm": 508, "y_mm": 0, "w_mm": 254, "h_mm": 762 }
+  ]
+}

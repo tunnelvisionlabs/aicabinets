@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en" data-dialog-id="layout-preview-integration">
+  <head>
+    <meta charset="utf-8" />
+    <title>Layout Preview Integration Harness</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="renderer.css" />
+    <script src="../../ui/dialogs/console_bridge.js"></script>
+    <script src="renderer.js"></script>
+    <script src="a11y.js"></script>
+  </head>
+  <body>
+    <main class="lp-harness">
+      <div id="layout-preview-host" class="lp-host" aria-label="Layout preview integration host"></div>
+    </main>
+    <script>
+      (function () {
+        'use strict';
+
+        var host = document.getElementById('layout-preview-host');
+        if (!host) {
+          return;
+        }
+
+        var controller = null;
+
+        function logError(message, error) {
+          if (window.console && typeof window.console.error === 'function') {
+            window.console.error(message, error);
+          }
+        }
+
+        function logWarning(message, error) {
+          if (window.console && typeof window.console.warn === 'function') {
+            window.console.warn(message, error);
+          }
+        }
+
+        function destroyController() {
+          if (controller && typeof controller.destroy === 'function') {
+            try {
+              controller.destroy();
+            } catch (error) {
+              logWarning('LayoutPreview.destroy failed:', error);
+            }
+          }
+          controller = null;
+        }
+
+        function renderLayout(model) {
+          if (!window.LayoutPreview || typeof window.LayoutPreview.render !== 'function') {
+            return false;
+          }
+
+          destroyController();
+          try {
+            controller = window.LayoutPreview.render(host, model || {});
+          } catch (error) {
+            logError('LayoutPreview.render failed:', error);
+            controller = null;
+            return false;
+          }
+          return !!controller;
+        }
+
+        function setActiveBay(bayId, options) {
+          if (!controller || typeof controller.setActiveBay !== 'function') {
+            return false;
+          }
+          try {
+            return controller.setActiveBay(bayId, options || {});
+          } catch (error) {
+            logError('LayoutPreview.setActiveBay failed:', error);
+            return false;
+          }
+        }
+
+        window.AICabinetsLayoutPreview = {
+          renderLayout: renderLayout,
+          setActiveBay: setActiveBay,
+          reset: destroyController
+        };
+
+        window.LayoutPreview.onRequestSelectBay = function (bayId, details) {
+          if (window.sketchup && typeof window.sketchup.requestSelectBay === 'function') {
+            try {
+              window.sketchup.requestSelectBay(bayId, details || null);
+            } catch (error) {
+              logError('requestSelectBay bridge failed:', error);
+            }
+          }
+        };
+
+        function notifyReady() {
+          if (window.sketchup && typeof window.sketchup.layout_preview_integration_ready === 'function') {
+            window.sketchup.layout_preview_integration_ready('ready');
+          }
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', notifyReady);
+        } else {
+          notifyReady();
+        }
+      })();
+    </script>
+  </body>
+</html>
