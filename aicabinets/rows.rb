@@ -67,7 +67,7 @@ module AICabinets
         ensure_instance_membership(instance, row_id, index + 1)
       end
 
-      state_changed ||= cleanup_orphaned_instance_memberships(model, state)
+      state_changed ||= cleanup_orphaned_instance_memberships(model, state['rows'])
       state_changed ||= sanitize_rows!(state)
 
       write_state(model, state) if state_changed || row_added
