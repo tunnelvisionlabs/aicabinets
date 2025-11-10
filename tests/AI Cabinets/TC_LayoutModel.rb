@@ -210,6 +210,60 @@ class TC_LayoutModel < TestUp::TestCase
     AICabinetsTestHelper.assert_within_tolerance(self, 720.0, front[:h_mm], 1.0e-6)
   end
 
+  def test_global_front_style_uses_front_field_when_no_partitions
+    params = base_params.merge(
+      width_mm: 860.0,
+      height_mm: 720.0,
+      front: 'doors_left',
+      shelves: '3',
+      partitions: {
+        mode: 'none',
+        count: 0,
+        orientation: 'vertical',
+        bays: []
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    assert_empty(result[:bays], 'Expected cabinet to render as a single opening when partitions are none.')
+
+    fronts = result[:fronts]
+    assert_equal(1, fronts.length, 'Expected cabinet-level door front to be emitted from the front field.')
+    front = fronts.first
+    assert_equal('doors_left', front[:style])
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:x_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:y_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 860.0, front[:w_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 720.0, front[:h_mm], 1.0e-6)
+
+    shelves = result[:shelves]
+    assert_equal(3, shelves.length, 'Expected shelves to respect the global shelves field when partitions are none.')
+    assert_equal(['cabinet'], shelves.map { |entry| entry[:bay_id] }.uniq)
+    expected_positions = [180.0, 360.0, 540.0]
+    assert_equal(expected_positions, shelves.map { |entry| entry[:y_mm] })
+  end
+
+  def test_global_front_style_ignores_empty_front_value
+    params = base_params.merge(
+      width_mm: 860.0,
+      height_mm: 720.0,
+      front: 'empty',
+      shelves: 0,
+      partitions: {
+        mode: 'none',
+        count: 0,
+        orientation: 'vertical',
+        bays: []
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    assert_empty(result[:fronts], 'Expected no door fronts when the front field requests an empty layout.')
+    assert_empty(result[:shelves], 'Expected shelves to remain empty when no global count is provided.')
+  end
+
   def test_degenerate_zero_bays
     params = base_params.merge(
       width_mm: 600.0,

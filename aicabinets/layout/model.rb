@@ -314,6 +314,13 @@ module AICabinets
           return normalize_count(params['shelf_count'])
         end
 
+        if params.key?(:shelves)
+          return normalize_count(params[:shelves])
+        end
+        if params.key?('shelves')
+          return normalize_count(params['shelves'])
+        end
+
         state = hash_or_nil(params[:fronts_shelves_state]) || hash_or_nil(params['fronts_shelves_state'])
         return 0 unless state.is_a?(Hash)
 
@@ -429,6 +436,10 @@ module AICabinets
         door_mode = state && (state[:door_mode] || state['door_mode'])
         if door_mode.nil? && params.is_a?(Hash)
           door_mode = params[:door_mode] || params['door_mode']
+        end
+        if door_mode.nil? && params.is_a?(Hash)
+          door_mode =
+            params[:front] || params['front'] || params[:front_layout] || params['front_layout']
         end
         normalized = door_mode.to_s.strip
         return nil if normalized.empty?
