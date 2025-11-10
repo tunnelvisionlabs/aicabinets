@@ -11,6 +11,32 @@
     }
   }
 
+  function ensurePreviewMessageBridge() {
+    if (window.__AICABINETS_PREVIEW_MESSAGE_HANDLER__) {
+      return;
+    }
+
+    var handler = function handlePreviewMessage(event) {
+      if (!event) {
+        return;
+      }
+
+      var data = event.data;
+      if (!data || typeof data !== 'object') {
+        return;
+      }
+
+      if (data.type === 'aicabinets/requestSelectBay') {
+        invokeSketchUp('requestSelectBay', data.bayId);
+      }
+    };
+
+    window.__AICABINETS_PREVIEW_MESSAGE_HANDLER__ = handler;
+    window.addEventListener('message', handler);
+  }
+
+  ensurePreviewMessageBridge();
+
   function requestSketchUpFocus() {
     if (typeof window.blur !== 'function') {
       return;
@@ -104,6 +130,298 @@
   var pendingBayState = null;
   var pendingBayValidity = [];
   var pendingToasts = [];
+
+  var layoutPreviewManager = (function () {
+    var state = {
+      enabled: false,
+      pane: null,
+      container: null,
+      loadPromise: null,
+      readyPromise: null,
+      hostHandle: null
+    };
+
+    function enable(options) {
+      ensureReady(options);
+      return true;
+    }
+
+    function update(model) {
+      var payload = parseModelPayload(model);
+      if (!payload) {
+        return false;
+      }
+      withHost(function (host) {
+        if (host && typeof host.update === 'function') {
+          host.update(payload);
+        }
+      });
+      return true;
+    }
+
+    function setActiveBay(bayId, opts) {
+      withHost(function (host) {
+        if (host && typeof host.setActiveBay === 'function') {
+          host.setActiveBay(bayId, opts || {});
+        }
+      });
+      return true;
+    }
+
+    function selectBay(selection) {
+      var data = parseSelectionPayload(selection);
+      if (!data) {
+        return false;
+      }
+      whenReady(function (formController) {
+        applySelectionToForm(formController, data);
+        return true;
+      }).catch(function (error) {
+        logPreviewError('selectBay', error);
+      });
+      return true;
+    }
+
+    function destroy() {
+      state.enabled = false;
+      if (state.hostHandle && typeof state.hostHandle.destroy === 'function') {
+        try {
+          state.hostHandle.destroy();
+        } catch (error) {
+          logPreviewError('destroy', error);
+        }
+      }
+      state.hostHandle = null;
+      state.readyPromise = null;
+      state.loadPromise = null;
+      state.container = null;
+      if (state.pane) {
+        state.pane.hidden = true;
+      }
+      document.body.classList.remove('has-layout-preview');
+      return true;
+    }
+
+    function isReady() {
+      return !!state.hostHandle;
+    }
+
+    function ensureReady(options) {
+      state.enabled = true;
+      ensurePane();
+      if (!state.readyPromise) {
+        state.readyPromise = loadAssets()
+          .then(function () {
+            ensurePane();
+            var host = mountHost(options);
+            if (!host) {
+              throw new Error('LayoutPreviewHost unavailable');
+            }
+            state.hostHandle = host;
+            return host;
+          })
+          .catch(function (error) {
+            logPreviewError('enable', error);
+            state.readyPromise = null;
+            throw error;
+          });
+      }
+      return state.readyPromise;
+    }
+
+    function withHost(callback, options) {
+      ensureReady(options)
+        .then(function (host) {
+          if (!host || typeof callback !== 'function') {
+            return;
+          }
+          try {
+            callback(host);
+          } catch (error) {
+            logPreviewError('callback', error);
+          }
+        })
+        .catch(function (error) {
+          logPreviewError('withHost', error);
+        });
+    }
+
+    function ensurePane() {
+      if (!state.pane) {
+        state.pane = document.querySelector('[data-role="layout-preview-pane"]');
+      }
+      if (state.pane && state.pane.hidden) {
+        state.pane.hidden = false;
+      }
+      if (!state.container) {
+        if (state.pane) {
+          state.container = state.pane.querySelector('[data-role="layout-preview-container"]');
+        }
+        if (!state.container) {
+          state.container = document.querySelector('[data-role="layout-preview-container"]');
+        }
+      }
+      if (state.pane && state.container) {
+        document.body.classList.add('has-layout-preview');
+      }
+    }
+
+    var PREVIEW_ASSET_BASE = '../../html/layout_preview/';
+
+    function loadAssets() {
+      if (state.loadPromise) {
+        return state.loadPromise;
+      }
+      state.loadPromise = loadStylesheet(PREVIEW_ASSET_BASE + 'renderer.css')
+        .then(function () {
+          return loadScript(PREVIEW_ASSET_BASE + 'renderer.js');
+        })
+        .then(function () {
+          return loadScript(PREVIEW_ASSET_BASE + 'a11y.js');
+        })
+        .then(function () {
+          return loadScript(PREVIEW_ASSET_BASE + 'host.js');
+        })
+        .catch(function (error) {
+          state.loadPromise = null;
+          throw error;
+        });
+      return state.loadPromise;
+    }
+
+    function loadStylesheet(href) {
+      return new Promise(function (resolve, reject) {
+        var existing = document.querySelector('link[data-layout-preview-css="' + href + '"]');
+        if (existing) {
+          resolve(existing);
+          return;
+        }
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        link.dataset.layoutPreviewCss = href;
+        link.addEventListener('load', function () {
+          resolve(link);
+        });
+        link.addEventListener('error', function () {
+          reject(new Error('Failed to load stylesheet: ' + href));
+        });
+        document.head.appendChild(link);
+      });
+    }
+
+    function loadScript(src) {
+      return new Promise(function (resolve, reject) {
+        var existing = document.querySelector('script[data-layout-preview-script="' + src + '"]');
+        if (existing) {
+          resolve(existing);
+          return;
+        }
+        var script = document.createElement('script');
+        script.src = src;
+        script.async = false;
+        script.dataset.layoutPreviewScript = src;
+        script.addEventListener('load', function () {
+          resolve(script);
+        });
+        script.addEventListener('error', function () {
+          reject(new Error('Failed to load script: ' + src));
+        });
+        document.head.appendChild(script);
+      });
+    }
+
+    function mountHost(options) {
+      if (!state.container || !window.LayoutPreviewHost || typeof window.LayoutPreviewHost.mount !== 'function') {
+        return null;
+      }
+      try {
+        return window.LayoutPreviewHost.mount(state.container, options || {});
+      } catch (error) {
+        logPreviewError('mount', error);
+        return null;
+      }
+    }
+
+    function parseModelPayload(model) {
+      if (!model) {
+        return {};
+      }
+      if (typeof model === 'string') {
+        try {
+          return JSON.parse(model);
+        } catch (error) {
+          logPreviewError('parse-model', error);
+          return {};
+        }
+      }
+      if (typeof model === 'object') {
+        return model;
+      }
+      return {};
+    }
+
+    function parseSelectionPayload(payload) {
+      if (!payload) {
+        return null;
+      }
+      if (typeof payload === 'string') {
+        try {
+          return JSON.parse(payload);
+        } catch (error) {
+          return null;
+        }
+      }
+      if (typeof payload === 'object') {
+        return payload;
+      }
+      return null;
+    }
+
+    function applySelectionToForm(formController, data) {
+      if (!formController) {
+        return;
+      }
+      var partitions = (formController.values || {}).partitions || {};
+      var bays = Array.isArray(partitions.bays) ? partitions.bays : [];
+      var length = bays.length || 1;
+      var index = Number(data.index);
+      if (!Number.isFinite(index)) {
+        index = 0;
+      }
+      var clamped = clampSelectedIndex(index, length);
+      formController.selectedBayIndex = clamped;
+      formController.pendingSelectedBayIndex = clamped;
+      if (formController.bayController && typeof formController.bayController.setSelectedIndex === 'function') {
+        formController.bayController.setSelectedIndex(clamped, {
+          emit: data.emit === true,
+          focus: data.focus !== false,
+          announce: data.announce !== false,
+          requestValidity: data.requestValidity !== false
+        });
+      }
+    }
+
+    function logPreviewError(context, error) {
+      if (!error) {
+        return;
+      }
+      if (window.console && typeof window.console.warn === 'function') {
+        window.console.warn('Layout preview ' + context + ' failed:', error);
+      }
+    }
+
+    return {
+      enable: enable,
+      update: update,
+      setActiveBay: setActiveBay,
+      selectBay: selectBay,
+      destroy: destroy,
+      isReady: isReady
+    };
+  })();
+
+  namespace.layoutPreview = layoutPreviewManager;
 
   var BAY_MODES = ['fronts_shelves', 'subpartitions'];
 
@@ -890,6 +1208,41 @@
           var numeric = Math.max(0, Math.round(Number(value) || 0));
           var index = formController.selectedBayIndex != null ? formController.selectedBayIndex : 0;
           formController.handleBaySubpartitionChange(index, numeric);
+          return collectState();
+        });
+      },
+      setTopFront: function setTopFront(value) {
+        return whenReady(function (formController) {
+          var normalized = value == null ? '' : String(value);
+          if (formController.inputs.front) {
+            formController.inputs.front.value = normalized;
+          }
+          formController.values.front = normalized;
+          formController.notifyGlobalFrontChange(normalized);
+          formController.setFieldError('front', null, true);
+          return collectState();
+        });
+      },
+      setTopShelves: function setTopShelves(value) {
+        return whenReady(function (formController) {
+          var numeric = Number(value);
+          if (!Number.isFinite(numeric)) {
+            numeric = null;
+          } else {
+            numeric = Math.max(0, Math.round(numeric));
+          }
+
+          if (formController.inputs.shelves) {
+            if (numeric == null) {
+              formController.inputs.shelves.value = '';
+            } else {
+              formController.inputs.shelves.value = String(numeric);
+            }
+          }
+
+          formController.values.shelves = numeric;
+          formController.notifyGlobalShelvesChange(numeric);
+          formController.setFieldError('shelves', null, true);
           return collectState();
         });
       },
@@ -2658,6 +3011,8 @@
     this.pendingSelectedBayIndex = null;
     this.bayTemplate = cloneBay(null);
     this.lastAnnouncedBayCount = null;
+    this.lastSentGlobalFront = null;
+    this.lastSentGlobalShelves = null;
 
     this.initializeElements();
     this.bindEvents();
@@ -3185,6 +3540,33 @@
     invokeSketchUp('ui_set_partition_mode', JSON.stringify({ value: normalized }));
   };
 
+  FormController.prototype.notifyGlobalFrontChange = function notifyGlobalFrontChange(value) {
+    var normalized = value == null ? null : String(value).trim();
+    if (normalized === '') {
+      normalized = null;
+    }
+    if (this.lastSentGlobalFront === normalized) {
+      return;
+    }
+
+    this.lastSentGlobalFront = normalized;
+    invokeSketchUp('ui_set_global_front', JSON.stringify({ value: normalized }));
+  };
+
+  FormController.prototype.notifyGlobalShelvesChange = function notifyGlobalShelvesChange(value) {
+    var numeric = null;
+    if (value != null && isFinite(value)) {
+      numeric = Math.max(0, Math.round(Number(value) || 0));
+    }
+
+    if (this.lastSentGlobalShelves === numeric) {
+      return;
+    }
+
+    this.lastSentGlobalShelves = numeric;
+    invokeSketchUp('ui_set_global_shelves', JSON.stringify({ value: numeric }));
+  };
+
   FormController.prototype.notifyPartitionsLayoutChange = function notifyPartitionsLayoutChange(mode) {
     var normalized = this.normalizePartitionsLayout(mode);
     if (this.lastSentPartitionsLayout === normalized) {
@@ -3447,6 +3829,7 @@
         self.touched.front = true;
         self.setFieldError('front', null, true);
         event.target.removeAttribute('data-invalid');
+        self.notifyGlobalFrontChange(self.values.front);
       });
     }
 
@@ -3982,6 +4365,9 @@
       this.applyIntegerValue(name, result.value);
       this.setFieldError(name, null, false);
       input.removeAttribute('data-invalid');
+      if (name === 'shelves') {
+        this.notifyGlobalShelvesChange(result.value);
+      }
     } else {
       this.applyIntegerValue(name, null);
       if (this.touched[name]) {
@@ -4012,6 +4398,10 @@
     }
 
     this.updateInsertButtonState();
+
+    if (name === 'shelves' && result.ok) {
+      this.notifyGlobalShelvesChange(result.value);
+    }
   };
 
   FormController.prototype.applyIntegerValue = function applyIntegerValue(name, value) {

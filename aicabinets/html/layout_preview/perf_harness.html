@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" data-dialog-id="layout-preview-perf">
+  <head>
+    <meta charset="utf-8" />
+    <title>Layout Preview Performance Harness</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="renderer.css" />
+    <link rel="stylesheet" href="perf_harness.css" />
+    <script src="../../ui/dialogs/console_bridge.js"></script>
+    <script src="renderer.js"></script>
+    <script src="a11y.js"></script>
+    <script src="controller.js"></script>
+    <script src="perf_harness.js" defer></script>
+  </head>
+  <body>
+    <main class="lp-perf" aria-label="Layout preview performance harness">
+      <header class="lp-perf-header">
+        <div class="lp-perf-controls" role="group" aria-label="Stress run controls">
+          <label class="lp-perf-control">
+            Fixture
+            <select data-role="fixture-select">
+              <option value="stress12">12-bay stress</option>
+              <option value="stress20">20-bay stress</option>
+            </select>
+          </label>
+          <label class="lp-perf-control">
+            Iterations
+            <input type="number" data-role="iteration-count" min="30" max="600" step="10" value="300" />
+          </label>
+          <label class="lp-perf-control">
+            Interval (ms)
+            <input type="number" data-role="interval-ms" min="0" max="60" step="1" value="16" />
+          </label>
+          <button type="button" data-role="start-run" class="lp-perf-button">Start Stress</button>
+          <button type="button" data-role="stop-run" class="lp-perf-button" disabled>Stop</button>
+          <button type="button" data-role="reset-metrics" class="lp-perf-button">Reset Metrics</button>
+        </div>
+        <p class="lp-perf-status" data-role="status-text">Idle — choose a fixture and press Start Stress.</p>
+      </header>
+      <section class="lp-perf-stage" aria-live="polite">
+        <div data-role="layout-preview-host" class="lp-host"></div>
+      </section>
+      <section class="lp-perf-metrics" aria-label="Timing metrics">
+        <article class="lp-metric-card">
+          <h2>Update timings</h2>
+          <dl>
+            <div>
+              <dt>Median update</dt>
+              <dd data-role="metric-update-median">—</dd>
+            </div>
+            <div>
+              <dt>95th percentile</dt>
+              <dd data-role="metric-update-p95">—</dd>
+            </div>
+            <div>
+              <dt>Samples</dt>
+              <dd data-role="metric-update-samples">0</dd>
+            </div>
+          </dl>
+        </article>
+        <article class="lp-metric-card">
+          <h2>Frame timings</h2>
+          <dl>
+            <div>
+              <dt>Median frame</dt>
+              <dd data-role="metric-frame-median">—</dd>
+            </div>
+            <div>
+              <dt>95th percentile</dt>
+              <dd data-role="metric-frame-p95">—</dd>
+            </div>
+            <div>
+              <dt>Samples</dt>
+              <dd data-role="metric-frame-samples">0</dd>
+            </div>
+          </dl>
+        </article>
+        <article class="lp-metric-card">
+          <h2>DOM + Memory</h2>
+          <dl>
+            <div>
+              <dt>SVG nodes</dt>
+              <dd data-role="metric-node-count">—</dd>
+            </div>
+            <div>
+              <dt>Node drift</dt>
+              <dd data-role="metric-node-drift">—</dd>
+            </div>
+            <div>
+              <dt>Heap drift</dt>
+              <dd data-role="metric-memory-drift">n/a</dd>
+            </div>
+          </dl>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

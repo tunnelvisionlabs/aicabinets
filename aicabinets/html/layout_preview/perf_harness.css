@@ -1,0 +1,157 @@
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f7f9fc;
+  color: #12263a;
+}
+
+.lp-perf {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  padding: 1.2rem;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.lp-perf-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.lp-perf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem 1rem;
+}
+
+.lp-perf-control {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  color: #1c3553;
+}
+
+.lp-perf-control input,
+.lp-perf-control select {
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.95rem;
+  border: 1px solid rgba(18, 38, 58, 0.2);
+  border-radius: 4px;
+  min-width: 5rem;
+  background: #fff;
+  color: inherit;
+}
+
+.lp-perf-button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  border: 1px solid rgba(18, 38, 58, 0.25);
+  background: #ffffff;
+  color: #10243e;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.lp-perf-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lp-perf-button:not(:disabled):hover,
+.lp-perf-button:not(:disabled):focus {
+  background: #10243e;
+  color: #ffffff;
+}
+
+.lp-perf-status {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(18, 38, 58, 0.9);
+}
+
+.lp-perf-stage {
+  flex: 1;
+  min-height: 320px;
+  padding: 1rem;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(18, 38, 58, 0.08);
+  display: flex;
+}
+
+.lp-perf-stage .lp-host {
+  flex: 1;
+  background: linear-gradient(135deg, rgba(16, 36, 62, 0.05), rgba(16, 36, 62, 0.03));
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+.lp-perf-metrics {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.lp-metric-card {
+  padding: 0.9rem;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(18, 38, 58, 0.08);
+}
+
+.lp-metric-card h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  color: #10243e;
+}
+
+.lp-metric-card dl {
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.lp-metric-card dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(16, 36, 62, 0.6);
+}
+
+.lp-metric-card dd {
+  margin: 0.1rem 0 0;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  color: #0c1a2f;
+}
+
+@media (max-width: 480px) {
+  .lp-perf {
+    padding: 0.8rem;
+  }
+
+  .lp-perf-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lp-perf-control {
+    width: 100%;
+  }
+
+  .lp-perf-button {
+    width: 100%;
+  }
+}
