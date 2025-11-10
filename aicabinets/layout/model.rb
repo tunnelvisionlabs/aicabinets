@@ -307,28 +307,29 @@ module AICabinets
       def extract_global_shelf_count(params)
         return 0 unless params.is_a?(Hash)
 
-        if params.key?(:shelf_count)
-          return normalize_count(params[:shelf_count])
-        end
-        if params.key?('shelf_count')
-          return normalize_count(params['shelf_count'])
-        end
+        direct_candidates = [
+          params[:shelf_count],
+          params['shelf_count'],
+          params[:shelves],
+          params['shelves']
+        ]
 
-        if params.key?(:shelves)
-          return normalize_count(params[:shelves])
-        end
-        if params.key?('shelves')
-          return normalize_count(params['shelves'])
+        direct_candidates.each do |candidate|
+          next if candidate.nil?
+
+          normalized = normalize_count(candidate)
+          return normalized
         end
 
         state = hash_or_nil(params[:fronts_shelves_state]) || hash_or_nil(params['fronts_shelves_state'])
         return 0 unless state.is_a?(Hash)
 
-        if state.key?(:shelf_count)
-          return normalize_count(state[:shelf_count])
-        end
-        if state.key?('shelf_count')
-          return normalize_count(state['shelf_count'])
+        state_candidates = [state[:shelf_count], state['shelf_count']]
+        state_candidates.each do |candidate|
+          next if candidate.nil?
+
+          normalized = normalize_count(candidate)
+          return normalized
         end
 
         0
@@ -428,19 +429,27 @@ module AICabinets
       private_class_method :extract_door_style
 
       def extract_global_door_style(params)
-        state =
-          if params.is_a?(Hash)
-            hash_or_nil(params[:fronts_shelves_state]) || hash_or_nil(params['fronts_shelves_state'])
-          end
+        door_mode = nil
+        if params.is_a?(Hash)
+          direct_candidates = [
+            params[:front],
+            params['front'],
+            params[:front_layout],
+            params['front_layout'],
+            params[:door_mode],
+            params['door_mode']
+          ]
 
-        door_mode = state && (state[:door_mode] || state['door_mode'])
-        if door_mode.nil? && params.is_a?(Hash)
-          door_mode = params[:door_mode] || params['door_mode']
+          door_mode = direct_candidates.compact.find { |value| !value.to_s.strip.empty? }
+
+          if door_mode.nil?
+            state = hash_or_nil(params[:fronts_shelves_state]) || hash_or_nil(params['fronts_shelves_state'])
+            if state.is_a?(Hash)
+              door_mode = state[:door_mode] || state['door_mode']
+            end
+          end
         end
-        if door_mode.nil? && params.is_a?(Hash)
-          door_mode =
-            params[:front] || params['front'] || params[:front_layout] || params['front_layout']
-        end
+
         normalized = door_mode.to_s.strip
         return nil if normalized.empty?
 

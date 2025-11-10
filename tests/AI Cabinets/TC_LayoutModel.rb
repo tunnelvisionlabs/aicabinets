@@ -323,6 +323,32 @@ class TC_LayoutModel < TestUp::TestCase
     assert_equal(expected_positions, shelves.map { |entry| entry[:y_mm] })
   end
 
+  def test_global_front_style_prefers_top_level_fields
+    params = base_params.merge(
+      width_mm: 900.0,
+      height_mm: 720.0,
+      front_layout: 'doors_right',
+      shelf_count: 1,
+      fronts_shelves_state: { door_mode: 'doors_double', shelf_count: 3 },
+      partitions: {
+        mode: 'none',
+        count: 0,
+        orientation: 'vertical',
+        bays: []
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    fronts = result[:fronts]
+    assert_equal(1, fronts.length, 'Expected a single cabinet-wide front when partitions are disabled.')
+    assert_equal('doors_right', fronts.first[:style], 'Expected top-level front layout to override legacy nested state.')
+
+    shelves = result[:shelves]
+    assert_equal(1, shelves.length, 'Expected top-level shelf count to override nested shelf count when partitions are none.')
+    assert_equal(['cabinet'], shelves.map { |entry| entry[:bay_id] }.uniq)
+  end
+
   def test_partition_mode_prefers_top_level_none
     params = base_params.merge(
       width_mm: 840.0,
