@@ -3,12 +3,22 @@
 require 'json'
 require 'securerandom'
 require 'time'
+require 'sketchup.rb'
 
 module AICabinets
   module Rows
     Result = Struct.new(:ok, :code, :message, keyword_init: true) do
       def ok?
         ok
+      end
+    end
+
+    class RowError < StandardError
+      attr_reader :code
+
+      def initialize(code, message)
+        super(message)
+        @code = code
       end
     end
 
@@ -23,6 +33,8 @@ module AICabinets
     DEFAULT_ROW_REVEAL_MM = 2.0
     COLLINEAR_TOLERANCE_MM = 0.5
     OPERATION_NAME = 'AI Cabinets — Create Row'.freeze
+    MANAGE_OPERATION_NAME = 'AI Cabinets — Manage Row'.freeze
+    ROW_HIGHLIGHT_OVERLAY_ID = 'AICabinets.Rows.Highlight'.freeze
 
     def create_from_selection(model:, reveal_mm: nil, lock_total_length: false)
       model = validate_model(model)
@@ -81,12 +93,230 @@ module AICabinets
       raise
     end
 
+    def list_summary(model)
+      model = validate_model(model)
+
+      state, changed = prepare_state(model)
+      write_state(model, state) if changed
+
+      state['rows'].values.map { |row| build_row_summary(row) }
+    end
+
+    def get_row(model:, row_id:)
+      model = validate_model(model)
+      row_id = validate_row_id(row_id)
+
+      state, changed = prepare_state(model)
+      row = state['rows'][row_id]
+      raise RowError.new(:unknown_row, 'Row not found.') unless row
+
+      detail = build_row_detail(model, row)
+      write_state(model, state) if changed
+
+      detail
+    end
+
+    def add_members(model:, row_id:, member_pids:)
+      model = validate_model(model)
+      row_id = validate_row_id(row_id)
+      pids = normalize_pids(member_pids)
+      raise RowError.new(:invalid_members, 'Specify at least one cabinet to add.') if pids.empty?
+
+      state, = prepare_state(model)
+      row = state['rows'][row_id]
+      raise RowError.new(:unknown_row, 'Row not found.') unless row
+
+      instances = resolve_member_instances(model, pids)
+      if instances.length != pids.length
+        raise RowError.new(:invalid_members, 'Some cabinets are missing or invalid.')
+      end
+
+      validate_instances_for_row!(instances, current_row_id: row_id)
+
+      operation_open = false
+      model.start_operation(MANAGE_OPERATION_NAME, true)
+      operation_open = true
+
+      existing_instances = resolve_member_instances(model, row['member_pids'])
+      updated_instances = merge_instances(existing_instances, instances)
+
+      if updated_instances.empty?
+        model.abort_operation
+        operation_open = false
+        raise RowError.new(:invalid_members, 'Unable to determine row membership after update.')
+      end
+
+      apply_row_membership!(model, row, updated_instances, state['rows'])
+
+      write_state(model, state)
+      update_highlight_if_active(model, row)
+      trigger_regeneration(model, row)
+
+      model.commit_operation
+      operation_open = false
+
+      build_row_detail(model, row)
+    rescue StandardError
+      model.abort_operation if operation_open
+      raise
+    end
+
+    def remove_members(model:, row_id:, member_pids:)
+      model = validate_model(model)
+      row_id = validate_row_id(row_id)
+      pids = normalize_pids(member_pids)
+      raise RowError.new(:invalid_members, 'Specify at least one cabinet to remove.') if pids.empty?
+
+      state, = prepare_state(model)
+      row = state['rows'][row_id]
+      raise RowError.new(:unknown_row, 'Row not found.') unless row
+
+      original_instances = resolve_member_instances(model, row['member_pids'])
+      updated_instances = original_instances.reject { |instance| pids.include?(instance.persistent_id.to_i) }
+
+      operation_open = false
+      model.start_operation(MANAGE_OPERATION_NAME, true)
+      operation_open = true
+
+      removed = original_instances.length - updated_instances.length
+      if removed.zero?
+        model.abort_operation
+        operation_open = false
+        raise RowError.new(:invalid_members, 'Selected cabinets are not part of the row.')
+      end
+
+      apply_row_membership!(model, row, updated_instances, state['rows'])
+
+      write_state(model, state)
+      update_highlight_if_active(model, row)
+      trigger_regeneration(model, row)
+
+      model.commit_operation
+      operation_open = false
+
+      build_row_detail(model, row)
+    rescue StandardError
+      model.abort_operation if operation_open
+      raise
+    end
+
+    def reorder(model:, row_id:, order:)
+      model = validate_model(model)
+      row_id = validate_row_id(row_id)
+      order_pids = normalize_pids(order)
+      raise RowError.new(:invalid_order, 'Specify the desired cabinet order.') if order_pids.empty?
+
+      state, = prepare_state(model)
+      row = state['rows'][row_id]
+      raise RowError.new(:unknown_row, 'Row not found.') unless row
+
+      current_instances = resolve_member_instances(model, row['member_pids'])
+      if current_instances.length != order_pids.length
+        raise RowError.new(:invalid_order, 'Order must reference all cabinets in the row.')
+      end
+
+      order_lookup = order_pids.each_with_index.to_h
+      unless current_instances.all? { |instance| order_lookup.key?(instance.persistent_id.to_i) }
+        raise RowError.new(:invalid_order, 'Order contains an unknown cabinet.')
+      end
+
+      reordered = current_instances.sort_by { |instance| order_lookup.fetch(instance.persistent_id.to_i) }
+
+      operation_open = false
+      model.start_operation(MANAGE_OPERATION_NAME, true)
+      operation_open = true
+
+      apply_row_membership!(model, row, reordered, state['rows'])
+
+      write_state(model, state)
+      update_highlight_if_active(model, row)
+      trigger_regeneration(model, row)
+
+      model.commit_operation
+      operation_open = false
+
+      build_row_detail(model, row)
+    rescue StandardError
+      model.abort_operation if operation_open
+      raise
+    end
+
+    def update(model:, row_id:, row_reveal_mm: nil, lock_total_length: nil)
+      model = validate_model(model)
+      row_id = validate_row_id(row_id)
+
+      state, = prepare_state(model)
+      row = state['rows'][row_id]
+      raise RowError.new(:unknown_row, 'Row not found.') unless row
+
+      attributes_changed = false
+
+      if !row_reveal_mm.nil?
+        reveal_value = coerce_row_reveal_mm(row_reveal_mm)
+        unless reveal_value
+          raise RowError.new(:invalid_reveal, 'Reveal must be expressed in millimeters.')
+        end
+
+        current_reveal = (row['row_reveal_mm'] || 0.0).to_f
+        if (current_reveal - reveal_value).abs > Float::EPSILON
+          row['row_reveal_mm'] = reveal_value
+          attributes_changed = true
+        end
+      end
+
+      unless lock_total_length.nil?
+        lock_value = !!lock_total_length
+        if row['lock_total_length'] != lock_value
+          row['lock_total_length'] = lock_value
+          attributes_changed = true
+        end
+      end
+
+      return build_row_detail(model, row) unless attributes_changed
+
+      operation_open = false
+      model.start_operation(MANAGE_OPERATION_NAME, true)
+      operation_open = true
+
+      row['updated_at'] = Time.now.utc.iso8601
+      write_state(model, state)
+      trigger_regeneration(model, row)
+
+      model.commit_operation
+      operation_open = false
+
+      build_row_detail(model, row)
+    rescue StandardError
+      model.abort_operation if operation_open
+      raise
+    end
+
+    def highlight(model:, row_id:, enabled:)
+      model = validate_model(model)
+      row_id = validate_row_id(row_id)
+
+      state, changed = prepare_state(model)
+      row = state['rows'][row_id]
+      raise RowError.new(:unknown_row, 'Row not found.') unless row
+
+      instances = resolve_member_instances(model, row['member_pids'])
+      if enabled
+        ensure_overlay(model).update(instances)
+        highlight_state(model)[:row_id] = row_id
+      else
+        clear_overlay(model)
+        highlight_state(model).delete(:row_id)
+      end
+
+      write_state(model, state) if changed
+
+      { ok: true }
+    end
+
     def list(model)
       model = validate_model(model)
 
-      state, changed = load_state(model)
-      changed |= repair_state!(model, state)
-      changed |= sanitize_rows!(state)
+      state, changed = prepare_state(model)
       write_state(model, state) if changed
 
       state['rows'].values.map { |row| symbolize_row(row) }
@@ -151,6 +381,180 @@ module AICabinets
       mm_value
     end
     private_class_method :coerce_row_reveal_mm
+
+    def prepare_state(model)
+      state, changed = load_state(model)
+      changed |= repair_state!(model, state)
+      changed |= sanitize_rows!(state)
+      [state, changed]
+    end
+    private_class_method :prepare_state
+
+    def build_row_summary(row)
+      {
+        row_id: row['row_id'],
+        name: row['name'],
+        member_count: Array(row['member_pids']).length,
+        lock_total_length: !!row['lock_total_length'],
+        row_reveal_mm: row['row_reveal_mm'],
+        row_reveal_formatted: format_length(row['row_reveal_mm'])
+      }
+    end
+    private_class_method :build_row_summary
+
+    def build_row_detail(model, row)
+      instances = resolve_member_instances(model, row['member_pids'])
+      members = instances.each_with_index.map do |instance, index|
+        {
+          pid: instance.persistent_id.to_i,
+          label: member_label(instance, index + 1),
+          row_pos: index + 1
+        }
+      end
+
+      {
+        row: {
+          row_id: row['row_id'],
+          name: row['name'],
+          member_pids: members.map { |member| member[:pid] },
+          members: members,
+          row_reveal_mm: row['row_reveal_mm'],
+          row_reveal_formatted: format_length(row['row_reveal_mm']),
+          lock_total_length: !!row['lock_total_length']
+        }
+      }
+    end
+    private_class_method :build_row_detail
+
+    def member_label(instance, fallback_index)
+      return "Cabinet ##{fallback_index}" unless instance&.valid?
+
+      if instance.respond_to?(:name) && !instance.name.to_s.empty?
+        return instance.name
+      end
+
+      definition = instance.definition if instance.respond_to?(:definition)
+      if definition && definition.respond_to?(:name) && !definition.name.to_s.empty?
+        return definition.name
+      end
+
+      "Cabinet ##{fallback_index}"
+    end
+    private_class_method :member_label
+
+    def validate_row_id(row_id)
+      value = row_id.to_s.strip
+      return value unless value.empty?
+
+      raise RowError.new(:invalid_row_id, 'Row id must be provided.')
+    end
+    private_class_method :validate_row_id
+
+    def normalize_pids(pids)
+      Array(pids).map { |pid| pid.to_i }.select { |pid| pid.positive? }.uniq
+    end
+    private_class_method :normalize_pids
+
+    def resolve_member_instances(model, member_pids)
+      Array(member_pids).filter_map do |pid|
+        entity = model.find_entity_by_persistent_id(pid.to_i)
+        next unless entity.is_a?(Sketchup::ComponentInstance)
+        next unless cabinet_instance?(entity)
+
+        entity
+      end
+    end
+    private_class_method :resolve_member_instances
+
+    def merge_instances(existing_instances, new_instances)
+      combined = existing_instances + new_instances
+      combined.uniq(&:object_id).sort_by do |instance|
+        [length_to_mm(instance.bounds.min.x) || 0.0, instance.persistent_id.to_i]
+      end
+    end
+    private_class_method :merge_instances
+
+    def apply_row_membership!(model, row, instances, rows_state)
+      row['member_pids'] = instances.map { |instance| instance.persistent_id.to_i }
+      now_iso = Time.now.utc.iso8601
+      row['updated_at'] = now_iso
+
+      instances.each_with_index do |instance, index|
+        ensure_instance_membership(instance, row['row_id'], index + 1)
+      end
+
+      cleanup_orphaned_instance_memberships(model, rows_state)
+    end
+    private_class_method :apply_row_membership!
+
+    def validate_instances_for_row!(instances, current_row_id:)
+      invalid = instances.reject do |instance|
+        membership = for_instance(instance)
+        membership.nil? || membership[:row_id] == current_row_id
+      end
+      return if invalid.empty?
+
+      raise RowError.new(:in_other_row, 'One or more cabinets already belong to another row.')
+    end
+    private_class_method :validate_instances_for_row!
+
+    def highlight_states
+      @highlight_states ||= {}.compare_by_identity
+    end
+    private_class_method :highlight_states
+
+    def highlight_state(model)
+      highlight_states[model] ||= {}
+    end
+    private_class_method :highlight_state
+
+    def ensure_overlay(model)
+      return NullOverlay.new unless overlay_supported?(model)
+
+      state = highlight_state(model)
+      overlay = state[:overlay]
+      return overlay if overlay&.valid_for_model?(model)
+
+      overlay = RowHighlightOverlay.new(model)
+      model.overlays.add(overlay)
+      state[:overlay] = overlay
+      overlay
+    rescue StandardError => error
+      warn("AI Cabinets: Unable to enable row highlight overlay: #{error.message}")
+      state[:overlay] = NullOverlay.new
+    end
+    private_class_method :ensure_overlay
+
+    def clear_overlay(model)
+      state = highlight_state(model)
+      overlay = state[:overlay]
+      overlay&.clear
+    end
+    private_class_method :clear_overlay
+
+    def overlay_supported?(model)
+      return false unless defined?(Sketchup::Overlays)
+      manager = model.respond_to?(:overlays) ? model.overlays : nil
+      manager.respond_to?(:add)
+    end
+    private_class_method :overlay_supported?
+
+    def update_highlight_if_active(model, row)
+      return unless highlight_state(model)[:row_id] == row['row_id']
+
+      overlay = ensure_overlay(model)
+      instances = resolve_member_instances(model, row['member_pids'])
+      overlay.update(instances)
+    end
+    private_class_method :update_highlight_if_active
+
+    def trigger_regeneration(model, row)
+      return unless defined?(AICabinets::Rows::Regeneration)
+      Regeneration.handle_row_change(model: model, row: row)
+    rescue StandardError => error
+      warn("AI Cabinets: Row regeneration failed: #{error.message}")
+    end
+    private_class_method :trigger_regeneration
 
     def validate_selection(model)
       selection = model.selection
@@ -526,5 +930,83 @@ module AICabinets
       }
     end
     private_class_method :default_state
+
+    def format_length(value_mm)
+      return '' if value_mm.nil?
+
+      if defined?(Sketchup) && value_mm.respond_to?(:to_f)
+        length = value_mm.to_f.mm
+        return Sketchup.format_length(length)
+      end
+
+      format('%.2f mm', value_mm.to_f)
+    rescue StandardError
+      format('%.2f mm', value_mm.to_f)
+    end
+    private_class_method :format_length
+
+    class NullOverlay
+      def update(_instances); end
+
+      def clear; end
+
+      def valid_for_model?(_model)
+        true
+      end
+    end
+    private_constant :NullOverlay
+
+    class RowHighlightOverlay < Sketchup::Overlay
+      COLOR = Sketchup::Color.new(0xff, 0x66, 0x00).freeze
+      LINE_WIDTH = 3
+
+      def initialize(model)
+        super(ROW_HIGHLIGHT_OVERLAY_ID)
+        @model = model
+        @polylines = []
+      end
+
+      def update(instances)
+        @polylines = build_polylines(instances)
+        invalidate
+      end
+
+      def clear
+        @polylines = []
+        invalidate
+      end
+
+      def valid_for_model?(model)
+        @model == model
+      end
+
+      def draw(view)
+        return if @polylines.empty?
+
+        view.drawing_color = COLOR
+        view.line_width = LINE_WIDTH
+        view.line_stipple = ''
+        @polylines.each do |polyline|
+          view.draw(GL_LINE_LOOP, polyline)
+        end
+      end
+
+      private
+
+      def build_polylines(instances)
+        instances.filter_map do |instance|
+          next unless instance&.valid?
+
+          bounds = instance.bounds
+          [
+            Geom::Point3d.new(bounds.min.x, bounds.min.y, bounds.min.z),
+            Geom::Point3d.new(bounds.max.x, bounds.min.y, bounds.min.z),
+            Geom::Point3d.new(bounds.max.x, bounds.min.y, bounds.max.z),
+            Geom::Point3d.new(bounds.min.x, bounds.min.y, bounds.max.z)
+          ]
+        end
+      end
+    end
+    private_constant :RowHighlightOverlay
   end
 end
