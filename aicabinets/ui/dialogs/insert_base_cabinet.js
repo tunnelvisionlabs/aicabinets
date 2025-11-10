@@ -1211,6 +1211,41 @@
           return collectState();
         });
       },
+      setTopFront: function setTopFront(value) {
+        return whenReady(function (formController) {
+          var normalized = value == null ? '' : String(value);
+          if (formController.inputs.front) {
+            formController.inputs.front.value = normalized;
+          }
+          formController.values.front = normalized;
+          formController.notifyGlobalFrontChange(normalized);
+          formController.setFieldError('front', null, true);
+          return collectState();
+        });
+      },
+      setTopShelves: function setTopShelves(value) {
+        return whenReady(function (formController) {
+          var numeric = Number(value);
+          if (!Number.isFinite(numeric)) {
+            numeric = null;
+          } else {
+            numeric = Math.max(0, Math.round(numeric));
+          }
+
+          if (formController.inputs.shelves) {
+            if (numeric == null) {
+              formController.inputs.shelves.value = '';
+            } else {
+              formController.inputs.shelves.value = String(numeric);
+            }
+          }
+
+          formController.values.shelves = numeric;
+          formController.notifyGlobalShelvesChange(numeric);
+          formController.setFieldError('shelves', null, true);
+          return collectState();
+        });
+      },
       clickBay: function clickBay(index) {
         return whenReady(function (formController) {
           if (formController.bayController) {
@@ -2976,6 +3011,8 @@
     this.pendingSelectedBayIndex = null;
     this.bayTemplate = cloneBay(null);
     this.lastAnnouncedBayCount = null;
+    this.lastSentGlobalFront = null;
+    this.lastSentGlobalShelves = null;
 
     this.initializeElements();
     this.bindEvents();
@@ -3503,6 +3540,33 @@
     invokeSketchUp('ui_set_partition_mode', JSON.stringify({ value: normalized }));
   };
 
+  FormController.prototype.notifyGlobalFrontChange = function notifyGlobalFrontChange(value) {
+    var normalized = value == null ? null : String(value).trim();
+    if (normalized === '') {
+      normalized = null;
+    }
+    if (this.lastSentGlobalFront === normalized) {
+      return;
+    }
+
+    this.lastSentGlobalFront = normalized;
+    invokeSketchUp('ui_set_global_front', JSON.stringify({ value: normalized }));
+  };
+
+  FormController.prototype.notifyGlobalShelvesChange = function notifyGlobalShelvesChange(value) {
+    var numeric = null;
+    if (value != null && isFinite(value)) {
+      numeric = Math.max(0, Math.round(Number(value) || 0));
+    }
+
+    if (this.lastSentGlobalShelves === numeric) {
+      return;
+    }
+
+    this.lastSentGlobalShelves = numeric;
+    invokeSketchUp('ui_set_global_shelves', JSON.stringify({ value: numeric }));
+  };
+
   FormController.prototype.notifyPartitionsLayoutChange = function notifyPartitionsLayoutChange(mode) {
     var normalized = this.normalizePartitionsLayout(mode);
     if (this.lastSentPartitionsLayout === normalized) {
@@ -3765,6 +3829,7 @@
         self.touched.front = true;
         self.setFieldError('front', null, true);
         event.target.removeAttribute('data-invalid');
+        self.notifyGlobalFrontChange(self.values.front);
       });
     }
 
@@ -4330,6 +4395,10 @@
     }
 
     this.updateInsertButtonState();
+
+    if (name === 'shelves' && result.ok) {
+      this.notifyGlobalShelvesChange(result.value);
+    }
   };
 
   FormController.prototype.applyIntegerValue = function applyIntegerValue(name, value) {
