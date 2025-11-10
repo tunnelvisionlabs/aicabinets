@@ -4365,6 +4365,9 @@
       this.applyIntegerValue(name, result.value);
       this.setFieldError(name, null, false);
       input.removeAttribute('data-invalid');
+      if (name === 'shelves') {
+        this.notifyGlobalShelvesChange(result.value);
+      }
     } else {
       this.applyIntegerValue(name, null);
       if (this.touched[name]) {

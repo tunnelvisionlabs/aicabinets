@@ -271,6 +271,40 @@ class TC_InsertBase_PreviewEmbed < TestUp::TestCase
     assert_equal(1, updated_shelves.length, 'Expected cabinet shelf group to persist after updates.')
     assert_equal(1, Array(updated_shelves.first['yPositions']).length, 'Expected one shelf indicator after update.')
 
+    stepped_value = await_js(<<~JAVASCRIPT)
+      (function () {
+        var input = document.querySelector('#field-shelves');
+        if (!input) {
+          throw new Error('Shelves input not found.');
+        }
+        if (typeof input.focus === 'function') {
+          input.focus();
+        }
+        if (typeof input.stepUp === 'function') {
+          input.stepUp();
+        } else {
+          var numeric = parseInt(input.value || '0', 10);
+          if (!Number.isFinite(numeric)) {
+            numeric = 0;
+          }
+          input.value = String(numeric + 1);
+        }
+        var event = new Event('input', { bubbles: true });
+        input.dispatchEvent(event);
+        return Number(input.value || 0);
+      })()
+    JAVASCRIPT
+    assert_equal(2, stepped_value, 'Shelves stepper script should increment the input value.')
+    pump_events
+    await_js(PREVIEW_READY_SCRIPT)
+
+    immediate = await_js(PREVIEW_FRONT_SHELF_STATE_SCRIPT)
+    refute_nil(immediate, 'Expected preview state payload after shelf input event.')
+    immediate_shelves = Array(immediate['shelves'])
+    assert_equal(1, immediate_shelves.length, 'Expected cabinet shelf group to remain after input change.')
+    assert_equal(2, Array(immediate_shelves.first['yPositions']).length,
+                 'Shelf count should update immediately on input without blurring the field.')
+
     assert_no_console_errors(@dialog_handle, 'Global fronts and shelves synchronization')
   ensure
     close_dialog
