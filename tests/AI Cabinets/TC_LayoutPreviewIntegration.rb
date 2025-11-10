@@ -82,7 +82,7 @@ class TC_LayoutPreviewIntegration < TestUp::TestCase
     deemphasized = state[:deemphasizedCount] || state['deemphasizedCount']
     assert_equal(2, deemphasized, 'Expected non-active bays to be deemphasized in single scope.')
 
-    aria_states = state[:ariaStates] || state['ariaStates'] || {}
+    aria_states = stringify_hash_keys(state[:ariaStates] || state['ariaStates'] || {})
     assert_equal('true', aria_states['bay-right'], 'Expected active bay aria-selected to be true.')
     assert_equal('false', aria_states['bay-left'], 'Expected inactive bay aria-selected to be false.')
     assert_equal('false', aria_states['bay-center'], 'Expected inactive bay aria-selected to be false.')
@@ -275,5 +275,13 @@ class TC_LayoutPreviewIntegration < TestUp::TestCase
       lines << "- [#{event[:level]}] #{event[:message]} (#{event[:dialog_id]})"
     end
     lines.join("\n")
+  end
+
+  def stringify_hash_keys(value)
+    return {} unless value.is_a?(Hash)
+
+    value.each_with_object({}) do |(key, entry), memo|
+      memo[key.to_s] = entry
+    end
   end
 end
