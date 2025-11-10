@@ -1,0 +1,13 @@
+{
+  "name": "aicabinets-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Development-only test harness for the AI Cabinets layout preview renderer.",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "29.7.0",
+    "jest-environment-jsdom": "29.7.0"
+  }
+}

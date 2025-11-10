@@ -282,6 +282,41 @@ class TC_LayoutModel < TestUp::TestCase
     assert_equal({ w_mm: 600.0, h_mm: 700.0 }, result[:outer])
   end
 
+  def test_single_bay_matches_outer_bounds
+    params = base_params.merge(
+      width_mm: 762.0,
+      height_mm: 914.0,
+      partitions: {
+        mode: 'even',
+        count: 0,
+        orientation: 'vertical',
+        bays: [
+          { id: 'single-bay' }
+        ]
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    bays = result[:bays]
+    assert_equal(1, bays.length, 'Expected a single bay entry when exactly one bay is configured.')
+
+    outer = result[:outer]
+    assert_equal({ w_mm: 762.0, h_mm: 914.0 }, outer)
+
+    bay = bays.first
+    assert_equal('single-bay', bay[:id])
+
+    tolerance = AICabinets::Layout::Model::EPS_MM
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, bay[:x_mm], tolerance)
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, bay[:y_mm], tolerance)
+    AICabinetsTestHelper.assert_within_tolerance(self, outer[:w_mm], bay[:w_mm], tolerance)
+    AICabinetsTestHelper.assert_within_tolerance(self, outer[:h_mm], bay[:h_mm], tolerance)
+
+    widths = bays.map { |entry| entry[:w_mm] }
+    AICabinetsTestHelper.assert_within_tolerance(self, outer[:w_mm], widths.sum, tolerance)
+  end
+
   def test_ignores_bay_specs_when_partition_mode_none
     params = base_params.merge(
       width_mm: 860.0,
