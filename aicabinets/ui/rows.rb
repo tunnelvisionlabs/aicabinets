@@ -8,9 +8,6 @@ module AICabinets
     module Rows
       module_function
 
-      ManagerDialog = AICabinets::UI::Rows::ManagerDialog
-      private_constant :ManagerDialog
-
       def show_manager(row_id: nil)
         ManagerDialog.show(row_id: row_id)
       end
