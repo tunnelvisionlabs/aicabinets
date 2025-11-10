@@ -16,6 +16,7 @@ module AICabinets
 
         commands[:insert_base_cabinet] ||= build_insert_base_cabinet_command
         commands[:edit_base_cabinet] ||= build_edit_base_cabinet_command
+        commands[:create_row_from_selection] ||= build_create_row_command
       end
 
       private
@@ -37,6 +38,15 @@ module AICabinets
         command.tooltip = 'Edit Selected Cabinet…'
         command.status_bar_text = 'Edit the selected AI Cabinets base cabinet.'
         assign_command_icons(command, 'edit_base_cabinet')
+        command
+      end
+
+      def build_create_row_command
+        command = ::UI::Command.new('Create Row from Selection') do
+          handle_create_row_from_selection
+        end
+        command.tooltip = 'Create Row from Selection'
+        command.status_bar_text = 'Create an AI Cabinets row from the current cabinet selection.'
         command
       end
 
@@ -87,6 +97,24 @@ module AICabinets
         unless dialog.show_for_edit(instance)
           notify_selection_issue('Unable to open the edit dialog for the selected cabinet.', status: :dialog_failed)
         end
+        nil
+      end
+
+      def handle_create_row_from_selection
+        return unless defined?(Sketchup)
+
+        model = Sketchup.active_model
+        result = AICabinets::Rows.create_from_selection(model: model)
+        if result.is_a?(AICabinets::Rows::Result)
+          warn("AI Cabinets: Row creation failed (#{result.code}): #{result.message}")
+          if defined?(::UI) && ::UI.respond_to?(:messagebox)
+            button_type = defined?(::MB_OK) ? ::MB_OK : 0
+            ::UI.messagebox(result.message, button_type, 'AI Cabinets')
+          end
+        elsif result
+          warn("AI Cabinets: Created cabinet row #{result}.")
+        end
+
         nil
       end
 

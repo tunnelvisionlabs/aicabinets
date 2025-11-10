@@ -25,7 +25,8 @@ module AICabinets
         @menu ||= extensions_menu.add_submenu(MENU_TITLE)
         menu_commands = [
           commands[:insert_base_cabinet],
-          commands[:edit_base_cabinet]
+          commands[:edit_base_cabinet],
+          commands[:create_row_from_selection]
         ].compact
 
         menu_commands.each do |command|
