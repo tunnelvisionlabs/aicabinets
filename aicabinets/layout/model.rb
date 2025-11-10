@@ -576,16 +576,19 @@ module AICabinets
       private_class_method :normalize_identifier
 
       def normalize_partition_mode(params, partitions_hash)
-        mode = nil
-        if partitions_hash.is_a?(Hash)
-          mode = partitions_hash[:mode] || partitions_hash['mode']
-        end
-        if (mode.nil? || mode.to_s.strip.empty?) && params.is_a?(Hash)
-          mode = params[:partition_mode] || params['partition_mode']
+        if params.is_a?(Hash)
+          candidate = params[:partition_mode] || params['partition_mode']
+          text = candidate.to_s.strip
+          return text.downcase unless text.empty?
         end
 
-        text = mode.to_s.strip.downcase
-        text.empty? ? 'none' : text
+        if partitions_hash.is_a?(Hash)
+          candidate = partitions_hash[:mode] || partitions_hash['mode']
+          text = candidate.to_s.strip
+          return text.downcase unless text.empty?
+        end
+
+        'none'
       end
       private_class_method :normalize_partition_mode
 

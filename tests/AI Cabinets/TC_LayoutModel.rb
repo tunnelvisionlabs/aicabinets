@@ -269,6 +269,45 @@ class TC_LayoutModel < TestUp::TestCase
     assert_equal(expected_positions, shelves.map { |entry| entry[:y_mm] })
   end
 
+  def test_partition_mode_prefers_top_level_none
+    params = base_params.merge(
+      width_mm: 840.0,
+      height_mm: 700.0,
+      partition_mode: 'none',
+      fronts_shelves_state: { door_mode: 'doors_right', shelf_count: 3 },
+      partitions: {
+        mode: 'even',
+        count: 1,
+        orientation: 'vertical',
+        bays: [
+          {
+            id: 'legacy-bay',
+            door_mode: 'doors_left',
+            shelf_count: 1,
+            shelves: [{ y_mm: 233.0 }]
+          }
+        ]
+      }
+    )
+
+    result = AICabinets::Layout::Model.build(params)
+
+    assert_empty(result[:bays], 'Expected legacy bay specs to be ignored when partition_mode is none.')
+
+    shelves = result[:shelves]
+    assert_equal(3, shelves.length, 'Expected shelves to derive from the global shelf count.')
+    assert_equal(['cabinet'], shelves.map { |entry| entry[:bay_id] }.uniq)
+
+    fronts = result[:fronts]
+    assert_equal(1, fronts.length, 'Expected cabinet-level door front to be emitted.')
+    front = fronts.first
+    assert_equal('doors_right', front[:style])
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:x_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 0.0, front[:y_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 840.0, front[:w_mm], 1.0e-6)
+    AICabinetsTestHelper.assert_within_tolerance(self, 700.0, front[:h_mm], 1.0e-6)
+  end
+
   def test_normalizes_when_width_sum_deviates
     params = base_params.merge(
       width_mm: 900.0,

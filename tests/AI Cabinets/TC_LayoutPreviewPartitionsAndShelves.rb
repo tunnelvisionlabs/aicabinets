@@ -108,6 +108,24 @@ class TC_LayoutPreviewPartitionsAndShelves < TestUp::TestCase
     ensure_dialog_ready
     AICabinets::UI::DialogConsoleBridge.drain_events(@dialog)
 
+    seeded_model = {
+      outer: { w_mm: 820, h_mm: 720 },
+      bays: [
+        { id: 'bay-1', role: 'bay', x_mm: 0, y_mm: 0, w_mm: 410, h_mm: 720 },
+        { id: 'bay-2', role: 'bay', x_mm: 410, y_mm: 0, w_mm: 410, h_mm: 720 }
+      ],
+      partitions: { orientation: 'vertical', positions_mm: [410] },
+      shelves: [
+        { bay_id: 'bay-1', y_mm: 240 },
+        { bay_id: 'bay-1', y_mm: 480 }
+      ],
+      fronts: [
+        { id: 'front-left', role: 'door', style: 'doors_left', x_mm: 0, y_mm: 0, w_mm: 410, h_mm: 720 }
+      ]
+    }
+
+    assert(render_layout(seeded_model), 'Expected LayoutPreviewDialog.renderLayout to seed bay state.')
+
     base_model = {
       outer: { w_mm: 820, h_mm: 720 },
       bays: [],
