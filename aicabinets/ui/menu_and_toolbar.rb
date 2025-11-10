@@ -33,6 +33,8 @@ module AICabinets
           @menu.add_item(command)
         end
 
+        primary_group_has_items = primary_commands.any?
+
         rows_commands = [
           commands[:create_row_from_selection],
           commands[:rows_manage],
@@ -42,7 +44,7 @@ module AICabinets
         ].compact
 
         if rows_commands.any?
-          @menu.add_separator unless @menu.count.zero?
+          @menu.add_separator if primary_group_has_items
           rows_menu = @menu.add_submenu('Rows')
           rows_commands.each do |command|
             rows_menu.add_item(command)
