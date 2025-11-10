@@ -44,6 +44,8 @@
           empty: {
             outer: { w_mm: 762, h_mm: 762 },
             bays: [],
+            partitions: { orientation: 'vertical', positions_mm: [] },
+            shelves: [],
             fronts: []
           },
           single: {
@@ -51,7 +53,14 @@
             bays: [
               { id: 'bay-0', role: 'bay', x_mm: 0, y_mm: 0, w_mm: 762, h_mm: 762 }
             ],
-            fronts: []
+            partitions: { orientation: 'vertical', positions_mm: [] },
+            shelves: [
+              { bay_id: 'bay-0', y_mm: 254 },
+              { bay_id: 'bay-0', y_mm: 508 }
+            ],
+            fronts: [
+              { id: 'bay-0-door', role: 'door', style: 'doors_double', x_mm: 0, y_mm: 0, w_mm: 762, h_mm: 762 }
+            ]
           },
           triple: {
             outer: { w_mm: 914, h_mm: 762 },
@@ -60,10 +69,16 @@
               { id: 'bay-1', role: 'bay', x_mm: 305, y_mm: 0, w_mm: 305, h_mm: 762 },
               { id: 'bay-2', role: 'bay', x_mm: 610, y_mm: 0, w_mm: 304, h_mm: 762 }
             ],
+            partitions: { orientation: 'vertical', positions_mm: [305, 610] },
+            shelves: [
+              { bay_id: 'bay-0', y_mm: 240 },
+              { bay_id: 'bay-0', y_mm: 520 },
+              { bay_id: 'bay-2', y_mm: 300 }
+            ],
             fronts: [
-              { id: 'door-left', role: 'door', x_mm: 0, y_mm: 0, w_mm: 305, h_mm: 762 },
+              { id: 'door-left', role: 'door', style: 'doors_left', x_mm: 0, y_mm: 0, w_mm: 305, h_mm: 762 },
               { id: 'drawer-stack', role: 'drawer_group', x_mm: 305, y_mm: 0, w_mm: 305, h_mm: 762 },
-              { id: 'door-right', role: 'door', x_mm: 610, y_mm: 0, w_mm: 304, h_mm: 762 }
+              { id: 'door-right', role: 'door', style: 'doors_right', x_mm: 610, y_mm: 0, w_mm: 304, h_mm: 762 }
             ]
           }
         };

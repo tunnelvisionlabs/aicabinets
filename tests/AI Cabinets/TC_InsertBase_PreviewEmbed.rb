@@ -105,6 +105,39 @@ class TC_InsertBase_PreviewEmbed < TestUp::TestCase
       };
     })()
   JAVASCRIPT
+  PREVIEW_FRONT_SHELF_STATE_SCRIPT = <<~JAVASCRIPT
+    (function () {
+      var container = document.querySelector('[data-role="layout-preview-container"]');
+      if (!container) {
+        return null;
+      }
+
+      var result = { doors: [], shelves: [] };
+
+      var doorNodes = container.querySelectorAll('[data-role="front"][data-front="door"]');
+      doorNodes.forEach(function (node) {
+        var style = node.getAttribute('data-style') || null;
+        var hinges = node.querySelectorAll('.lp-door-hinge').length;
+        var gaps = node.querySelectorAll('.lp-door-gap').length;
+        result.doors.push({ style: style, hingeCount: hinges, gapCount: gaps });
+      });
+
+      var shelfGroups = container.querySelectorAll('[data-role="bay-shelves"]');
+      shelfGroups.forEach(function (group) {
+        var bayId = group.getAttribute('data-bay-id') || null;
+        var positions = [];
+        group.querySelectorAll('line').forEach(function (line) {
+          var y = Number(line.getAttribute('y1'));
+          if (!Number.isNaN(y)) {
+            positions.push(y);
+          }
+        });
+        result.shelves.push({ bayId: bayId, yPositions: positions });
+      });
+
+      return result;
+    })()
+  JAVASCRIPT
   PREVIEW_DISABLED_STATE_SCRIPT = <<~JAVASCRIPT
     (function () {
       var pane = document.querySelector('[data-role="layout-preview-pane"]');
@@ -119,7 +152,8 @@ class TC_InsertBase_PreviewEmbed < TestUp::TestCase
     })()
   JAVASCRIPT
   private_constant :DEFAULT_TIMEOUT, :PREVIEW_READY_SCRIPT, :READY_SCRIPT,
-                    :PREVIEW_STATE_SCRIPT, :PREVIEW_DISABLED_STATE_SCRIPT
+                    :PREVIEW_STATE_SCRIPT, :PREVIEW_FRONT_SHELF_STATE_SCRIPT,
+                    :PREVIEW_DISABLED_STATE_SCRIPT
 
   def setup
     @original_flag = AICabinets::Features.layout_preview?
@@ -185,6 +219,93 @@ class TC_InsertBase_PreviewEmbed < TestUp::TestCase
     assert_equal(0, disabled_state['scriptHandles'], 'Preview scripts should not load when the feature is disabled.')
 
     assert_no_console_errors(@dialog_handle, 'Preview-disabled dialog boot')
+  ensure
+    close_dialog
+  end
+
+  def test_preview_updates_global_front_and_shelves_without_partitions
+    AICabinets::Features.enable_layout_preview!
+    open_dialog
+    ensure_dialog_ready
+
+    await_js('AICabinetsTest.setPartitionMode("none")')
+    pump_events
+    await_js(PREVIEW_READY_SCRIPT)
+
+    await_js('AICabinetsTest.setTopFront("doors_right")')
+    await_js('AICabinetsTest.setTopShelves(3)')
+    pump_events
+    await_js(PREVIEW_READY_SCRIPT)
+
+    state = await_js(PREVIEW_FRONT_SHELF_STATE_SCRIPT)
+    refute_nil(state, 'Expected preview state payload for cabinet configuration.')
+
+    doors = Array(state['doors'])
+    assert_equal(1, doors.length, 'Expected a single cabinet-wide door overlay.')
+    door = doors.first
+    assert_equal('doors_right', door['style'])
+    assert_equal(1, door['hingeCount'])
+    assert_equal(0, door['gapCount'])
+
+    shelves = Array(state['shelves'])
+    assert_equal(1, shelves.length, 'Expected cabinet shelf group to render.')
+    cabinet = shelves.first
+    assert_equal('cabinet', cabinet['bayId'])
+    assert_equal(3, Array(cabinet['yPositions']).length, 'Expected three shelf indicators for the cabinet.')
+
+    await_js('AICabinetsTest.setTopFront("doors_double")')
+    await_js('AICabinetsTest.setTopShelves(1)')
+    pump_events
+    await_js(PREVIEW_READY_SCRIPT)
+
+    updated = await_js(PREVIEW_FRONT_SHELF_STATE_SCRIPT)
+    refute_nil(updated, 'Expected preview state payload after updating cabinet fronts and shelves.')
+
+    updated_doors = Array(updated['doors'])
+    assert_equal(1, updated_doors.length, 'Expected a single cabinet-wide door overlay after updates.')
+    assert_equal('doors_double', updated_doors.first['style'])
+    assert_equal(0, updated_doors.first['hingeCount'])
+    assert_equal(1, updated_doors.first['gapCount'])
+
+    updated_shelves = Array(updated['shelves'])
+    assert_equal(1, updated_shelves.length, 'Expected cabinet shelf group to persist after updates.')
+    assert_equal(1, Array(updated_shelves.first['yPositions']).length, 'Expected one shelf indicator after update.')
+
+    stepped_value = await_js(<<~JAVASCRIPT)
+      (function () {
+        var input = document.querySelector('#field-shelves');
+        if (!input) {
+          throw new Error('Shelves input not found.');
+        }
+        if (typeof input.focus === 'function') {
+          input.focus();
+        }
+        if (typeof input.stepUp === 'function') {
+          input.stepUp();
+        } else {
+          var numeric = parseInt(input.value || '0', 10);
+          if (!Number.isFinite(numeric)) {
+            numeric = 0;
+          }
+          input.value = String(numeric + 1);
+        }
+        var event = new Event('input', { bubbles: true });
+        input.dispatchEvent(event);
+        return Number(input.value || 0);
+      })()
+    JAVASCRIPT
+    assert_equal(2, stepped_value, 'Shelves stepper script should increment the input value.')
+    pump_events
+    await_js(PREVIEW_READY_SCRIPT)
+
+    immediate = await_js(PREVIEW_FRONT_SHELF_STATE_SCRIPT)
+    refute_nil(immediate, 'Expected preview state payload after shelf input event.')
+    immediate_shelves = Array(immediate['shelves'])
+    assert_equal(1, immediate_shelves.length, 'Expected cabinet shelf group to remain after input change.')
+    assert_equal(2, Array(immediate_shelves.first['yPositions']).length,
+                 'Shelf count should update immediately on input without blurring the field.')
+
+    assert_no_console_errors(@dialog_handle, 'Global fronts and shelves synchronization')
   ensure
     close_dialog
   end

@@ -9,6 +9,9 @@
     active_tint: '#1f7aec'
   };
 
+  var EPSILON_MM = 1.0e-3;
+  var CABINET_BAY_ID = 'cabinet';
+
   function clampPadding(value) {
     if (!isFinite(value)) {
       return DEFAULT_OPTIONS.padding_frac;
@@ -175,7 +178,11 @@
 
     var layers = ensureSceneLayers(state);
     updateOuterLayer(layers.outer, model.outer);
-    updateBaysLayer(layers.bays, model.bays);
+    var shelfCounts = buildShelfCounts(model.shelves);
+    updateBaysLayer(layers.bays, model.bays, shelfCounts);
+    updateShelvesLayer(layers.shelves, model.shelves, model.bays, model.outer);
+    updatePartitionsLayer(layers.partitionsV, model.partitions, model.outer, 'vertical');
+    updatePartitionsLayer(layers.partitionsH, model.partitions, model.outer, 'horizontal');
     updateFrontsLayer(layers.fronts, model.fronts);
 
     applyA11yBindings(state);
@@ -187,13 +194,20 @@
       state.layers = {
         outer: ensureLayer(state.scene, 'lp-outer', 'outer shell'),
         bays: ensureLayer(state.scene, 'lp-bays', 'bays'),
+        shelves: ensureLayer(state.scene, 'lp-shelves', 'shelves', { 'data-layer': 'shelves' }),
+        partitionsV: ensureLayer(state.scene, 'lp-partitions-v', 'vertical partitions', {
+          'data-layer': 'partitions-v'
+        }),
+        partitionsH: ensureLayer(state.scene, 'lp-partitions-h', 'horizontal partitions', {
+          'data-layer': 'partitions-h'
+        }),
         fronts: ensureLayer(state.scene, 'lp-fronts', 'fronts')
       };
     }
     return state.layers;
   }
 
-  function ensureLayer(scene, className, label) {
+  function ensureLayer(scene, className, label, attributes) {
     if (!scene) {
       return null;
     }
@@ -201,7 +215,7 @@
     var selector = 'g.' + className;
     var layer = scene.querySelector(selector);
     if (!layer) {
-      layer = createGroup(className, label);
+      layer = createGroup(className, label, attributes);
       scene.appendChild(layer);
     }
     return layer;
@@ -212,6 +226,11 @@
     var width = toPositiveNumber(outer.w_mm, 1);
     var height = toPositiveNumber(outer.h_mm, 1);
 
+    var normalizedOuter = {
+      w_mm: width,
+      h_mm: height
+    };
+
     var bays = Array.isArray(layoutModel && layoutModel.bays)
       ? layoutModel.bays
           .map(function (bay, index) {
@@ -219,6 +238,9 @@
           })
           .filter(Boolean)
       : [];
+
+    var partitions = normalizePartitions(layoutModel && layoutModel.partitions, normalizedOuter);
+    var shelves = normalizeShelves(layoutModel && layoutModel.shelves);
 
     var fronts = Array.isArray(layoutModel && layoutModel.fronts)
       ? layoutModel.fronts
@@ -229,11 +251,10 @@
       : [];
 
     return {
-      outer: {
-        w_mm: width,
-        h_mm: height
-      },
+      outer: normalizedOuter,
       bays: bays,
+      partitions: partitions,
+      shelves: shelves,
       fronts: fronts
     };
   }
@@ -254,6 +275,11 @@
     var id = data.id != null ? String(data.id) : null;
     var role = data.role ? String(data.role) : fallbackRole;
 
+    var style = null;
+    if (data && Object.prototype.hasOwnProperty.call(data, 'style')) {
+      style = data.style != null ? String(data.style) : null;
+    }
+
     return {
       id: id,
       role: role,
@@ -261,8 +287,112 @@
       x_mm: x,
       y_mm: y,
       w_mm: width,
-      h_mm: height
+      h_mm: height,
+      style: style
     };
+  }
+
+  function normalizePartitions(rawPartitions, outer) {
+    var data = rawPartitions && typeof rawPartitions === 'object' ? rawPartitions : null;
+    var orientation = 'vertical';
+    if (data && typeof data.orientation === 'string') {
+      var candidate = data.orientation.toLowerCase();
+      orientation = candidate === 'horizontal' ? 'horizontal' : 'vertical';
+    }
+
+    var positions = Array.isArray(data && data.positions_mm)
+      ? data.positions_mm
+          .map(function (value) {
+            return Number(value);
+          })
+          .filter(function (value) {
+            return Number.isFinite(value);
+          })
+      : [];
+
+    positions.sort(function (a, b) {
+      return a - b;
+    });
+
+    var axisLimit = orientation === 'horizontal' ? outer.h_mm : outer.w_mm;
+    var normalized = [];
+    var last = null;
+    for (var index = 0; index < positions.length; index += 1) {
+      var clamped = clampAxisPosition(positions[index], axisLimit);
+      if (clamped === null) {
+        continue;
+      }
+      if (last !== null && Math.abs(clamped - last) <= EPSILON_MM) {
+        continue;
+      }
+      normalized.push(clamped);
+      last = clamped;
+    }
+
+    return {
+      orientation: orientation,
+      positions_mm: normalized
+    };
+  }
+
+  function normalizeShelves(rawShelves) {
+    if (!Array.isArray(rawShelves)) {
+      return [];
+    }
+
+    return rawShelves
+      .map(function (entry) {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+
+        var bayId = null;
+        if (Object.prototype.hasOwnProperty.call(entry, 'bay_id')) {
+          bayId = entry.bay_id;
+        } else if (Object.prototype.hasOwnProperty.call(entry, 'bayId')) {
+          bayId = entry.bayId;
+        }
+
+        if (bayId != null) {
+          bayId = String(bayId);
+        } else {
+          bayId = null;
+        }
+
+        var y = Number(entry.y_mm);
+        if (!Number.isFinite(y)) {
+          return null;
+        }
+
+        return {
+          bay_id: bayId,
+          y_mm: y
+        };
+      })
+      .filter(function (entry) {
+        return entry !== null && Number.isFinite(entry.y_mm);
+      });
+  }
+
+  function clampAxisPosition(value, axisLimit) {
+    var numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+
+    if (axisLimit > 0) {
+      if (numeric < 0) {
+        numeric = 0;
+      }
+      if (numeric > axisLimit) {
+        numeric = axisLimit;
+      }
+      if (numeric <= EPSILON_MM || Math.abs(axisLimit - numeric) <= EPSILON_MM) {
+        return null;
+      }
+    }
+
+    return numeric;
   }
 
   function toNumber(value, fallback) {
@@ -317,14 +447,14 @@
     rect.setAttribute('rx', formatNumber(Math.min(outer.w_mm, outer.h_mm) * 0.012));
   }
 
-  function updateBaysLayer(group, bays) {
+  function updateBaysLayer(group, bays, shelfCounts) {
     if (!group) {
       return;
     }
 
     var existing = group.querySelectorAll('[data-role="bay"]');
     if (existing.length !== bays.length) {
-      rebuildBays(group, bays);
+      rebuildBays(group, bays, shelfCounts);
       return;
     }
 
@@ -339,9 +469,11 @@
       var fallbackId = 'bay-' + String(index + 1);
       wrapper.setAttribute('data-id', bay.id || fallbackId);
       wrapper.setAttribute('role', 'group');
-      wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
       wrapper.setAttribute('data-w-mm', formatNumber(bay.w_mm));
       wrapper.setAttribute('data-h-mm', formatNumber(bay.h_mm));
+
+      var shelfCount = resolveShelfCount(shelfCounts, bay, fallbackId);
+      applyShelfMetadata(wrapper, index, shelfCount);
 
       var rect = wrapper.querySelector('rect');
       if (!rect) {
@@ -364,7 +496,7 @@
     }
   }
 
-  function rebuildBays(group, bays) {
+  function rebuildBays(group, bays, shelfCounts) {
     clearLayerChildren(group);
 
     bays.forEach(function (bay, index) {
@@ -372,11 +504,13 @@
       wrapper.setAttribute('data-role', 'bay');
       wrapper.setAttribute('data-index', String(index));
       wrapper.setAttribute('role', 'group');
-      wrapper.setAttribute('aria-label', 'Bay ' + String(index + 1));
       var fallbackId = 'bay-' + String(index + 1);
       wrapper.setAttribute('data-id', bay.id || fallbackId);
       wrapper.setAttribute('data-w-mm', formatNumber(bay.w_mm));
       wrapper.setAttribute('data-h-mm', formatNumber(bay.h_mm));
+
+      var shelfCount = resolveShelfCount(shelfCounts, bay, fallbackId);
+      applyShelfMetadata(wrapper, index, shelfCount);
 
       var rect = createRect(bay.x_mm, bay.y_mm, bay.w_mm, bay.h_mm);
       rect.setAttribute('rx', formatNumber(Math.min(bay.w_mm, bay.h_mm) * 0.05));
@@ -390,12 +524,245 @@
     });
   }
 
+  function resolveShelfCount(shelfCounts, bay, fallbackId) {
+    if (!shelfCounts) {
+      return 0;
+    }
+    var key = bay.id || fallbackId;
+    if (!key || !Object.prototype.hasOwnProperty.call(shelfCounts, key)) {
+      return 0;
+    }
+    var count = Number(shelfCounts[key]);
+    return Number.isFinite(count) && count > 0 ? Math.round(count) : 0;
+  }
+
+  function applyShelfMetadata(node, index, shelfCount) {
+    if (!node) {
+      return;
+    }
+    node.setAttribute('aria-label', buildInitialBayLabel(index, shelfCount));
+    if (shelfCount > 0) {
+      node.setAttribute('data-shelf-count', String(shelfCount));
+    } else {
+      node.removeAttribute('data-shelf-count');
+    }
+  }
+
+  function buildInitialBayLabel(index, shelfCount) {
+    var label = 'Bay ' + String(index + 1);
+    if (shelfCount > 0) {
+      label += ', ' + shelfCount + ' shelf' + (shelfCount === 1 ? '' : 's');
+    }
+    return label;
+  }
+
+  function buildShelfCounts(shelves) {
+    var counts = Object.create(null);
+    if (!Array.isArray(shelves)) {
+      return counts;
+    }
+
+    shelves.forEach(function (entry) {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      if (entry.bay_id == null) {
+        return;
+      }
+      var key = String(entry.bay_id);
+      if (!Object.prototype.hasOwnProperty.call(counts, key)) {
+        counts[key] = 0;
+      }
+      counts[key] += 1;
+    });
+
+    return counts;
+  }
+
+  function updateShelvesLayer(group, shelves, bays, outer) {
+    if (!group) {
+      return;
+    }
+
+    if (!Array.isArray(shelves) || shelves.length === 0) {
+      clearLayerChildren(group);
+      return;
+    }
+
+    clearLayerChildren(group);
+
+    var bayMap = buildBayMap(bays);
+    var grouped = groupShelvesByBay(shelves);
+    var cabinetBay = buildCabinetBay(outer);
+
+    Object.keys(grouped).forEach(function (bayId) {
+      var bay = bayMap[bayId];
+      if (!bay && cabinetBay && bayId === cabinetBay.id) {
+        bay = cabinetBay;
+      }
+      if (!bay) {
+        return;
+      }
+
+      var wrapper = document.createElementNS(SVG_NS, 'g');
+      wrapper.setAttribute('data-role', 'bay-shelves');
+      wrapper.setAttribute('data-bay-id', bayId);
+
+      var entries = grouped[bayId].slice().sort(function (a, b) {
+        return a.y_mm - b.y_mm;
+      });
+
+      for (var index = 0; index < entries.length; index += 1) {
+        var shelf = entries[index];
+        var y = clampShelfY(shelf.y_mm, bay);
+        if (y === null) {
+          continue;
+        }
+
+        var inset = Math.max(Math.min(bay.w_mm * 0.08, 18), 4);
+        var startX = bay.x_mm + inset;
+        var endX = bay.x_mm + bay.w_mm - inset;
+        if (endX <= startX) {
+          endX = bay.x_mm + bay.w_mm;
+        }
+
+        var line = document.createElementNS(SVG_NS, 'line');
+        line.setAttribute('x1', formatNumber(startX));
+        line.setAttribute('x2', formatNumber(endX));
+        line.setAttribute('y1', formatNumber(y));
+        line.setAttribute('y2', formatNumber(y));
+        line.setAttribute('data-index', String(index));
+        line.setAttribute('vector-effect', 'non-scaling-stroke');
+        line.setAttribute('shape-rendering', 'geometricPrecision');
+        wrapper.appendChild(line);
+      }
+
+      if (wrapper.childNodes.length > 0) {
+        group.appendChild(wrapper);
+      }
+    });
+  }
+
+  function buildCabinetBay(outer) {
+    if (!outer || !isFinite(outer.w_mm) || !isFinite(outer.h_mm)) {
+      return null;
+    }
+    if (outer.w_mm <= 0 || outer.h_mm <= 0) {
+      return null;
+    }
+
+    return {
+      id: CABINET_BAY_ID,
+      x_mm: 0,
+      y_mm: 0,
+      w_mm: outer.w_mm,
+      h_mm: outer.h_mm
+    };
+  }
+
+  function buildBayMap(bays) {
+    var map = Object.create(null);
+    if (!Array.isArray(bays)) {
+      return map;
+    }
+
+    for (var index = 0; index < bays.length; index += 1) {
+      var bay = bays[index];
+      if (!bay) {
+        continue;
+      }
+      var id = bay.id || 'bay-' + String(index + 1);
+      map[id] = bay;
+    }
+
+    return map;
+  }
+
+  function groupShelvesByBay(shelves) {
+    var grouped = Object.create(null);
+    shelves.forEach(function (entry) {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      if (entry.bay_id == null) {
+        return;
+      }
+      var key = String(entry.bay_id);
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(entry);
+    });
+    return grouped;
+  }
+
+  function clampShelfY(value, bay) {
+    var numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+
+    var top = bay.y_mm;
+    var bottom = bay.y_mm + bay.h_mm;
+    if (numeric < top + EPSILON_MM) {
+      numeric = top + EPSILON_MM;
+    }
+    if (numeric > bottom - EPSILON_MM) {
+      numeric = bottom - EPSILON_MM;
+    }
+    return numeric;
+  }
+
+  function updatePartitionsLayer(group, partitions, outer, orientation) {
+    if (!group) {
+      return;
+    }
+
+    var expected = orientation === 'horizontal' ? 'horizontal' : 'vertical';
+    var positions =
+      partitions && partitions.orientation === expected && Array.isArray(partitions.positions_mm)
+        ? partitions.positions_mm
+        : [];
+
+    if (!positions.length) {
+      clearLayerChildren(group);
+      return;
+    }
+
+    clearLayerChildren(group);
+
+    var axisLimit = expected === 'horizontal' ? outer.h_mm : outer.w_mm;
+    for (var index = 0; index < positions.length; index += 1) {
+      var clamped = clampAxisPosition(positions[index], axisLimit);
+      if (clamped === null) {
+        continue;
+      }
+
+      var line = document.createElementNS(SVG_NS, 'line');
+      if (expected === 'vertical') {
+        line.setAttribute('x1', formatNumber(clamped));
+        line.setAttribute('x2', formatNumber(clamped));
+        line.setAttribute('y1', '0');
+        line.setAttribute('y2', formatNumber(outer.h_mm));
+      } else {
+        line.setAttribute('x1', '0');
+        line.setAttribute('x2', formatNumber(outer.w_mm));
+        line.setAttribute('y1', formatNumber(clamped));
+        line.setAttribute('y2', formatNumber(clamped));
+      }
+      line.setAttribute('data-index', String(index));
+      line.setAttribute('vector-effect', 'non-scaling-stroke');
+      line.setAttribute('shape-rendering', 'geometricPrecision');
+      group.appendChild(line);
+    }
+  }
+
   function updateFrontsLayer(group, fronts) {
     if (!group) {
       return;
     }
 
-    var existing = group.querySelectorAll('rect[data-role]');
+    var existing = group.querySelectorAll('[data-role="front"]');
     if (existing.length !== fronts.length) {
       rebuildFronts(group, fronts);
       return;
@@ -403,15 +770,11 @@
 
     for (var index = 0; index < fronts.length; index += 1) {
       var front = fronts[index];
-      var rect = existing[index];
-      if (!rect) {
+      var wrapper = existing[index];
+      if (!wrapper) {
         continue;
       }
-      rect.setAttribute('x', formatNumber(front.x_mm));
-      rect.setAttribute('y', formatNumber(front.y_mm));
-      rect.setAttribute('width', formatNumber(front.w_mm));
-      rect.setAttribute('height', formatNumber(front.h_mm));
-      rect.setAttribute('data-role', front.role || 'front');
+      updateFrontNode(wrapper, front);
     }
   }
 
@@ -419,15 +782,119 @@
     clearLayerChildren(group);
 
     fronts.forEach(function (front) {
-      var rect = createRect(front.x_mm, front.y_mm, front.w_mm, front.h_mm);
-      rect.setAttribute('data-role', front.role || 'front');
-      group.appendChild(rect);
+      var node = createFrontNode(front);
+      if (node) {
+        group.appendChild(node);
+      }
     });
   }
 
-  function createGroup(className, label) {
+  function createFrontNode(front) {
+    if (!front) {
+      return null;
+    }
+
+    var wrapper = document.createElementNS(SVG_NS, 'g');
+    wrapper.setAttribute('data-role', 'front');
+    wrapper.setAttribute('data-front', front.role || 'front');
+    if (front.id) {
+      wrapper.setAttribute('data-id', front.id);
+    }
+    if (front.role === 'door' && front.style) {
+      wrapper.setAttribute('data-style', front.style);
+    }
+
+    var rect = createRect(front.x_mm, front.y_mm, front.w_mm, front.h_mm);
+    rect.setAttribute('class', 'lp-front-rect');
+    wrapper.appendChild(rect);
+
+    applyDoorDecor(wrapper, front);
+    return wrapper;
+  }
+
+  function updateFrontNode(wrapper, front) {
+    if (!wrapper || !front) {
+      return;
+    }
+
+    wrapper.setAttribute('data-front', front.role || 'front');
+    if (front.id) {
+      wrapper.setAttribute('data-id', front.id);
+    } else {
+      wrapper.removeAttribute('data-id');
+    }
+
+    if (front.role === 'door' && front.style) {
+      wrapper.setAttribute('data-style', front.style);
+    } else {
+      wrapper.removeAttribute('data-style');
+    }
+
+    var rect = wrapper.querySelector('rect.lp-front-rect');
+    if (!rect) {
+      rect = createRect(front.x_mm, front.y_mm, front.w_mm, front.h_mm);
+      rect.setAttribute('class', 'lp-front-rect');
+      wrapper.insertBefore(rect, wrapper.firstChild);
+    }
+
+    rect.setAttribute('x', formatNumber(front.x_mm));
+    rect.setAttribute('y', formatNumber(front.y_mm));
+    rect.setAttribute('width', formatNumber(front.w_mm));
+    rect.setAttribute('height', formatNumber(front.h_mm));
+
+    var details = wrapper.querySelectorAll('.lp-door-hinge, .lp-door-gap');
+    for (var index = 0; index < details.length; index += 1) {
+      wrapper.removeChild(details[index]);
+    }
+
+    applyDoorDecor(wrapper, front);
+  }
+
+  function applyDoorDecor(wrapper, front) {
+    if (!wrapper || !front || front.role !== 'door') {
+      return;
+    }
+
+    var style = front.style || '';
+    if (style === 'doors_left' || style === 'doors_right') {
+      var hinge = document.createElementNS(SVG_NS, 'line');
+      var inset = Math.max(Math.min(front.w_mm * 0.1, 20), 4);
+      var x = style === 'doors_left' ? front.x_mm + inset : front.x_mm + front.w_mm - inset;
+      var top = front.y_mm + Math.min(front.h_mm * 0.12, 30);
+      var bottom = front.y_mm + front.h_mm - Math.min(front.h_mm * 0.12, 30);
+      hinge.setAttribute('x1', formatNumber(x));
+      hinge.setAttribute('x2', formatNumber(x));
+      hinge.setAttribute('y1', formatNumber(top));
+      hinge.setAttribute('y2', formatNumber(bottom));
+      hinge.setAttribute('class', 'lp-door-hinge');
+      hinge.setAttribute('vector-effect', 'non-scaling-stroke');
+      hinge.setAttribute('shape-rendering', 'geometricPrecision');
+      wrapper.appendChild(hinge);
+      return;
+    }
+
+    if (style === 'doors_double') {
+      var gap = document.createElementNS(SVG_NS, 'line');
+      var center = front.x_mm + front.w_mm / 2;
+      gap.setAttribute('x1', formatNumber(center));
+      gap.setAttribute('x2', formatNumber(center));
+      gap.setAttribute('y1', formatNumber(front.y_mm));
+      gap.setAttribute('y2', formatNumber(front.y_mm + front.h_mm));
+      gap.setAttribute('class', 'lp-door-gap');
+      gap.setAttribute('vector-effect', 'non-scaling-stroke');
+      gap.setAttribute('shape-rendering', 'geometricPrecision');
+      wrapper.appendChild(gap);
+    }
+  }
+
+  function createGroup(className, label, attributes) {
     var group = document.createElementNS(SVG_NS, 'g');
     group.setAttribute('class', className);
+    if (attributes && typeof attributes === 'object') {
+      Object.keys(attributes).forEach(function (key) {
+        group.setAttribute(key, attributes[key]);
+      });
+    }
     if (label) {
       var title = document.createElementNS(SVG_NS, 'title');
       title.textContent = capitalize(label);

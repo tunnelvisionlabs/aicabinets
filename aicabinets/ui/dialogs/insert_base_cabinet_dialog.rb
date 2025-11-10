@@ -862,6 +862,64 @@ module AICabinets
         end
         private_class_method :handle_ui_set_partitions_layout
 
+        def handle_ui_set_global_front(dialog, payload)
+          data = parse_payload(payload)
+          raw_value = extract_string(data[:value] || data['value'])
+
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          normalized = VALID_FRONT_VALUES.include?(raw_value) ? raw_value : nil
+          state = params[:fronts_shelves_state]
+          state = params[:fronts_shelves_state] = {} unless state.is_a?(Hash)
+
+          if normalized
+            params[:front] = normalized
+            params[:front_layout] = normalized
+            params[:door_mode] = normalized
+            state[:door_mode] = normalized
+          else
+            params.delete(:front)
+            params.delete(:front_layout)
+            params.delete(:door_mode)
+            state.delete(:door_mode)
+          end
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          sync_layout_preview(dialog)
+        end
+        private_class_method :handle_ui_set_global_front
+
+        def handle_ui_set_global_shelves(dialog, payload)
+          data = parse_payload(payload)
+          params = ensure_dialog_params
+          return unless params.is_a?(Hash)
+
+          value = data.key?(:value) || data.key?('value') ? data[:value] || data['value'] : nil
+          count = extract_integer(value)
+
+          state = params[:fronts_shelves_state]
+          state = params[:fronts_shelves_state] = {} unless state.is_a?(Hash)
+
+          if count.nil?
+            params.delete(:shelves)
+            params.delete(:shelf_count)
+            state.delete(:shelf_count)
+          else
+            params[:shelves] = count
+            params[:shelf_count] = count
+            state[:shelf_count] = count
+          end
+
+          AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: dialog_defaults)
+          store_dialog_params(params)
+
+          sync_layout_preview(dialog)
+        end
+        private_class_method :handle_ui_set_global_shelves
+
         def handle_ui_set_shelf_count(dialog, payload)
           data = parse_payload(payload)
           index = extract_index(data)
@@ -1213,6 +1271,14 @@ module AICabinets
 
           dialog.add_action_callback('ui_set_door_mode') do |_context, payload|
             handle_ui_set_door_mode(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_set_global_front') do |_context, payload|
+            handle_ui_set_global_front(dialog, payload)
+          end
+
+          dialog.add_action_callback('ui_set_global_shelves') do |_context, payload|
+            handle_ui_set_global_shelves(dialog, payload)
           end
 
           dialog.add_action_callback('ui_set_bay_mode') do |_context, payload|
