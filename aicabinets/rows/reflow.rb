@@ -14,7 +14,6 @@ module AICabinets
       OPERATION_NAME = 'AI Cabinets — Reflow Row'.freeze
       EPSILON_MM = 1e-6
       MM_PER_INCH = 25.4
-      EPSILON_IN = EPSILON_MM / MM_PER_INCH
       VALID_SCOPES = {
         instance_only: 'instance',
         instance: 'instance',
@@ -22,7 +21,6 @@ module AICabinets
         all: 'all'
       }.freeze
       MIN_MEMBER_WIDTH_MM = 25.0
-      MIN_MEMBER_WIDTH_IN = MIN_MEMBER_WIDTH_MM / MM_PER_INCH
       def apply_width_change!(instance:, new_width_mm:, scope: :instance_only)
         validate_edit_dependencies!
         instance = validate_instance(instance)
@@ -44,23 +42,22 @@ module AICabinets
           raise RowError.new(:not_in_row, 'Specified cabinet is no longer part of the row.')
         end
 
-        baseline_origins_in = capture_member_origins_in(members)
-        original_width_in = measure_instance_width_in(instance)
-        new_width_in = mm_to_in(new_width)
-        delta_in = new_width_in - original_width_in
-        return Result.new(ok: true, code: :no_change) if delta_in.abs <= EPSILON_IN
+        baseline_origins_mm = capture_member_origins_mm(members)
+        original_width_mm = measure_instance_width_mm(instance)
+        delta_mm = new_width - original_width_mm
+        return Result.new(ok: true, code: :no_change) if delta_mm.abs <= EPSILON_MM
 
         operation_open = false
         model.start_operation(OPERATION_NAME, true)
         operation_open = true
 
         apply_member_width!(instance, new_width, scope_value)
-        offsets_in, total_delta_in = compute_offsets(members, instance, delta_in, scope_key)
+        offsets_mm, total_delta_mm = compute_offsets(members, instance, delta_mm, scope_key)
 
-        apply_transforms!(members, baseline_origins_in, offsets_in)
+        apply_transforms!(members, baseline_origins_mm, offsets_mm)
 
-        if row['lock_total_length'] && total_delta_in.abs > EPSILON_IN
-          adjust_filler_width!(members, total_delta_in)
+        if row['lock_total_length'] && total_delta_mm.abs > EPSILON_MM
+          adjust_filler_width!(members, total_delta_mm)
         end
 
         state_changed ||= update_row_metadata!(row, members)
@@ -195,7 +192,7 @@ module AICabinets
       end
       private_class_method :definition_params
 
-      def compute_offsets(members, target_instance, delta_in, scope_key)
+      def compute_offsets(members, target_instance, delta_mm, scope_key)
         target_definition = target_instance.definition
 
         per_member_delta = members.each_with_object({}) do |member, memo|
@@ -206,7 +203,7 @@ module AICabinets
               member == target_instance
             end
 
-          memo[member] = applies ? delta_in : 0.0
+          memo[member] = applies ? delta_mm : 0.0
         end
 
         cumulative = 0.0
@@ -219,59 +216,58 @@ module AICabinets
       end
       private_class_method :compute_offsets
 
-      def apply_transforms!(members, baseline_origins_in, offsets_in)
+      def apply_transforms!(members, baseline_origins_mm, offsets_mm)
         members.each do |member|
-          baseline_origin = baseline_origins_in[member]
+          baseline_origin = baseline_origins_mm[member]
           next unless baseline_origin
 
-          offset_in = offsets_in[member] || 0.0
-          target_origin_in = baseline_origin + offset_in
-          current_origin_in = origin_x_in(member)
-          delta_in = target_origin_in - current_origin_in
-          next if delta_in.abs <= EPSILON_IN
+          offset_mm = offsets_mm[member] || 0.0
+          target_origin_mm = baseline_origin + offset_mm
+          current_origin_mm = origin_x_mm(member)
+          delta_mm = target_origin_mm - current_origin_mm
+          next if delta_mm.abs <= EPSILON_MM
 
-          translation = Geom::Transformation.translation([delta_in, 0.0, 0.0])
-          member.transform!(translation)
+          member.transform!(translation_mm(delta_mm))
         end
       end
       private_class_method :apply_transforms!
 
-      def adjust_filler_width!(members, total_delta_in)
+      def adjust_filler_width!(members, total_delta_mm)
         filler = members.last
         return unless filler
 
-        filler_width_in = measure_instance_width_in(filler)
-        new_width_in = filler_width_in - total_delta_in
+        filler_width_mm = measure_instance_width_mm(filler)
+        new_width_mm = filler_width_mm - total_delta_mm
 
-        if new_width_in < MIN_MEMBER_WIDTH_IN
+        if new_width_mm < MIN_MEMBER_WIDTH_MM - EPSILON_MM
           raise RowError.new(:lock_length_failed, 'Row lock prevents applying this width change.')
         end
 
-        apply_member_width!(filler, inches_to_mm(new_width_in), VALID_SCOPES[:instance_only])
+        apply_member_width!(filler, new_width_mm, VALID_SCOPES[:instance_only])
       end
       private_class_method :adjust_filler_width!
 
-      def capture_member_origins_in(members)
+      def capture_member_origins_mm(members)
         members.each_with_object({}) do |member, memo|
-          memo[member] = origin_x_in(member)
+          memo[member] = origin_x_mm(member)
         end
       end
-      private_class_method :capture_member_origins_in
+      private_class_method :capture_member_origins_mm
 
-      def origin_x_in(member)
+      def origin_x_mm(member)
         origin = member.transformation.origin
-        origin ? origin.x.to_f : 0.0
+        origin ? length_to_mm(origin.x) : 0.0
       end
-      private_class_method :origin_x_in
+      private_class_method :origin_x_mm
 
-      def measure_instance_width_in(instance)
+      def measure_instance_width_mm(instance)
         bounds = instance.bounds
-        width_in = bounds.max.x.to_f - bounds.min.x.to_f
-        return width_in if width_in.positive?
+        width_mm = length_to_mm(bounds.max.x) - length_to_mm(bounds.min.x)
+        return width_mm if width_mm.positive?
 
         raise RowError.new(:invalid_width, 'Unable to determine cabinet width.')
       end
-      private_class_method :measure_instance_width_in
+      private_class_method :measure_instance_width_mm
 
       def update_row_metadata!(row, members)
         changed = false
@@ -296,21 +292,26 @@ module AICabinets
         bounds = members.map(&:bounds)
         return nil if bounds.empty?
 
-        min_x = bounds.map { |bbox| bbox.min.x.to_f }.min
-        max_x = bounds.map { |bbox| bbox.max.x.to_f }.max
-        inches_to_mm(max_x - min_x)
+        min_x = bounds.map { |bbox| length_to_mm(bbox.min.x) }.min
+        max_x = bounds.map { |bbox| length_to_mm(bbox.max.x) }.max
+        max_x - min_x
       end
       private_class_method :compute_total_length_mm
 
-      def mm_to_in(value_mm)
-        value_mm.to_f / MM_PER_INCH
+      def translation_mm(delta_mm)
+        vector = AICabinets::Ops::Units.vector_mm(delta_mm, 0.0, 0.0)
+        Geom::Transformation.translation(vector)
       end
-      private_class_method :mm_to_in
+      private_class_method :translation_mm
 
-      def inches_to_mm(value_in)
-        value_in.to_f * MM_PER_INCH
+      def length_to_mm(value)
+        if value.respond_to?(:to_mm)
+          value.to_mm.to_f
+        else
+          value.to_f * MM_PER_INCH
+        end
       end
-      private_class_method :inches_to_mm
+      private_class_method :length_to_mm
     end
   end
 end
