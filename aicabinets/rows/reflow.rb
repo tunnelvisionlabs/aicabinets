@@ -42,7 +42,6 @@ module AICabinets
           raise RowError.new(:not_in_row, 'Specified cabinet is no longer part of the row.')
         end
 
-        baseline_origins_mm = capture_member_origins_mm(members)
         original_width_mm = measure_instance_width_mm(instance)
         delta_mm = new_width - original_width_mm
         return Result.new(ok: true, code: :no_change) if delta_mm.abs <= EPSILON_MM
@@ -54,7 +53,7 @@ module AICabinets
         apply_member_width!(instance, new_width, scope_value)
         offsets_mm, total_delta_mm = compute_offsets(members, instance, delta_mm, scope_key)
 
-        apply_transforms!(members, baseline_origins_mm, offsets_mm)
+        apply_transforms!(members, offsets_mm)
 
         if row['lock_total_length'] && total_delta_mm.abs > EPSILON_MM
           adjust_filler_width!(members, total_delta_mm)
@@ -216,18 +215,13 @@ module AICabinets
       end
       private_class_method :compute_offsets
 
-      def apply_transforms!(members, baseline_origins_mm, offsets_mm)
+      def apply_transforms!(members, offsets_mm)
         members.each do |member|
-          baseline_origin = baseline_origins_mm[member]
-          next unless baseline_origin
+          offset_mm = offsets_mm[member]
+          next unless offset_mm
+          next if offset_mm.abs <= EPSILON_MM
 
-          offset_mm = offsets_mm[member] || 0.0
-          target_origin_mm = baseline_origin + offset_mm
-          current_origin_mm = origin_x_mm(member)
-          delta_mm = target_origin_mm - current_origin_mm
-          next if delta_mm.abs <= EPSILON_MM
-
-          member.transform!(translation_mm(delta_mm))
+          member.transform!(translation_mm(offset_mm))
         end
       end
       private_class_method :apply_transforms!
@@ -246,19 +240,6 @@ module AICabinets
         apply_member_width!(filler, new_width_mm, VALID_SCOPES[:instance_only])
       end
       private_class_method :adjust_filler_width!
-
-      def capture_member_origins_mm(members)
-        members.each_with_object({}) do |member, memo|
-          memo[member] = origin_x_mm(member)
-        end
-      end
-      private_class_method :capture_member_origins_mm
-
-      def origin_x_mm(member)
-        origin = member.transformation.origin
-        origin ? length_to_mm(origin.x) : 0.0
-      end
-      private_class_method :origin_x_mm
 
       def measure_instance_width_mm(instance)
         bounds = instance.bounds
