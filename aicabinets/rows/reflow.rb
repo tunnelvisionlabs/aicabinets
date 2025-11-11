@@ -307,11 +307,24 @@ module AICabinets
           return value.to_mm.to_f
         end
 
-        if value.is_a?(Numeric)
-          return value.to_f
+        length_class =
+          if defined?(AICabinets::Ops::Units::LENGTH_CLASS)
+            AICabinets::Ops::Units::LENGTH_CLASS
+          end
+
+        if value.respond_to?(:to_mm)
+          return value.to_mm.to_f
         end
 
-        value.to_mm.to_f if value.respond_to?(:to_mm)
+        if length_class && value.is_a?(Numeric)
+          return length_class.new(value).to_mm.to_f
+        end
+
+        if value.is_a?(Numeric)
+          return value.to_f * 25.4
+        end
+
+        nil
       rescue StandardError
         nil
       end
