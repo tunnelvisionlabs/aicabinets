@@ -18,8 +18,6 @@ module AICabinets
         all: 'all'
       }.freeze
       MIN_MEMBER_WIDTH_MM = 25.0
-      MOVE_EPSILON_LENGTH = AICabinets::Ops::Units.to_length_mm(1e-6)
-
       def apply_width_change!(instance:, new_width_mm:, scope: :instance_only)
         validate_edit_dependencies!
         instance = validate_instance(instance)
@@ -41,10 +39,6 @@ module AICabinets
           raise RowError.new(:not_in_row, 'Specified cabinet is no longer part of the row.')
         end
 
-        original_transforms = members.each_with_object({}) do |member, memo|
-          memo[member] = member.transformation
-        end
-
         operation_open = false
         model.start_operation(OPERATION_NAME, true)
         operation_open = true
@@ -52,7 +46,7 @@ module AICabinets
         delta_mm = apply_member_width!(instance, new_width, scope_value)
         offsets_mm, total_delta_mm = compute_offsets(members, instance, delta_mm, scope_key)
 
-        apply_transforms!(members, offsets_mm, original_transforms)
+        apply_transforms!(members, offsets_mm)
 
         if row['lock_total_length'] && total_delta_mm.abs > Float::EPSILON
           adjust_filler_width!(members, total_delta_mm)
@@ -215,21 +209,14 @@ module AICabinets
       end
       private_class_method :compute_offsets
 
-      def apply_transforms!(members, offsets_mm, original_transforms)
+      def apply_transforms!(members, offsets_mm)
         members.each do |member|
           offset_mm = offsets_mm[member] || 0.0
           next if offset_mm.abs <= Float::EPSILON
 
-          base = original_transforms[member] || member.transformation
-          base_origin = base.origin
           offset_vector = AICabinets::Ops::Units.vector_mm(offset_mm, 0.0, 0.0)
-          target_origin = base_origin.offset(offset_vector)
-          current_origin = member.transformation.origin
-          move_vector = current_origin.vector_to(target_origin)
-
-          next if move_vector.length <= MOVE_EPSILON_LENGTH
-
-          member.transform!(Geom::Transformation.translation(move_vector))
+          translation = Geom::Transformation.translation(offset_vector)
+          member.transform!(translation)
         end
       end
       private_class_method :apply_transforms!
