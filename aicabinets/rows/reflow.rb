@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'time'
 
 Sketchup.require('aicabinets/ops/edit_base_cabinet')
 Sketchup.require('aicabinets/ops/units')
@@ -11,6 +12,7 @@ module AICabinets
       module_function
 
       OPERATION_NAME = 'AI Cabinets — Reflow Row'.freeze
+      EPSILON_MM = 1e-6
       VALID_SCOPES = {
         instance_only: 'instance',
         instance: 'instance',
@@ -28,7 +30,7 @@ module AICabinets
         raise RowError.new(:not_in_row, 'The cabinet is not part of a row.') unless membership
 
         model = instance.model
-        state, _changed = AICabinets::Rows.__send__(:prepare_state, model)
+        state, state_changed = AICabinets::Rows.__send__(:prepare_state, model)
         row = state['rows'][membership[:row_id]]
         raise RowError.new(:unknown_row, 'Row not found.') unless row
 
@@ -39,18 +41,28 @@ module AICabinets
           raise RowError.new(:not_in_row, 'Specified cabinet is no longer part of the row.')
         end
 
+        baseline_origins_mm = capture_member_origins_mm(members)
+        original_width_mm = measure_instance_width_mm(instance)
+        delta_mm = new_width - original_width_mm
+        return Result.new(ok: true, code: :no_change) if delta_mm.abs <= EPSILON_MM
+
         operation_open = false
         model.start_operation(OPERATION_NAME, true)
         operation_open = true
 
-        delta_mm = apply_member_width!(instance, new_width, scope_value)
+        apply_member_width!(instance, new_width, scope_value)
         offsets_mm, total_delta_mm = compute_offsets(members, instance, delta_mm, scope_key)
 
-        apply_transforms!(members, offsets_mm)
+        apply_transforms!(members, baseline_origins_mm, offsets_mm)
 
-        if row['lock_total_length'] && total_delta_mm.abs > Float::EPSILON
+        if row['lock_total_length'] && total_delta_mm.abs > EPSILON_MM
           adjust_filler_width!(members, total_delta_mm)
         end
+
+        state_changed ||= update_row_metadata!(row, members)
+        AICabinets::Rows.__send__(:write_state, model, state) if state_changed
+
+        AICabinets::Rows.__send__(:trigger_regeneration, model, row)
 
         model.commit_operation
         operation_open = false
@@ -152,10 +164,6 @@ module AICabinets
         edit_ops = AICabinets::Ops::EditBaseCabinet
         original_definition = instance.definition
         params = definition_params(original_definition)
-        old_width_mm = params[:width_mm].to_f
-
-        return 0.0 if (old_width_mm - new_width_mm).abs <= Float::EPSILON
-
         params[:width_mm] = new_width_mm
         sanitized = edit_ops.__send__(:validate_params!, params)
 
@@ -164,8 +172,6 @@ module AICabinets
 
         def_key, params_json = edit_ops.__send__(:build_definition_key, sanitized)
         edit_ops.__send__(:assign_definition_attributes, definition, def_key, params_json)
-
-        new_width_mm - old_width_mm
       end
       private_class_method :apply_member_width!
 
@@ -209,12 +215,18 @@ module AICabinets
       end
       private_class_method :compute_offsets
 
-      def apply_transforms!(members, offsets_mm)
+      def apply_transforms!(members, baseline_origins_mm, offsets_mm)
         members.each do |member|
-          offset_mm = offsets_mm[member] || 0.0
-          next if offset_mm.abs <= Float::EPSILON
+          baseline_origin = baseline_origins_mm[member]
+          next unless baseline_origin
 
-          offset_vector = AICabinets::Ops::Units.vector_mm(offset_mm, 0.0, 0.0)
+          offset_mm = offsets_mm[member] || 0.0
+          target_origin_mm = baseline_origin + offset_mm
+          current_origin_mm = origin_x_mm(member)
+          delta_mm = target_origin_mm - current_origin_mm
+          next if delta_mm.abs <= EPSILON_MM
+
+          offset_vector = AICabinets::Ops::Units.vector_mm(delta_mm, 0.0, 0.0)
           translation = Geom::Transformation.translation(offset_vector)
           member.transform!(translation)
         end
@@ -225,8 +237,7 @@ module AICabinets
         filler = members.last
         return unless filler
 
-        filler_params = definition_params(filler.definition)
-        filler_width = filler_params[:width_mm].to_f
+        filler_width = measure_instance_width_mm(filler)
         new_width = filler_width - total_delta_mm
 
         if new_width < MIN_MEMBER_WIDTH_MM
@@ -236,6 +247,75 @@ module AICabinets
         apply_member_width!(filler, new_width, VALID_SCOPES[:instance_only])
       end
       private_class_method :adjust_filler_width!
+
+      def capture_member_origins_mm(members)
+        members.each_with_object({}) do |member, memo|
+          memo[member] = origin_x_mm(member)
+        end
+      end
+      private_class_method :capture_member_origins_mm
+
+      def origin_x_mm(member)
+        origin = member.transformation.origin
+        length_to_mm(origin&.x) || 0.0
+      end
+      private_class_method :origin_x_mm
+
+      def measure_instance_width_mm(instance)
+        bounds = instance.bounds
+        width_length = bounds.max.x - bounds.min.x
+        width_mm = length_to_mm(width_length)
+        return width_mm if width_mm && width_mm.positive?
+
+        raise RowError.new(:invalid_width, 'Unable to determine cabinet width.')
+      end
+      private_class_method :measure_instance_width_mm
+
+      def update_row_metadata!(row, members)
+        changed = false
+        now_iso = Time.now.utc.iso8601
+
+        if row['updated_at'] != now_iso
+          row['updated_at'] = now_iso
+          changed = true
+        end
+
+        total_length = compute_total_length_mm(members)
+        if total_length && row['total_length_mm'] != total_length
+          row['total_length_mm'] = total_length
+          changed = true
+        end
+
+        changed
+      end
+      private_class_method :update_row_metadata!
+
+      def compute_total_length_mm(members)
+        bounds = members.map(&:bounds)
+        return nil if bounds.empty?
+
+        min_x = bounds.map { |bbox| bbox.min.x }.min
+        max_x = bounds.map { |bbox| bbox.max.x }.max
+        length_to_mm(max_x - min_x)
+      end
+      private_class_method :compute_total_length_mm
+
+      def length_to_mm(value)
+        return unless value
+
+        if defined?(Sketchup::Length) && value.is_a?(Sketchup::Length)
+          return value.to_mm.to_f
+        end
+
+        if value.is_a?(Numeric)
+          return value.to_f
+        end
+
+        value.to_mm.to_f if value.respond_to?(:to_mm)
+      rescue StandardError
+        nil
+      end
+      private_class_method :length_to_mm
     end
   end
 end
