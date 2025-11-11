@@ -3,6 +3,7 @@
 require 'json'
 
 Sketchup.require('aicabinets/ops/edit_base_cabinet')
+Sketchup.require('aicabinets/ops/units')
 
 module AICabinets
   module Rows
@@ -17,6 +18,7 @@ module AICabinets
         all: 'all'
       }.freeze
       MIN_MEMBER_WIDTH_MM = 25.0
+      MOVE_EPSILON_LENGTH = AICabinets::Ops::Units.to_length_mm(1e-6)
 
       def apply_width_change!(instance:, new_width_mm:, scope: :instance_only)
         validate_edit_dependencies!
@@ -219,8 +221,15 @@ module AICabinets
           next if offset_mm.abs <= Float::EPSILON
 
           base = original_transforms[member] || member.transformation
-          translation = Geom::Transformation.translation(Geom::Vector3d.new(offset_mm.mm, 0, 0))
-          member.transformation = translation * base
+          base_origin = base.origin
+          offset_vector = AICabinets::Ops::Units.vector_mm(offset_mm, 0.0, 0.0)
+          target_origin = base_origin.offset(offset_vector)
+          current_origin = member.transformation.origin
+          move_vector = current_origin.vector_to(target_origin)
+
+          next if move_vector.length <= MOVE_EPSILON_LENGTH
+
+          member.transform!(Geom::Transformation.translation(move_vector))
         end
       end
       private_class_method :apply_transforms!
