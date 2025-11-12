@@ -92,7 +92,7 @@ module AICabinets
           right_neighbor = entries[index + 1]
 
           left_kind = boundary_kind(entry, left_neighbor)
-          right_kind = boundary_kind(entry, right_neighbor, side: :right)
+          right_kind = boundary_kind(entry, right_neighbor, _side: :right)
 
           trim_left = trim_amount(entry, left_kind, reveal_mm, entry[:legacy_left_mm])
           trim_right = trim_amount(entry, right_kind, reveal_mm, entry[:legacy_right_mm])
