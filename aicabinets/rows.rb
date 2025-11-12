@@ -6,6 +6,8 @@ require 'time'
 require 'sketchup.rb'
 
 Sketchup.require('aicabinets/rows/reflow')
+Sketchup.require('aicabinets/rows/reveal')
+Sketchup.require('aicabinets/rows/regeneration')
 
 module AICabinets
   module Rows
