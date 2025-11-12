@@ -21,6 +21,7 @@ module AICabinets
         commands[:rows_add_selection] ||= build_rows_add_selection_command
         commands[:rows_remove_selection] ||= build_rows_remove_selection_command
         commands[:rows_toggle_highlight] ||= build_rows_highlight_command
+        commands[:rows_toggle_auto_select] ||= build_rows_auto_select_command
       end
 
       private
@@ -91,6 +92,24 @@ module AICabinets
         command.tooltip = 'Rows: Toggle Highlight'
         command.status_bar_text = 'Toggle highlighting of the active AI Cabinets row.'
         assign_command_icons(command, 'rows_highlight')
+        command
+      end
+
+      def build_rows_auto_select_command
+        command = ::UI::Command.new('Rows: Auto-select Row on Member Select') do
+          handle_rows_toggle_auto_select
+        end
+        command.tooltip = 'Rows: Auto-select Row on Member Select'
+        command.status_bar_text = 'Toggle automatically selecting an entire row when picking a member.'
+        if command.respond_to?(:set_validation_proc) && defined?(MF_CHECKED) && defined?(MF_UNCHECKED)
+          command.set_validation_proc do
+            begin
+              AICabinets::UI::Rows.auto_select_row? ? MF_CHECKED : MF_UNCHECKED
+            rescue StandardError
+              MF_UNCHECKED
+            end
+          end
+        end
         command
       end
 
@@ -199,6 +218,15 @@ module AICabinets
         end
 
         AICabinets::UI::Rows.toggle_highlight
+      end
+
+      def handle_rows_toggle_auto_select
+        unless defined?(AICabinets::UI::Rows)
+          warn('AI Cabinets: Rows UI unavailable.')
+          return
+        end
+
+        AICabinets::UI::Rows.toggle_auto_select
       end
 
       def notify_selection_issue(message, status: nil)

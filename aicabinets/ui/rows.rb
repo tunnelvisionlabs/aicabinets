@@ -76,8 +76,37 @@ module AICabinets
         nil
       end
 
-      def toggle_highlight
-        response = ManagerDialog.toggle_highlight
+      def toggle_highlight(row_id: nil)
+        model = Sketchup.active_model
+        highlight_module = AICabinets::Rows::Highlight
+        current_row_id = highlight_module.active_row_id(model: model)
+
+        target_row_id = row_id || ManagerDialog.active_row_id
+        target_row_id = target_row_id.to_s
+        target_row_id = nil if target_row_id.empty?
+
+        if current_row_id && (!target_row_id || target_row_id == current_row_id)
+          response = ManagerDialog.set_highlight(false)
+          unless response.is_a?(Hash) && response[:ok]
+            error = response && response[:error]
+            notify(error[:message]) if error
+            return nil
+          end
+
+          return response
+        end
+
+        target_row_id ||= infer_row_id_from_selection(model)
+        if target_row_id.to_s.empty?
+          notify('Select a row in the Rows Manager or select cabinets from a single row to highlight.')
+          return nil
+        end
+
+        detail = AICabinets::Rows.get_row(model: model, row_id: target_row_id)
+        ManagerDialog.set_active_row(target_row_id, sync_selection: false, detail: detail)
+        ManagerDialog.refresh_ui(row_id: target_row_id)
+
+        response = ManagerDialog.set_highlight(true)
         unless response.is_a?(Hash) && response[:ok]
           error = response && response[:error]
           notify(error[:message]) if error
@@ -85,6 +114,23 @@ module AICabinets
         end
 
         response
+      rescue AICabinets::Rows::RowError => error
+        notify(error.message)
+        nil
+      end
+
+      def auto_select_row?
+        AICabinets::Rows::Selection.auto_select_row?
+      end
+
+      def set_auto_select_row(on:)
+        result = AICabinets::Rows::Selection.set_auto_select_row(on: on, model: Sketchup.active_model)
+        ManagerDialog.refresh_preferences_ui if ManagerDialog.respond_to?(:refresh_preferences_ui)
+        result
+      end
+
+      def toggle_auto_select
+        set_auto_select_row(on: !auto_select_row?)
       end
 
       def refresh_active_row
@@ -124,6 +170,13 @@ module AICabinets
         ::UI.messagebox(message, button_type, 'AI Cabinets')
       end
       private_class_method :notify
+
+      def infer_row_id_from_selection(model)
+        AICabinets::Rows.infer_row_from_selection(model)
+      rescue StandardError
+        nil
+      end
+      private_class_method :infer_row_id_from_selection
 
     end
   end
