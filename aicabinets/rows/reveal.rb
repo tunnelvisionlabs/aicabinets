@@ -54,7 +54,7 @@ module AICabinets
         warn("AI Cabinets: Row reveal application failed: #{error.message}")
         raise RowError.new(:reveal_failed, 'Unable to apply row reveal across the row.')
       ensure
-        if operation && operation_open && model&.respond_to?(:abort_operation)
+        if operation && operation_open && model.respond_to?(:abort_operation)
           model.abort_operation
         end
       end
@@ -140,7 +140,7 @@ module AICabinets
       end
       private_class_method :apply_category
 
-      def boundary_kind(entry, neighbor, side: :left)
+      def boundary_kind(entry, neighbor, _side: :left)
         return :legacy unless entry[:use_row_reveal]
         return :exposed_end unless neighbor&.dig(:use_row_reveal)
 
@@ -148,7 +148,7 @@ module AICabinets
       end
       private_class_method :boundary_kind
 
-      def trim_amount(entry, kind, reveal_mm, legacy_mm)
+      def trim_amount(_entry, kind, reveal_mm, legacy_mm)
         case kind
         when :interior_split
           [reveal_mm.to_f / 2.0, 0.0].max
@@ -165,9 +165,7 @@ module AICabinets
         return Rows::DEFAULT_ROW_REVEAL_MM unless value
 
         numeric =
-          if value.is_a?(Numeric)
-            value.to_f
-          elsif value.respond_to?(:to_f)
+          if value.is_a?(Numeric) || value.respond_to?(:to_f)
             value.to_f
           else
             Float(value)
@@ -232,9 +230,7 @@ module AICabinets
           next if value.nil?
 
           numeric =
-            if value.is_a?(Numeric)
-              value.to_f
-            elsif value.respond_to?(:to_f)
+            if value.is_a?(Numeric) || value.respond_to?(:to_f)
               value.to_f
             else
               Float(value)
