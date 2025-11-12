@@ -4,7 +4,6 @@ require 'json'
 require 'time'
 
 Sketchup.require('aicabinets/ops/edit_base_cabinet')
-Sketchup.require('aicabinets/ops/units')
 
 module AICabinets
   module Rows
@@ -51,9 +50,12 @@ module AICabinets
         operation_open = true
 
         apply_member_width!(instance, new_width, scope_value)
-        offsets_mm, total_delta_mm = compute_offsets(members, instance, delta_mm, scope_key)
-
-        apply_transforms!(members, offsets_mm)
+        total_delta_mm = apply_reflow_transforms!(
+          members,
+          instance,
+          delta_mm,
+          scope_key
+        )
 
         if row['lock_total_length'] && total_delta_mm.abs > EPSILON_MM
           adjust_filler_width!(members, total_delta_mm)
@@ -191,37 +193,35 @@ module AICabinets
       end
       private_class_method :definition_params
 
-      def compute_offsets(members, target_instance, delta_mm, scope_key)
+      def apply_reflow_transforms!(members, target_instance, delta_mm, scope_key)
         target_definition = target_instance.definition
+        cumulative_shift_mm = 0.0
+        occurrences = 0
 
-        per_member_delta = members.each_with_object({}) do |member, memo|
-          applies =
-            if scope_key == :all_instances
-              member.definition == target_definition
-            else
-              member == target_instance
-            end
-
-          memo[member] = applies ? delta_mm : 0.0
-        end
-
-        cumulative = 0.0
-        offsets = members.each_with_object({}) do |member, memo|
-          memo[member] = cumulative
-          cumulative += per_member_delta[member]
-        end
-
-        [offsets, cumulative]
-      end
-      private_class_method :compute_offsets
-
-      def apply_transforms!(members, offsets_mm)
         members.each do |member|
-          offset_mm = offsets_mm.fetch(member, 0.0)
-          translate_x_mm!(member, offset_mm)
+          translate_x_mm!(member, cumulative_shift_mm)
+
+          next unless member_triggers_delta?(member, target_instance, target_definition, scope_key)
+
+          occurrences += 1
+          cumulative_shift_mm += delta_mm
+        end
+
+        occurrences * delta_mm
+      end
+      private_class_method :apply_reflow_transforms!
+
+      def member_triggers_delta?(member, target_instance, target_definition, scope_key)
+        case scope_key
+        when :instance_only, :instance
+          member == target_instance
+        when :all_instances, :all
+          member.definition == target_definition
+        else
+          false
         end
       end
-      private_class_method :apply_transforms!
+      private_class_method :member_triggers_delta?
 
       def translate_x_mm!(member, delta_mm)
         shift_mm =
@@ -233,8 +233,10 @@ module AICabinets
 
         return if shift_mm.abs <= EPSILON_MM
 
-        vector = AICabinets::Ops::Units.vector_mm(shift_mm, 0.0, 0.0)
-        member.transform!(Geom::Transformation.translation(vector))
+        delta_length = shift_mm.mm
+        member.transform!(
+          Geom::Transformation.translation([delta_length.to_f, 0.0, 0.0])
+        )
       end
       private_class_method :translate_x_mm!
 
