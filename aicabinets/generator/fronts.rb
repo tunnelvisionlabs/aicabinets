@@ -347,8 +347,18 @@ module AICabinets
         vertical_bounds = door_vertical_bounds(params)
         return [] unless vertical_bounds
 
-        left_reveal_mm = params.door_edge_reveal_mm.to_f
-        right_reveal_mm = params.door_edge_reveal_mm.to_f
+        left_reveal_mm =
+          if params.respond_to?(:door_edge_reveal_mm_for)
+            params.door_edge_reveal_mm_for(:left).to_f
+          else
+            params.door_edge_reveal_mm.to_f
+          end
+        right_reveal_mm =
+          if params.respond_to?(:door_edge_reveal_mm_for)
+            params.door_edge_reveal_mm_for(:right).to_f
+          else
+            params.door_edge_reveal_mm.to_f
+          end
         clear_width_mm = params.width_mm.to_f - left_reveal_mm - right_reveal_mm
         if clear_width_mm <= MIN_DIMENSION_MM
           warn_skip('Skipped doors because reveals consumed the cabinet width.')
@@ -746,17 +756,27 @@ module AICabinets
 
       def bay_edge_reveal_mm(params:, bay_index:, total_bays:, side:, front_presence:, orientation:)
         edge_reveal = params.door_edge_reveal_mm.to_f
-        return edge_reveal if total_bays <= 1
+        if total_bays <= 1
+          return params.door_edge_reveal_mm_for(side).to_f if params.respond_to?(:door_edge_reveal_mm_for)
+
+          return edge_reveal
+        end
         return edge_reveal if orientation == :horizontal
 
         case side
         when :left
-          return edge_reveal if bay_index.zero?
+          if bay_index.zero?
+            return params.door_edge_reveal_mm_for(:left).to_f if params.respond_to?(:door_edge_reveal_mm_for)
+            return edge_reveal
+          end
 
           neighbor_index = bay_index - 1
           return edge_reveal unless front_presence[bay_index] && front_presence[neighbor_index]
         when :right
-          return edge_reveal if bay_index == total_bays - 1
+          if bay_index == total_bays - 1
+            return params.door_edge_reveal_mm_for(:right).to_f if params.respond_to?(:door_edge_reveal_mm_for)
+            return edge_reveal
+          end
 
           neighbor_index = bay_index + 1
           return edge_reveal unless front_presence[bay_index] && front_presence[neighbor_index]

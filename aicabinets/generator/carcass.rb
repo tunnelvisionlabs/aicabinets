@@ -516,8 +516,10 @@ module AICabinets
                     :interior_clear_height_mm, :partition_left_faces_mm,
                     :partition_thickness_mm, :partition_orientation, :front_mode, :door_thickness,
                     :door_thickness_mm, :door_edge_reveal_mm,
+                    :door_edge_reveal_left_mm, :door_edge_reveal_right_mm,
                     :door_top_reveal_mm, :door_bottom_reveal_mm,
                     :door_center_reveal_mm, :door_edge_reveal,
+                    :door_edge_reveal_left, :door_edge_reveal_right,
                     :door_top_reveal, :door_bottom_reveal,
                     :door_center_reveal, :partition_bays
 
@@ -609,6 +611,14 @@ module AICabinets
 
           edge_reveal_override =
             coerce_non_negative_numeric(params_mm[:door_reveal_mm] || params_mm[:door_reveal])
+          edge_reveal_left_override =
+            coerce_non_negative_numeric(
+              params_mm[:door_edge_reveal_left_mm] || params_mm['door_edge_reveal_left_mm']
+            )
+          edge_reveal_right_override =
+            coerce_non_negative_numeric(
+              params_mm[:door_edge_reveal_right_mm] || params_mm['door_edge_reveal_right_mm']
+            )
           top_reveal_override =
             coerce_non_negative_numeric(params_mm[:top_reveal_mm] || params_mm[:top_reveal])
           bottom_reveal_override =
@@ -618,6 +628,10 @@ module AICabinets
 
           @door_edge_reveal_mm =
             (edge_reveal_override || Fronts::REVEAL_EDGE_MM).to_f
+          @door_edge_reveal_left_mm =
+            (edge_reveal_left_override || @door_edge_reveal_mm).to_f
+          @door_edge_reveal_right_mm =
+            (edge_reveal_right_override || @door_edge_reveal_mm).to_f
           @door_top_reveal_mm =
             (top_reveal_override || Fronts::REVEAL_TOP_MM).to_f
           @door_bottom_reveal_mm =
@@ -626,6 +640,8 @@ module AICabinets
             (center_reveal_override || Fronts::REVEAL_CENTER_MM).to_f
 
           @door_edge_reveal = length_mm(@door_edge_reveal_mm)
+          @door_edge_reveal_left = length_mm(@door_edge_reveal_left_mm)
+          @door_edge_reveal_right = length_mm(@door_edge_reveal_right_mm)
           @door_top_reveal = length_mm(@door_top_reveal_mm)
           @door_bottom_reveal = length_mm(@door_bottom_reveal_mm)
           @door_center_reveal = length_mm(@door_center_reveal_mm)
@@ -688,6 +704,17 @@ module AICabinets
 
         def partition_thickness
           @partition_thickness ||= length_mm(@partition_thickness_mm)
+        end
+
+        def door_edge_reveal_mm_for(side)
+          case side
+          when :left
+            @door_edge_reveal_left_mm
+          when :right
+            @door_edge_reveal_right_mm
+          else
+            @door_edge_reveal_mm
+          end
         end
 
         private
