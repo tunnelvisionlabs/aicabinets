@@ -5,6 +5,8 @@ require 'securerandom'
 require 'time'
 require 'sketchup.rb'
 
+Sketchup.require('aicabinets/rows/reflow')
+
 module AICabinets
   module Rows
     Result = Struct.new(:ok, :code, :message, keyword_init: true) do
