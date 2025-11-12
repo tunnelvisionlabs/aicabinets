@@ -27,6 +27,7 @@ module AICabinets
           state[:pending_focus_row] = row_id if row_id
           show_dialog(dialog)
           refresh_ui
+          sync_preferences_to_ui
           dialog
         end
 
@@ -39,6 +40,7 @@ module AICabinets
           else
             show_dialog(dialog)
             refresh_ui
+            sync_preferences_to_ui
           end
         end
 
@@ -50,6 +52,14 @@ module AICabinets
           !!state[:highlight]
         end
 
+        def highlight_strategy
+          state[:highlight_strategy]
+        end
+
+        def refresh_preferences_ui
+          sync_preferences_to_ui
+        end
+
         def set_active_row(row_id, sync_selection: true, detail: nil)
           previous_row_id = state[:active_row_id]
           state[:active_row_id] = row_id
@@ -58,13 +68,15 @@ module AICabinets
 
           if highlight_enabled? && row_id
             begin
-              AICabinets::Rows.highlight(model: active_model, row_id: row_id, enabled: true)
+              result = AICabinets::Rows.highlight(model: active_model, row_id: row_id, enabled: true)
+              store_highlight_result(result, true)
             rescue AICabinets::Rows::RowError => error
               warn("AI Cabinets: Unable to update row highlight: #{error.message}")
             end
           elsif previous_row_id && previous_row_id != row_id
             begin
-              AICabinets::Rows.highlight(model: active_model, row_id: previous_row_id, enabled: false)
+              result = AICabinets::Rows.highlight(model: active_model, row_id: previous_row_id, enabled: false)
+              store_highlight_result(result, false)
             rescue AICabinets::Rows::RowError
               # Ignore cleanup failures when highlight is disabled.
             end
@@ -73,20 +85,23 @@ module AICabinets
           detail
         end
 
-      def set_highlight(enabled)
-        row_id = active_row_id
-        raise AICabinets::Rows::RowError.new(:unknown_row, 'Select a row before highlighting.') if enabled && row_id.to_s.empty?
+        def set_highlight(enabled)
+          row_id = active_row_id
+          raise AICabinets::Rows::RowError.new(:unknown_row, 'Select a row before highlighting.') if enabled && row_id.to_s.empty?
 
-        state[:highlight] = enabled
-        unless row_id
-          update_highlight_ui(false)
-          return { ok: true, highlight: false }
+          unless row_id
+            state[:highlight] = false
+            state.delete(:highlight_strategy)
+            update_highlight_ui(false)
+            return { ok: true, highlight: false }
+          end
+
+          state[:highlight] = enabled
+          result = AICabinets::Rows.highlight(model: active_model, row_id: row_id, enabled: enabled)
+          store_highlight_result(result, enabled)
+          update_highlight_ui(enabled)
+          normalize_highlight_result(result, enabled)
         end
-
-        result = AICabinets::Rows.highlight(model: active_model, row_id: row_id, enabled: enabled)
-        update_highlight_ui(enabled)
-        { ok: true, highlight: enabled, overlay: result }
-      end
 
       def toggle_highlight
         new_state = !highlight_enabled?
@@ -289,13 +304,22 @@ module AICabinets
           when 'rows.highlight'
             row_id = fetch_row_id(params)
             enabled = fetch_boolean(params, :on)
-            state[:active_row_id] = row_id
-            state[:highlight] = !!enabled
-            result = AICabinets::Rows.highlight(model: active_model, row_id: row_id, enabled: enabled)
-            update_highlight_ui(enabled)
+            enabled = false if enabled.nil?
+            detail = AICabinets::Rows.get_row(model: active_model, row_id: row_id)
+            set_active_row(row_id, sync_selection: false, detail: detail)
+            result = set_highlight(!!enabled)
+            refresh_ui(row_id: row_id)
             result
           when 'rows.selection'
             { pids: selection_component_pids }
+          when 'rows.set_pref'
+            enabled = fetch_boolean(params, :auto_select_row_on_member)
+            enabled = false if enabled.nil?
+            result = AICabinets::Rows::Selection.set_auto_select_row(on: enabled, model: active_model)
+            sync_preferences_to_ui
+            { ok: true, auto_select_row_on_member: !!result[:enabled] }
+          when 'rows.get_pref'
+            { auto_select_row_on_member: AICabinets::Rows::Selection.auto_select_row? }
           else
             raise AICabinets::Rows::RowError.new(:unsupported_method, "Unknown rows method: #{method}")
           end
@@ -413,23 +437,57 @@ module AICabinets
     end
     private_class_method :update_highlight_ui
 
+    def sync_preferences_to_ui
+      dialog = current_dialog
+      return unless dialog
+
+      enabled = AICabinets::Rows::Selection.auto_select_row?
+      json = JSON.generate(auto_select_row_on_member: enabled)
+      dialog.execute_script("window.AICabinetsRows && window.AICabinetsRows.setPreferences(#{json});")
+    end
+    private_class_method :sync_preferences_to_ui
+
+    def normalize_highlight_result(result, enabled)
+      if result.is_a?(Hash)
+        normalized = result.transform_keys { |key| key.respond_to?(:to_sym) ? key.to_sym : key }
+        normalized[:highlight] = enabled
+        normalized[:ok] = true unless normalized.key?(:ok)
+        normalized
+      else
+        { ok: true, highlight: enabled }
+      end
+    end
+    private_class_method :normalize_highlight_result
+
+    def store_highlight_result(result, enabled)
+      return unless result.is_a?(Hash)
+
+      strategy = result[:strategy] || result['strategy']
+      if strategy
+        state[:highlight_strategy] = strategy
+      elsif !enabled
+        state.delete(:highlight_strategy)
+      end
+    end
+    private_class_method :store_highlight_result
+
     def active_model
       Sketchup.active_model
     end
-        private_class_method :active_model
+    private_class_method :active_model
 
-        def js_string(value)
-          format('"%s"', value.to_s.gsub(/\\/, '\\\\').gsub(/"/, '\\"'))
-        end
-        private_class_method :js_string
+    def js_string(value)
+      format('"%s"', value.to_s.gsub(/\\/, '\\\\').gsub(/"/, '\\"'))
+    end
+    private_class_method :js_string
 
-        def notify(message)
-          return unless defined?(::UI)
+    def notify(message)
+      return unless defined?(::UI)
 
-          button_type = defined?(::MB_OK) ? ::MB_OK : 0
-          ::UI.messagebox(message, button_type, 'AI Cabinets')
-        end
-        private_class_method :notify
+      button_type = defined?(::MB_OK) ? ::MB_OK : 0
+      ::UI.messagebox(message, button_type, 'AI Cabinets')
+    end
+    private_class_method :notify
       end
     end
   end

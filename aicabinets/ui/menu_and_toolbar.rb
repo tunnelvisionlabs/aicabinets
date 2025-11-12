@@ -40,7 +40,8 @@ module AICabinets
           commands[:rows_manage],
           commands[:rows_add_selection],
           commands[:rows_remove_selection],
-          commands[:rows_toggle_highlight]
+          commands[:rows_toggle_highlight],
+          commands[:rows_toggle_auto_select]
         ].compact
 
         if rows_commands.any?
