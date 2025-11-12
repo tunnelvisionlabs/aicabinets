@@ -116,11 +116,21 @@ module AICabinets
       private_class_method :validate_instance
 
       def coerce_positive_mm(value)
-        mm = if value.respond_to?(:to_mm)
-               value.to_mm.to_f
-             else
-               Float(value)
-             end
+        mm =
+          case value
+          when nil
+            raise ArgumentError
+          when String
+            Float(value)
+          else
+            if length_object?(value)
+              value.to_mm.to_f
+            elsif value.respond_to?(:to_f)
+              value.to_f
+            else
+              Float(value)
+            end
+          end
 
         raise RowError.new(:invalid_width, 'Width must be positive.') unless mm.positive?
 
@@ -129,6 +139,22 @@ module AICabinets
         raise RowError.new(:invalid_width, 'Width must be expressed in millimeters.')
       end
       private_class_method :coerce_positive_mm
+
+      def length_object?(value)
+        length_class =
+          if defined?(Sketchup::Length)
+            Sketchup::Length
+          elsif defined?(Length)
+            Length
+          end
+
+        if length_class
+          value.is_a?(length_class)
+        else
+          value.respond_to?(:to_mm) && !value.is_a?(Numeric)
+        end
+      end
+      private_class_method :length_object?
 
       def normalize_scope(scope)
         key =
