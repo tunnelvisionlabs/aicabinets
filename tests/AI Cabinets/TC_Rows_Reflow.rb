@@ -273,12 +273,12 @@ class TC_Rows_Reflow_UndoRedo < TestUp::TestCase
     after_origins = origins_mm(instances)
     assert_in_delta(before_origins[2] + 50.0, after_origins[2], 1e-3)
 
-    Sketchup.send_action('editUndo:')
+    Sketchup.undo
     undo_origins = origins_mm(instances)
     assert_in_delta(before_origins[0], undo_origins[0], 1e-3)
     assert_in_delta(before_origins[2], undo_origins[2], 1e-3)
 
-    Sketchup.send_action('editRedo:')
+    Sketchup.redo
     redo_origins = origins_mm(instances)
     assert_in_delta(after_origins[2], redo_origins[2], 1e-3)
   end
