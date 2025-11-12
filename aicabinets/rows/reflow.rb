@@ -50,12 +50,10 @@ module AICabinets
         model.start_operation(OPERATION_NAME, true)
         operation_open = true
 
-        baseline_origins_mm = measure_member_origins_mm(members)
-
         apply_member_width!(instance, new_width, scope_value)
         offsets_mm, total_delta_mm = compute_offsets(members, instance, delta_mm, scope_key)
 
-        apply_transforms!(members, offsets_mm, baseline_origins_mm)
+        apply_transforms!(members, offsets_mm)
 
         if row['lock_total_length'] && total_delta_mm.abs > EPSILON_MM
           adjust_filler_width!(members, total_delta_mm)
@@ -217,33 +215,28 @@ module AICabinets
       end
       private_class_method :compute_offsets
 
-      def apply_transforms!(members, offsets_mm, baseline_origins_mm)
+      def apply_transforms!(members, offsets_mm)
         members.each do |member|
-          baseline_origin_mm = baseline_origins_mm[member]
-          next unless baseline_origin_mm
-
           offset_mm = offsets_mm.fetch(member, 0.0)
-          target_origin_mm = baseline_origin_mm + offset_mm
-          current_origin_mm = measure_origin_mm(member)
-          delta_mm = target_origin_mm - current_origin_mm
-          next if delta_mm.abs <= EPSILON_MM
-
-          member.transform!(translation_mm(delta_mm))
+          translate_x_mm!(member, offset_mm)
         end
       end
       private_class_method :apply_transforms!
 
-      def measure_member_origins_mm(members)
-        members.each_with_object({}) do |member, memo|
-          memo[member] = measure_origin_mm(member)
-        end
-      end
-      private_class_method :measure_member_origins_mm
+      def translate_x_mm!(member, delta_mm)
+        shift_mm =
+          if delta_mm.respond_to?(:to_mm)
+            delta_mm.to_mm.to_f
+          else
+            delta_mm.to_f
+          end
 
-      def measure_origin_mm(instance)
-        length_to_mm(instance.transformation.origin.x)
+        return if shift_mm.abs <= EPSILON_MM
+
+        vector = AICabinets::Ops::Units.vector_mm(shift_mm, 0.0, 0.0)
+        member.transform!(Geom::Transformation.translation(vector))
       end
-      private_class_method :measure_origin_mm
+      private_class_method :translate_x_mm!
 
       def adjust_filler_width!(members, total_delta_mm)
         filler = members.last
@@ -297,12 +290,6 @@ module AICabinets
         max_x - min_x
       end
       private_class_method :compute_total_length_mm
-
-      def translation_mm(delta_mm)
-        vector = AICabinets::Ops::Units.vector_mm(delta_mm, 0.0, 0.0)
-        Geom::Transformation.translation(vector)
-      end
-      private_class_method :translation_mm
 
       def length_to_mm(value)
         if value.respond_to?(:to_mm)
