@@ -251,7 +251,7 @@ module AICabinets
 
       def translate_x_mm!(member, delta_mm)
         shift_mm =
-          if delta_mm.respond_to?(:to_mm)
+          if length_object?(delta_mm)
             delta_mm.to_mm.to_f
           else
             delta_mm.to_f
