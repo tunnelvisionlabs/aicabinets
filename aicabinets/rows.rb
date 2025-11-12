@@ -8,6 +8,8 @@ require 'sketchup.rb'
 Sketchup.require('aicabinets/rows/reflow')
 Sketchup.require('aicabinets/rows/reveal')
 Sketchup.require('aicabinets/rows/regeneration')
+Sketchup.require('aicabinets/rows/overlay')
+Sketchup.require('aicabinets/rows/selection')
 
 module AICabinets
   module Rows
@@ -38,8 +40,6 @@ module AICabinets
     COLLINEAR_TOLERANCE_MM = 0.5
     OPERATION_NAME = 'AI Cabinets — Create Row'.freeze
     MANAGE_OPERATION_NAME = 'AI Cabinets — Manage Row'.freeze
-    ROW_HIGHLIGHT_OVERLAY_ID = 'AICabinets.Rows.Highlight'.freeze
-
     def create_from_selection(model:, reveal_mm: nil, lock_total_length: false)
       model = validate_model(model)
 
@@ -304,17 +304,16 @@ module AICabinets
       raise RowError.new(:unknown_row, 'Row not found.') unless row
 
       instances = resolve_member_instances(model, row['member_pids'])
-      if enabled
-        ensure_overlay(model).update(instances)
-        highlight_state(model)[:row_id] = row_id
-      else
-        clear_overlay(model)
-        highlight_state(model).delete(:row_id)
-      end
+      result =
+        if enabled
+          Highlight.show(model: model, row_id: row_id, instances: instances)
+        else
+          Highlight.hide(model: model)
+        end
 
       write_state(model, state) if changed
 
-      { ok: true }
+      result
     end
 
     def list(model)
@@ -324,6 +323,28 @@ module AICabinets
       write_state(model, state) if changed
 
       state['rows'].values.map { |row| symbolize_row(row) }
+    end
+
+    def infer_row_from_selection(model)
+      model = validate_model(model)
+      selection = model.selection
+      return nil unless selection && selection.respond_to?(:grep)
+
+      row_ids = selection.grep(Sketchup::ComponentInstance).filter_map do |instance|
+        membership = for_instance(instance)
+        membership && membership[:row_id]
+      end
+
+      return nil if row_ids.empty?
+
+      counts = Hash.new(0)
+      row_ids.each { |row_id| counts[row_id] += 1 }
+
+      max_count = counts.values.max
+      winners = counts.select { |_row_id, count| count == max_count }.keys
+      return nil unless winners.length == 1
+
+      winners.first
     end
 
     def for_instance(instance)
@@ -502,53 +523,12 @@ module AICabinets
     end
     private_class_method :validate_instances_for_row!
 
-    def highlight_states
-      @highlight_states ||= {}.compare_by_identity
-    end
-    private_class_method :highlight_states
-
-    def highlight_state(model)
-      highlight_states[model] ||= {}
-    end
-    private_class_method :highlight_state
-
-    def ensure_overlay(model)
-      return NullOverlay.new unless overlay_supported?(model)
-
-      state = highlight_state(model)
-      overlay = state[:overlay]
-      return overlay if overlay&.valid_for_model?(model)
-
-      overlay = RowHighlightOverlay.new(model)
-      model.overlays.add(overlay)
-      state[:overlay] = overlay
-      overlay
-    rescue StandardError => error
-      warn("AI Cabinets: Unable to enable row highlight overlay: #{error.message}")
-      state[:overlay] = NullOverlay.new
-    end
-    private_class_method :ensure_overlay
-
-    def clear_overlay(model)
-      state = highlight_state(model)
-      overlay = state[:overlay]
-      overlay&.clear
-    end
-    private_class_method :clear_overlay
-
-    def overlay_supported?(model)
-      return false unless defined?(Sketchup::Overlays)
-      manager = model.respond_to?(:overlays) ? model.overlays : nil
-      manager.respond_to?(:add)
-    end
-    private_class_method :overlay_supported?
-
     def update_highlight_if_active(model, row)
-      return unless highlight_state(model)[:row_id] == row['row_id']
+      highlight_row_id = Highlight.active_row_id(model: model)
+      return unless highlight_row_id == row['row_id']
 
-      overlay = ensure_overlay(model)
       instances = resolve_member_instances(model, row['member_pids'])
-      overlay.update(instances)
+      Highlight.refresh(model: model, row_id: row['row_id'], instances: instances)
     end
     private_class_method :update_highlight_if_active
 
@@ -949,68 +929,5 @@ module AICabinets
     end
     private_class_method :format_length
 
-    class NullOverlay
-      def update(_instances); end
-
-      def clear; end
-
-      def valid_for_model?(_model)
-        true
-      end
-    end
-    private_constant :NullOverlay
-
-    class RowHighlightOverlay < Sketchup::Overlay
-      COLOR = Sketchup::Color.new(0xff, 0x66, 0x00).freeze
-      LINE_WIDTH = 3
-
-      def initialize(model)
-        super(ROW_HIGHLIGHT_OVERLAY_ID)
-        @model = model
-        @polylines = []
-      end
-
-      def update(instances)
-        @polylines = build_polylines(instances)
-        invalidate
-      end
-
-      def clear
-        @polylines = []
-        invalidate
-      end
-
-      def valid_for_model?(model)
-        @model == model
-      end
-
-      def draw(view)
-        return if @polylines.empty?
-
-        view.drawing_color = COLOR
-        view.line_width = LINE_WIDTH
-        view.line_stipple = ''
-        @polylines.each do |polyline|
-          view.draw(GL_LINE_LOOP, polyline)
-        end
-      end
-
-      private
-
-      def build_polylines(instances)
-        instances.filter_map do |instance|
-          next unless instance&.valid?
-
-          bounds = instance.bounds
-          [
-            Geom::Point3d.new(bounds.min.x, bounds.min.y, bounds.min.z),
-            Geom::Point3d.new(bounds.max.x, bounds.min.y, bounds.min.z),
-            Geom::Point3d.new(bounds.max.x, bounds.min.y, bounds.max.z),
-            Geom::Point3d.new(bounds.min.x, bounds.min.y, bounds.max.z)
-          ]
-        end
-      end
-    end
-    private_constant :RowHighlightOverlay
   end
 end

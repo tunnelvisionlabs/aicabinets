@@ -6,6 +6,7 @@
     highlightEnabled: false,
     selectedMemberPid: null,
     pendingRequest: 0,
+    autoSelectRowOnMember: false,
   };
 
   const pending = new Map();
@@ -60,6 +61,16 @@
       })
       .catch((error) => {
         showError(error.message || 'Unable to load rows.');
+      });
+  }
+
+  function loadPreferences() {
+    callRpc('rows.get_pref')
+      .then((prefs) => {
+        applyPreferences(prefs);
+      })
+      .catch((error) => {
+        console.warn('Rows preference load failed:', error);
       });
   }
 
@@ -320,6 +331,43 @@
     updateHighlightButton();
   }
 
+  function applyPreferences(prefs) {
+    if (!prefs) {
+      return;
+    }
+
+    let enabled = prefs.auto_select_row_on_member;
+    if (typeof enabled === 'undefined') {
+      enabled = prefs.autoSelectRowOnMember;
+    }
+    state.autoSelectRowOnMember = !!enabled;
+    updatePreferenceControls();
+  }
+
+  function updatePreferenceControls() {
+    const checkbox = document.getElementById('auto-select-row');
+    if (checkbox) {
+      checkbox.checked = !!state.autoSelectRowOnMember;
+    }
+  }
+
+  function handlePreferenceToggle(event) {
+    const enabled = !!event.target.checked;
+    callRpc('rows.set_pref', { auto_select_row_on_member: enabled })
+      .then((result) => {
+        if (result && typeof result.auto_select_row_on_member !== 'undefined') {
+          state.autoSelectRowOnMember = !!result.auto_select_row_on_member;
+        } else {
+          state.autoSelectRowOnMember = enabled;
+        }
+        updatePreferenceControls();
+      })
+      .catch((error) => {
+        showError(error.message || 'Unable to update selection preference.');
+        event.target.checked = state.autoSelectRowOnMember;
+      });
+  }
+
   function escapeHtml(value) {
     return (value || '').toString().replace(/[&<>"']/g, (char) => {
       switch (char) {
@@ -371,10 +419,15 @@
     document.getElementById('row-lock-length').addEventListener('change', applyLockToggle);
     document.getElementById('move-up').addEventListener('click', () => moveSelectedMember(-1));
     document.getElementById('move-down').addEventListener('click', () => moveSelectedMember(1));
+    const autoSelect = document.getElementById('auto-select-row');
+    if (autoSelect) {
+      autoSelect.addEventListener('change', handlePreferenceToggle);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
+    loadPreferences();
     refreshAll();
   });
 
@@ -382,6 +435,14 @@
     refreshAll,
     refreshRow,
     setHighlight: setHighlightState,
+    setPreferences(preferences) {
+      try {
+        const parsed = typeof preferences === 'string' ? JSON.parse(preferences) : preferences;
+        applyPreferences(parsed);
+      } catch (error) {
+        console.warn('Unable to parse preferences payload', error);
+      }
+    },
     receive: handleResponse,
   };
 })();
