@@ -212,6 +212,30 @@ class TC_DialogPartitions < TestUp::TestCase
     end
   end
 
+  def test_double_door_stays_enabled_with_horizontal_partitions
+    run_dialog_test do
+      await_js('AICabinetsTest.setPartitionMode("horizontal")')
+      await_js('AICabinetsTest.setTopCount(2)')
+
+      state = await_js('AICabinetsTest.requestDoubleValidity()')
+      double_state = state.dig('baySnapshot', 'double')
+
+      refute_nil(double_state, 'Expected double-door snapshot data for horizontal partitions')
+      refute(
+        double_state['disabled'],
+        'Double door option should remain enabled when only horizontal partitions are present'
+      )
+      refute(
+        double_state['hintVisible'],
+        'Hint should remain hidden when double doors are allowed for horizontal partitions'
+      )
+
+      metadata = double_state['validity']
+      assert(metadata, 'Expected validity metadata when querying double-door state')
+      assert(metadata['allowed'], 'Double doors should be allowed when partitions are horizontal')
+    end
+  end
+
   private
 
   def run_dialog_test(&block)

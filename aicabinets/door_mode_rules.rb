@@ -154,8 +154,16 @@ module AICabinets
       interior_width = right - left
       return [] if interior_width < MIN_BAY_WIDTH_MM
 
-      thickness = compute_partition_thickness_mm(partitions, panel_thickness_mm, interior_width)
       mode = normalize_partition_mode(partitions)
+      orientation = partition_orientation(partitions)
+
+      if orientation == :horizontal
+        bay_count = horizontal_bay_count(params, partitions, mode)
+        bay_count = 1 if bay_count <= 0
+        return Array.new(bay_count) { [left, right] }
+      end
+
+      thickness = compute_partition_thickness_mm(partitions, panel_thickness_mm, interior_width)
 
       case mode
       when :even
@@ -167,6 +175,25 @@ module AICabinets
       end
     end
     private_class_method :partition_bay_ranges_mm
+
+    def horizontal_bay_count(params, partitions, mode)
+      specs = fetch_bays_array(params)
+      count = specs.length
+      return count if count.positive?
+
+      case mode
+      when :even
+        partition_count = coerce_non_negative_integer(fetch_hash_value(partitions, :count)) || 0
+        partition_count + 1
+      when :positions
+        positions = Array(fetch_hash_value(partitions, :positions_mm))
+        numeric = positions.map { |value| coerce_float(value) }.compact
+        numeric.empty? ? 1 : numeric.length + 1
+      else
+        1
+      end
+    end
+    private_class_method :horizontal_bay_count
 
     def fetch_edge_reveal_mm(params)
       value = coerce_non_negative_numeric(params[:door_reveal_mm])
