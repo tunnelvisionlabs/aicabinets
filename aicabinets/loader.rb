@@ -2,6 +2,7 @@
 
 module AICabinets
   if defined?(Sketchup)
+    Sketchup.require('aicabinets/compat/undo')
     Sketchup.require('aicabinets/features')
     Sketchup.require('aicabinets/version')
     Sketchup.require('aicabinets/ops/units')
