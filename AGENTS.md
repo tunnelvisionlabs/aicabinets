@@ -70,112 +70,17 @@ Use these short IDs in **Implementation Notes (Constraints & Practices)** to jus
   * **Bug** - a task representing current behavior which deviates from the expected behavior
   * **Feature** - a task representing new behavior that has not been implemented
 
-> **Formatting rule:** Prefer **markdown headings** for section titles (no bold section headers).
+Start new issues with the structured GitHub forms so titles, labels, and required details stay consistent:
 
-## Story Issue Template
+* [Story issue form](https://github.com/tunnelvisionlabs/aicabinets/issues/new?template=story.yml)
+* [Task issue form](https://github.com/tunnelvisionlabs/aicabinets/issues/new?template=task.yml)
+* [Bug report form](https://github.com/tunnelvisionlabs/aicabinets/issues/new?template=bug_report.yml)
+* [Enhancement issue form](https://github.com/tunnelvisionlabs/aicabinets/issues/new?template=enhancement.yml)
+* [Feature request form](https://github.com/tunnelvisionlabs/aicabinets/issues/new?template=feature_request.yml)
 
-```markdown
-# [Story] <Concise outcome, e.g., "Edit Selected Cabinet with Scope">
+> **Formatting rule:** Prefer **markdown headings** for section titles (no bold section headers), and follow each heading with a blank line before the next content.
 
-## Goal
-One or two sentences describing the user-visible outcome.
-
-## User Story
-As a <role>, I want <capability> so that <benefit>.
-
-## Acceptance Criteria
-- Given <precondition>, when <action>, then <observable result>.
-- Given …, when …, then …
-- Include edge cases and validation rules needed to ship.
-
-## Scope
-### In
-- Bullet list of what is definitely included.
-
-### Out
-- Bullet list of what is explicitly excluded.
-
-## UX Notes / Mockups
-- Link sketches or describe expected UI states and defaults.
-
-## Data & Persistence
-- Data written/read (e.g., JSON defaults in **mm**, component definition/instance attributes).
-- Any schema or versioning notes.
-
-## Technical Notes
-- High-level approach and key constraints (e.g., FLB *carcass* anchor; undoable operations; HtmlDialog).
-- Cross-reference best-practice IDs (e.g., BP‑1, BP‑3, BP‑4, BP‑5).
-
-## Sub-Issues
-- [ ] <Task 1>
-- [ ] <Task 2>
-- [ ] <Task 3>
-
-## Risks
-- Foreseeable pitfalls or UX surprises and how we’ll mitigate them.
-
-## Definition of Done
-- All acceptance criteria pass.
-- Tests for critical logic are added and green.
-- Docs updated where relevant.
-
-## Labels
-type:story, area:<ui|geometry|…>, component:<dialog|generator|…>, priority:P?
-```
-
-## Task Issue Template
-
-```markdown
-# [Task|Bug|Feature] <Crisp action, e.g., "Add edit-scope option to dialog">
-
-## Summary
-
-<Overview for general audience of what changes and why it matters.>
-
-### Current Behavior <!-- Only for bugs or behavior changes -->
-
-<What happens today. If derived from code analysis, cite the commit SHA.>
-
-### Expected Behavior <!-- Only for bugs or behavior changes -->
-
-<What should happen, described concretely.>
-
-### Steps to Reproduce <!-- Only for bugs or behavior changes -->
-
-<A sequence of steps to reproduce the problem.>
-
-## Technical Description <!-- optional; include only if it adds material detail -->
-
-<Details for contributors (APIs touched, modules, data shape, algorithms).>
-
-### Root cause (likely) <!-- Only for bugs or behavior changes -->
-
-<Explanation of suspected root cause.>
-
-### Best Practice Reference <!-- Optional -->
-
-<If available and unambiguous, cross-reference a guideline so the expected behavior isn’t just preference (e.g., BP‑1 HtmlDialog, BP‑3 FLB anchor, BP‑4 mm defaults). References to external practices are also acceptable.>
-
-### Implementation Notes <!-- Constraints & Practices -->
-- List **constraints** required to maintain best practices (e.g., BP‑1, BP‑3, BP‑4, BP‑5, BP‑6).
-- Do **not** prescribe specific classes/methods if not necessary to meet the acceptance criteria.
-- Aim for a single undoable operation; keep the FLB *carcass* anchor invariant; keep JSON fields in **mm**.
-
-### Proposed solutions <!-- Optional sequence of proposed solutions -->
-
-#### Option A - <First option title>
-
-#### Option B - <Second option title>
-
-## Acceptance Criteria
-- [ ] Checklist items that must be true for this task to be complete.
-- [ ] Keep them observable and testable from a user or API perspective.
-
-### Labels
-type:<bug|feature|task>, area:<ui|geometry|…>, component:<dialog|generator|…>, priority:P?
-```
-
-> **Omit by default for tasks:** Test Plan, Docs, and Dependencies. Include them **only** when they were explicitly requested for that issue.
+Use the sections provided by each form; include optional sections when the details are specific, accurate, and materially help contributors complete the work.
 
 ## Labels
 

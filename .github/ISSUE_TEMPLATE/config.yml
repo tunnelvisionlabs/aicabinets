@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📘 Project guide (AGENTS.md)
+    url: https://github.com/tunnelvisionlabs/aicabinets/blob/main/AGENTS.md
+    about: Review project invariants, issue conventions, and writing guidelines before filing.
+  - name: 📚 README
+    url: https://github.com/tunnelvisionlabs/aicabinets/blob/main/README.md
+    about: Learn about AI Cabinets goals, setup, and usage at a glance.
