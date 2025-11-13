@@ -167,10 +167,33 @@ module RowsTestHarness
     entries = ModelQuery.fronts_by_bay(instance: instance).values.flatten
     raise 'Cabinet has no door fronts.' if entries.empty?
 
-    min_x = entries.map { |info| info[:bounds].min.x }.min
-    max_x = entries.map { |info| info[:bounds].max.x }.max
+    base_transform = instance.transformation
+    world_bbox = Geom::BoundingBox.new
 
-    [AICabinetsTestHelper.mm(min_x), AICabinetsTestHelper.mm(max_x)]
+    entries.each do |info|
+      entity = info[:entity]
+      next unless entity&.valid?
+
+      bounds = world_bounds_for_front(entity, base_transform)
+      next unless bounds
+
+      8.times do |index|
+        point = bounds.corner(index)
+        next unless point
+
+        world_bbox.add(point)
+      end
+    end
+
+    raise 'Unable to resolve door fronts bounds.' if world_bbox.empty?
+
+    min_x = world_bbox.min.x
+    max_x = world_bbox.max.x
+
+    [
+      AICabinetsTestHelper.mm_from_length(min_x),
+      AICabinetsTestHelper.mm_from_length(max_x)
+    ]
   end
 
   def total_length_mm(instances)
@@ -292,6 +315,39 @@ module RowsTestHarness
     object.dup
   end
   private_class_method :deep_copy
+
+  def world_bounds_for_front(entity, parent_transform)
+    return unless entity&.valid?
+
+    transform =
+      if entity.respond_to?(:transformation)
+        parent_transform * entity.transformation
+      else
+        parent_transform
+      end
+
+    source_bounds =
+      if entity.respond_to?(:definition) && entity.definition&.valid?
+        entity.definition.bounds
+      elsif entity.respond_to?(:entities)
+        entity.entities.bounds
+      else
+        entity.bounds
+      end
+
+    return unless source_bounds
+
+    bounds = Geom::BoundingBox.new
+    8.times do |index|
+      point = source_bounds.corner(index)
+      next unless point
+
+      bounds.add(point.transform(transform))
+    end
+
+    bounds
+  end
+  private_class_method :world_bounds_for_front
 
   def ensure_model_units_mm(model)
     options = model.options
