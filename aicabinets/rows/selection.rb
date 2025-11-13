@@ -24,7 +24,7 @@ module AICabinets
       end
 
       def reset!
-        observer_attached_models.dup.each do |model|
+        observer_attached_models.keys.each do |model|
           detach_observer(model)
         end
         @auto_select_row = false
@@ -90,10 +90,10 @@ module AICabinets
         selection = model.respond_to?(:selection) ? model.selection : nil
         return unless selection
 
-        return if observer_attached_models.include?(model)
+        return if observer_attached_models.key?(model)
 
         selection.add_observer(observer)
-        observer_attached_models << model
+        observer_attached_models[model] = true
       rescue StandardError
         nil
       end
@@ -112,7 +112,7 @@ module AICabinets
       end
 
       def observer_attached_models
-        @observer_attached_models ||= [].compare_by_identity
+        @observer_attached_models ||= {}.compare_by_identity
       end
 
       def fetch_row_detail(model, row_id)

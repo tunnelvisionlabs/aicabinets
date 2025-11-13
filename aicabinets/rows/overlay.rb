@@ -127,6 +127,34 @@ module AICabinets
         raise ArgumentError, 'model must be a SketchUp::Model'
       end
 
+      def overlay_constructor_arity
+        @overlay_constructor_arity ||= begin
+          return 0 unless defined?(Sketchup::Overlay)
+          Sketchup::Overlay.instance_method(:initialize).arity
+        rescue StandardError
+          0
+        end
+      end
+
+      def overlay_requires_priority_argument?
+        arity = overlay_constructor_arity
+        arity >= 2 || arity.negative?
+      end
+
+      def overlay_priority
+        @overlay_priority ||= begin
+          if defined?(Sketchup::Overlay::PRIORITY_VIEWER)
+            Sketchup::Overlay::PRIORITY_VIEWER
+          elsif defined?(Sketchup::Overlay::PRIORITY_DEFAULT)
+            Sketchup::Overlay::PRIORITY_DEFAULT
+          elsif defined?(Sketchup::Overlay::PRIORITY_NORMAL)
+            Sketchup::Overlay::PRIORITY_NORMAL
+          else
+            50
+          end
+        end
+      end
+
       def handle_tool_deactivated(model)
         state = states[model]
         return unless state
@@ -211,7 +239,11 @@ module AICabinets
 
         class Overlay < Sketchup::Overlay
           def initialize(model)
-            super(ROW_HIGHLIGHT_OVERLAY_ID)
+            args = [ROW_HIGHLIGHT_OVERLAY_ID]
+            if Highlight.__send__(:overlay_requires_priority_argument?)
+              args << Highlight.__send__(:overlay_priority)
+            end
+            super(*args)
             @model = model
             @geometry = nil
           end
