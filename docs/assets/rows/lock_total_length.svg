@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">Lock total length with filler success versus failure</title>
+  <desc id="desc">Top row shows a filler cabinet absorbing a 40 millimeter reduction successfully. Bottom row shows the filler too small to absorb the change, causing lock failure.</desc>
+  <style>
+    .label { font-family: 'Segoe UI', sans-serif; fill: #1f2933; font-size: 20px; }
+    .cabinet { fill: #e2e8f0; stroke: #475569; stroke-width: 2; }
+    .filler { fill: #fde68a; stroke: #b45309; stroke-width: 2; }
+    .note { font-family: 'Segoe UI', sans-serif; fill: #2563eb; font-size: 18px; }
+    .warn { font-family: 'Segoe UI', sans-serif; fill: #dc2626; font-size: 18px; }
+  </style>
+  <text class="label" x="40" y="50">Lock holds — filler absorbs Δw</text>
+  <g transform="translate(40,70)">
+    <rect class="cabinet" x="0" y="0" width="180" height="120" rx="12" />
+    <rect class="cabinet" x="190" y="0" width="220" height="120" rx="12" />
+    <rect class="filler" x="420" y="0" width="120" height="120" rx="12" />
+    <text class="note" x="0" y="150">Filler shrinks by 40&nbsp;mm → row length unchanged</text>
+  </g>
+  <text class="label" x="40" y="220">Lock fails — filler would drop below 25&nbsp;mm</text>
+  <g transform="translate(40,240)">
+    <rect class="cabinet" x="0" y="0" width="180" height="120" rx="12" />
+    <rect class="cabinet" x="190" y="0" width="220" height="120" rx="12" />
+    <rect class="filler" x="420" y="0" width="60" height="120" rx="12" />
+    <text class="warn" x="0" y="150">Requested change exceeds filler capacity → operation cancels</text>
+  </g>
+</svg>
