@@ -83,32 +83,37 @@ module AICabinets
             front_tag: front_tag
           )
 
+          inner_length_mm = open_width_mm - (2.0 * stile_width_mm)
+          raise ArgumentError, 'Opening width too small for rails' unless inner_length_mm > MIN_DIMENSION_MM
+
           if AICabinets::Capabilities.solid_booleans?
-            rails = build_coped_rails(
+            rails = build_rails(
               definition.entities,
-              stiles: stiles,
-              open_width_mm: open_width_mm,
+              stile_width_mm: stile_width_mm,
+              inner_length_mm: inner_length_mm,
               rail_width_mm: rail_width_mm,
               thickness_mm: thickness_mm,
               profile_depth_mm: profile_depth_mm,
               profile_run_mm: rail_profile_run_mm,
               open_height_mm: open_height_mm,
               material: material,
-              front_tag: front_tag
+              front_tag: front_tag,
+              coping: true
             )
             coping_mode = :boolean_subtract
           else
-            rails = build_square_rails(
+            rails = build_rails(
               definition.entities,
               stile_width_mm: stile_width_mm,
+              inner_length_mm: inner_length_mm,
               rail_width_mm: rail_width_mm,
               thickness_mm: thickness_mm,
               profile_depth_mm: profile_depth_mm,
               profile_run_mm: rail_profile_run_mm,
-              open_width_mm: open_width_mm,
               open_height_mm: open_height_mm,
               material: material,
-              front_tag: front_tag
+              front_tag: front_tag,
+              coping: false
             )
             coping_mode = :square_fallback
             warnings << 'SketchUp solid boolean operations unavailable; generated square rail ends.'
@@ -218,79 +223,7 @@ module AICabinets
       end
       private_class_method :build_stiles
 
-      def create_stile_group(entities, width_mm:, height_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:)
-        group = entities.add_group
-        face = group.entities.add_face(
-          Units.point_mm(0.0, 0.0, 0.0),
-          Units.point_mm(width_mm, 0.0, 0.0),
-          Units.point_mm(width_mm, 0.0, height_mm),
-          Units.point_mm(0.0, 0.0, height_mm)
-        )
-        face.reverse! if face.normal.y.positive?
-        face.pushpull(-Units.to_length_mm(thickness_mm))
-
-        apply_stile_profile!(group, width_mm: width_mm, height_mm: height_mm, profile_depth_mm: profile_depth_mm, profile_run_mm: profile_run_mm)
-        group
-      end
-      private_class_method :create_stile_group
-
-      def apply_stile_profile!(group, width_mm:, height_mm:, profile_depth_mm:, profile_run_mm:)
-        return unless group&.valid?
-
-        points = [
-          Units.point_mm(width_mm, 0.0, height_mm),
-          Units.point_mm(width_mm - profile_run_mm, 0.0, height_mm),
-          Units.point_mm(width_mm, -profile_depth_mm, height_mm)
-        ]
-        face = group.entities.add_face(points)
-        return unless face
-
-        distance = Units.to_length_mm(height_mm)
-        push_distance = face.normal.z.positive? ? -distance : distance
-        face.pushpull(push_distance)
-      rescue StandardError
-        nil
-      end
-      private_class_method :apply_stile_profile!
-
-      def build_coped_rails(entities, stiles:, open_width_mm:, rail_width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, open_height_mm:, material:, front_tag:)
-        oversize_length_mm = open_width_mm
-
-        bottom = create_rail_group(
-          entities,
-          length_mm: oversize_length_mm,
-          rail_width_mm: rail_width_mm,
-          thickness_mm: thickness_mm,
-          profile_depth_mm: profile_depth_mm,
-          profile_run_mm: profile_run_mm,
-          inside_edge: :top
-        )
-
-        top = create_rail_group(
-          entities,
-          length_mm: oversize_length_mm,
-          rail_width_mm: rail_width_mm,
-          thickness_mm: thickness_mm,
-          profile_depth_mm: profile_depth_mm,
-          profile_run_mm: profile_run_mm,
-          inside_edge: :bottom
-        )
-        translate_group!(top, z_mm: open_height_mm - rail_width_mm)
-
-        bottom = cope_rail!(bottom, stiles)
-        top = cope_rail!(top, stiles)
-
-        apply_group_metadata(bottom, role: GROUP_ROLE_RAIL, name: 'Rail-Bottom', tag: front_tag, material: material)
-        apply_group_metadata(top, role: GROUP_ROLE_RAIL, name: 'Rail-Top', tag: front_tag, material: material)
-
-        [bottom, top]
-      end
-      private_class_method :build_coped_rails
-
-      def build_square_rails(entities, stile_width_mm:, rail_width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, open_width_mm:, open_height_mm:, material:, front_tag:)
-        inner_length_mm = open_width_mm - (2.0 * stile_width_mm)
-        raise ArgumentError, 'Opening width too small for square rails' unless inner_length_mm > MIN_DIMENSION_MM
-
+      def build_rails(entities, stile_width_mm:, inner_length_mm:, rail_width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, open_height_mm:, material:, front_tag:, _coping:)
         bottom = create_rail_group(
           entities,
           length_mm: inner_length_mm,
@@ -317,74 +250,62 @@ module AICabinets
 
         [bottom, top]
       end
-      private_class_method :build_square_rails
+      private_class_method :build_rails
+
+      def create_stile_group(entities, width_mm:, height_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:)
+        group = entities.add_group
+        face = group.entities.add_face(stile_profile_points(width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:))
+        raise 'Failed to create stile profile face' unless face
+
+        ensure_face_normal!(face, axis: :z)
+        face.pushpull(Units.to_length_mm(height_mm))
+        group
+      end
+      private_class_method :create_stile_group
+
+      def stile_profile_points(width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:)
+        [
+          Units.point_mm(0.0, 0.0, 0.0),
+          Units.point_mm(width_mm - profile_run_mm, 0.0, 0.0),
+          Units.point_mm(width_mm, profile_depth_mm, 0.0),
+          Units.point_mm(width_mm, thickness_mm, 0.0),
+          Units.point_mm(0.0, thickness_mm, 0.0)
+        ]
+      end
+      private_class_method :stile_profile_points
 
       def create_rail_group(entities, length_mm:, rail_width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, inside_edge:)
         group = entities.add_group
-        face = group.entities.add_face(
-          Units.point_mm(0.0, 0.0, 0.0),
-          Units.point_mm(length_mm, 0.0, 0.0),
-          Units.point_mm(length_mm, 0.0, rail_width_mm),
-          Units.point_mm(0.0, 0.0, rail_width_mm)
-        )
-        face.reverse! if face.normal.y.positive?
-        face.pushpull(-Units.to_length_mm(thickness_mm))
+        face = group.entities.add_face(rail_profile_points(rail_width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, inside_edge: inside_edge))
+        raise 'Failed to create rail profile face' unless face
 
-        apply_rail_profile!(group, rail_width_mm: rail_width_mm, length_mm: length_mm, profile_depth_mm: profile_depth_mm, profile_run_mm: profile_run_mm, inside_edge: inside_edge)
+        ensure_face_normal!(face, axis: :x)
+        face.pushpull(Units.to_length_mm(length_mm))
+
         group
       end
       private_class_method :create_rail_group
 
-      def apply_rail_profile!(group, rail_width_mm:, length_mm:, profile_depth_mm:, profile_run_mm:, inside_edge:)
-        return unless group&.valid?
+      def rail_profile_points(rail_width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, inside_edge:)
+        base = [
+          [0.0, 0.0, 0.0],
+          [0.0, 0.0, rail_width_mm - profile_run_mm],
+          [0.0, profile_depth_mm, rail_width_mm],
+          [0.0, thickness_mm, rail_width_mm],
+          [0.0, thickness_mm, 0.0]
+        ]
 
         points =
           if inside_edge == :top
-            [
-              Units.point_mm(0.0, 0.0, rail_width_mm),
-              Units.point_mm(0.0, -profile_depth_mm, rail_width_mm),
-              Units.point_mm(0.0, 0.0, rail_width_mm - profile_run_mm)
-            ]
+            base
           else
-            [
-              Units.point_mm(0.0, 0.0, 0.0),
-              Units.point_mm(0.0, -profile_depth_mm, 0.0),
-              Units.point_mm(0.0, 0.0, profile_run_mm)
-            ]
-          end
-        face = group.entities.add_face(points)
-        return unless face
-
-        face.reverse! if face.normal.x.negative?
-        face.pushpull(Units.to_length_mm(length_mm))
-      rescue StandardError
-        nil
-      end
-      private_class_method :apply_rail_profile!
-
-      def cope_rail!(rail, stiles)
-        result = rail
-        stiles.each do |stile|
-          next unless stile&.valid?
-
-          copy = stile.copy
-          difference = nil
-          begin
-            difference = result.subtract(copy)
-          ensure
-            copy.erase! if copy&.valid?
+            base.map { |(x_mm, y_mm, z_mm)| [x_mm, y_mm, rail_width_mm - z_mm] }
           end
 
-          next unless difference.is_a?(Sketchup::Group) && difference.valid?
-
-          result.erase! if result.valid? && !result.equal?(difference)
-          result = difference
-        end
-        result
-      rescue StandardError
-        rail
+        points.map { |coords| Units.point_mm(*coords) }
       end
-      private_class_method :cope_rail!
+      private_class_method :rail_profile_points
+
 
       def apply_group_metadata(group, role:, name:, tag:, material:)
         return group unless group&.valid?
@@ -399,6 +320,25 @@ module AICabinets
         group
       end
       private_class_method :apply_group_metadata
+
+      def ensure_face_normal!(face, axis:, expected_positive: true)
+        return unless face&.valid?
+
+        component =
+          case axis
+          when :x then face.normal.x
+          when :y then face.normal.y
+          when :z then face.normal.z
+          else 0.0
+          end
+
+        if expected_positive
+          face.reverse! if component.negative?
+        else
+          face.reverse! if component.positive?
+        end
+      end
+      private_class_method :ensure_face_normal!
 
       def assign_tag(group, tag)
         return unless tag
