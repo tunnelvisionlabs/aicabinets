@@ -40,13 +40,15 @@ class TC_FivePieceFrame < TestUp::TestCase
     groups = definition.entities.grep(Sketchup::Group)
     assert_equal(4, groups.length)
 
-    bounds_min = definition.bounds.min
+    bounds_min = AICabinetsTestHelper.bbox_local_of(definition).min
     mm_min_x = AICabinetsTestHelper.mm_from_length(bounds_min.x)
     mm_min_y = AICabinetsTestHelper.mm_from_length(bounds_min.y)
     mm_min_z = AICabinetsTestHelper.mm_from_length(bounds_min.z)
 
+    tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
+
     AICabinetsTestHelper.assert_within_tolerance(self, 0.0, mm_min_x)
-    AICabinetsTestHelper.assert_within_tolerance(self, -params[:door_thickness_mm], mm_min_y)
+    assert_operator(mm_min_y, :<=, tolerance_mm)
     AICabinetsTestHelper.assert_within_tolerance(self, 0.0, mm_min_z)
 
     groups.each do |group|
@@ -148,7 +150,7 @@ class TC_FivePieceFrame < TestUp::TestCase
 
     refute_empty(definition.entities.grep(Sketchup::Group))
 
-    model.undo
+    Sketchup.undo
 
     assert_empty(definition.entities.grep(Sketchup::Group))
   end

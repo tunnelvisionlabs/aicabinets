@@ -98,7 +98,7 @@ module AICabinets
               open_height_mm: open_height_mm,
               material: material,
               front_tag: front_tag,
-              coping: true
+              _coping: true
             )
             coping_mode = :boolean_subtract
           else
@@ -113,7 +113,7 @@ module AICabinets
               open_height_mm: open_height_mm,
               material: material,
               front_tag: front_tag,
-              coping: false
+              _coping: false
             )
             coping_mode = :square_fallback
             warnings << 'SketchUp solid boolean operations unavailable; generated square rail ends.'
