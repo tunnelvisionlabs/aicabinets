@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">Row reflow instance-only versus all-instances width edit</title>
+  <desc id="desc">Two sequences of three cabinets. The top shows only the edited cabinet widening while right neighbors translate once. The bottom shows all instances widening so both occurrences of the shared definition widen and push neighbors twice.</desc>
+  <style>
+    .label { font-family: 'Segoe UI', sans-serif; fill: #1f2933; font-size: 20px; }
+    .cabinet { fill: #e1e8f0; stroke: #4a5668; stroke-width: 2; }
+    .edited { fill: #ffd699; }
+    .arrow { stroke: #2563eb; stroke-width: 3; marker-end: url(#arrowhead); }
+    .delta { font-family: 'Segoe UI', sans-serif; fill: #2563eb; font-size: 18px; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb" />
+    </marker>
+  </defs>
+  <text class="label" x="40" y="40">Instance-only edit: width +50&nbsp;mm</text>
+  <g transform="translate(40,60)">
+    <rect class="cabinet" x="0" y="0" width="200" height="140" rx="12" />
+    <rect class="cabinet edited" x="210" y="0" width="200" height="140" rx="12" />
+    <rect class="cabinet" x="420" y="0" width="200" height="140" rx="12" />
+    <line class="arrow" x1="630" y1="70" x2="690" y2="70" />
+    <text class="delta" x="700" y="78">Right members shift +50&nbsp;mm</text>
+  </g>
+  <g transform="translate(40,230)">
+    <text class="label" x="0" y="-10">All-instances edit: shared definition +50&nbsp;mm</text>
+    <rect class="cabinet" x="0" y="0" width="200" height="140" rx="12" />
+    <rect class="cabinet edited" x="210" y="0" width="200" height="140" rx="12" />
+    <rect class="cabinet" x="420" y="0" width="200" height="140" rx="12" />
+    <rect class="cabinet edited" x="630" y="0" width="200" height="140" rx="12" />
+    <line class="arrow" x1="840" y1="70" x2="900" y2="70" />
+    <text class="delta" x="910" y="78">Neighbors translate twice (+100&nbsp;mm)</text>
+  </g>
+</svg>
