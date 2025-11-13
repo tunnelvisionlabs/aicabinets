@@ -144,8 +144,6 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
   def test_operation_is_atomic
     params = build_params
     definition = Sketchup.active_model.definitions.add('Miter Frame AC4')
-    model = Sketchup.active_model
-
     with_solid_booleans(true) do
       AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
@@ -157,7 +155,7 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
 
     refute_empty(definition.entities.grep(Sketchup::Group))
 
-    model.undo
+    Sketchup.undo
 
     assert_empty(definition.entities.grep(Sketchup::Group))
   end
