@@ -48,6 +48,7 @@ These rules apply across the codebase and issues.
 * Namespace all code under `AICabinets`.
 * Use a registrar (`aicabinets.rb`) and a support folder (`aicabinets/`).
 * Prefer `Sketchup.require` for load paths to remain compatible with packaged/signed extensions.
+* `lib/*` contains prototype/POC reference code kept for historical context. It is read-only for agents and will be removed once the extension reaches a superset of feature parity.
 
 ## Best‑Practice References (IDs you can cite in issues)
 
@@ -62,6 +63,7 @@ Use these short IDs in **Implementation Notes (Constraints & Practices)** to jus
 * **BP‑7:** Tag **by category**; create tags if missing; avoid dimension‑encoded names.
 * **BP‑8:** Use `Sketchup.require`, not `require_relative`, for extension‑friendly loading.
 * **BP‑9:** Accept and display lengths using model units; parse with `String#to_l`/`.mm` and format with `Sketchup.format_length`.
+* **BP‑10:** `lib/*` is a read-only prototype. Do not modify.
 
 ## Issue Types
 
