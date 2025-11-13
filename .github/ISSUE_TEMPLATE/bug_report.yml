@@ -1,0 +1,62 @@
+name: Bug report
+description: Report incorrect or unstable behavior with reproduction steps.
+title: "[Bug]: "
+labels:
+  - type:bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Confirm this is a defect in shipped behavior. For feature requests, use the enhancement or feature request forms.
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current Behavior
+      description: Describe what happens, including error messages, screenshots, or logs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected Behavior
+      description: Describe what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Provide steps starting from a fresh model, if possible.
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, SketchUp version, AI Cabinets version/build, other relevant extensions.
+      placeholder: Windows 11, SketchUp 2023, AI Cabinets v0.2.0
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots / Logs
+      description: Drag & drop images, GIFs, or log excerpts that illustrate the issue.
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Regression?
+      description: Did this work in a previous release?
+      options:
+        - Unsure
+        - No, never worked
+        - Yes, it regressed
+    validations:
+      required: false
+  - type: input
+    id: first_bad_version
+    attributes:
+      label: First Bad Version
+      description: If known, specify the first release where the issue reproduced.

@@ -1,0 +1,85 @@
+name: Story
+description: Capture a user-visible capability with goals and acceptance criteria.
+title: "[Story]: "
+labels:
+  - type:story
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Review the [AI Cabinets guide](https://github.com/tunnelvisionlabs/aicabinets/blob/main/AGENTS.md) before filing to confirm scope, invariants, and label taxonomy.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: Summarize the user-visible outcome in 1–2 sentences.
+      placeholder: e.g., Allow editing a placed cabinet without recreating geometry.
+    validations:
+      required: true
+  - type: textarea
+    id: user_story
+    attributes:
+      label: User Story
+      description: Follow the "As a <role>, I want <capability>, so that <benefit>" structure.
+      placeholder: As a designer, I want … so that …
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Provide Given/When/Then scenarios covering success paths and edge cases.
+      placeholder: |
+        Given …
+        When …
+        Then …
+    validations:
+      required: true
+  - type: textarea
+    id: scope_in
+    attributes:
+      label: Scope — In
+      description: Bullet what is in scope for this story.
+      placeholder: |
+        - Include cabinet editor UX
+        - Persist per-definition parameters
+  - type: textarea
+    id: scope_out
+    attributes:
+      label: Scope — Out
+      description: Bullet what is explicitly excluded.
+      placeholder: |
+        - Do not change existing catalog defaults
+  - type: textarea
+    id: ux_notes
+    attributes:
+      label: UX Notes / Mockups
+      description: Link sketches, prototypes, or describe state transitions.
+  - type: textarea
+    id: data_persistence
+    attributes:
+      label: Data & Persistence
+      description: Note data written/read (mm defaults, schema versions) and migration concerns.
+  - type: textarea
+    id: technical_notes
+    attributes:
+      label: Technical Notes
+      description: Document constraints, invariants (e.g., FLB carcass anchor), and best-practice references (BP-#).
+  - type: textarea
+    id: sub_issues
+    attributes:
+      label: Sub-issues Checklist
+      description: Track related tasks (use - [ ] syntax to create checkboxes).
+      placeholder: |
+        - [ ] Task: Update geometry generator
+        - [ ] Task: Add regression tests
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks
+      description: Call out potential pitfalls and mitigation ideas.
+  - type: textarea
+    id: definition_of_done
+    attributes:
+      label: Definition of Done
+      description: Provide observable conditions required before closing the story.

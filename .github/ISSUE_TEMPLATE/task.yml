@@ -1,0 +1,57 @@
+name: Task
+description: Track a focused unit of work with expected behavior and acceptance criteria.
+title: "[Task]: "
+labels:
+  - type:task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for a single work item. For bugs or new capabilities, prefer the dedicated forms.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the change at a high level (what and why) in a few sentences.
+      placeholder: Update cabinet generator to respect overlay offsets.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected Behavior
+      description: Describe what will be true once the task is complete.
+      placeholder: Cabinets respect overlay offsets during regeneration.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Provide observable checks (Given/When/Then or bullet list) that define done.
+    validations:
+      required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current Behavior / Limitation
+      description: Outline the current state, including screenshots or logs if helpful.
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to Reproduce / Validate
+      description: Provide steps to verify the change or reproduce the current issue.
+      placeholder: |
+        1. …
+        2. …
+        3. …
+  - type: textarea
+    id: technical_description
+    attributes:
+      label: Technical Description
+      description: Capture key implementation notes, invariants, or references to BP-# guidelines.
+  - type: textarea
+    id: proposed_solutions
+    attributes:
+      label: Proposed Solutions / Follow-ups
+      description: List candidate approaches or call out related issues to file separately.

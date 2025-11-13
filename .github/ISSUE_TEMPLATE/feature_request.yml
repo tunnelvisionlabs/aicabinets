@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose a brand-new capability for AI Cabinets.
+title: "[Feature]: "
+labels:
+  - type:feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to describe net-new behavior that does not yet exist in AI Cabinets.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the feature at a high level in a few sentences.
+      placeholder: Add a parametric tall cabinet with adjustable compartments.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Desired Outcome
+      description: Describe what the user will be able to do once this feature ships.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Provide observable checks (Given/When/Then or bullet list) that define success.
+    validations:
+      required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current Behavior / Gap
+      description: Explain what users do today and why it’s insufficient.
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Current Workflow (if any)
+      description: Outline how users work around this gap today, if applicable.
+  - type: textarea
+    id: technical_description
+    attributes:
+      label: Technical Notes
+      description: Capture constraints, dependencies, or considerations to keep in mind.
+  - type: textarea
+    id: proposed_solutions
+    attributes:
+      label: Proposed Solutions / Alternatives
+      description: Share ideas, sketches, or links that could guide implementation.
