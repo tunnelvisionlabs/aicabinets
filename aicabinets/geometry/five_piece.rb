@@ -3,7 +3,9 @@
 require 'sketchup.rb'
 
 Sketchup.require('aicabinets/capabilities')
+Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/ops/materials')
+Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/params/five_piece')
 Sketchup.require('aicabinets/tags')
@@ -53,7 +55,7 @@ module AICabinets
         raise ArgumentError, 'Opening width must exceed twice the stile width' if open_width_mm <= (2.0 * stile_width_mm) + MIN_DIMENSION_MM
         raise ArgumentError, 'Opening height must exceed twice the rail width' if open_height_mm <= (2.0 * rail_width_mm) + MIN_DIMENSION_MM
 
-        front_tag = AICabinets::Tags.ensure_owned_tag(model, 'AICabinets/Fronts')
+        front_tag = ensure_fronts_tag(model)
         material = resolve_frame_material(model, validated[:frame_material_id])
 
         warnings = []
@@ -360,6 +362,23 @@ module AICabinets
         nil
       end
       private_class_method :assign_material
+
+      def ensure_fronts_tag(model)
+        return unless model.is_a?(Sketchup::Model)
+
+        tag_name = AICabinets::Generator::Fronts::FRONTS_TAG_NAME
+        tag = AICabinets::Ops::Tags.ensure_tag(model, tag_name)
+        if tag && tag.respond_to?(:name) && tag.respond_to?(:name=) && tag.name != tag_name
+          begin
+            tag.name = tag_name
+          rescue StandardError
+            # Best-effort rename; ignore if SketchUp prevents renaming due to folders.
+            nil
+          end
+        end
+        tag
+      end
+      private_class_method :ensure_fronts_tag
 
       def translate_group!(group, x_mm: 0.0, y_mm: 0.0, z_mm: 0.0)
         return group unless group&.valid?
