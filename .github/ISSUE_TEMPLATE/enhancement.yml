@@ -2,7 +2,7 @@ name: Enhancement
 description: Improve existing behavior, UX, or performance.
 title: "[Enhancement]: "
 labels:
-  - type:enhancement
+  - enhancement
 body:
   - type: markdown
     attributes:

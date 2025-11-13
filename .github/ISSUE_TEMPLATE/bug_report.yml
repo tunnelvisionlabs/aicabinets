@@ -1,13 +1,20 @@
 name: Bug report
 description: Report incorrect or unstable behavior with reproduction steps.
 title: "[Bug]: "
-labels:
-  - type:bug
+type: Bug
 body:
   - type: markdown
     attributes:
       value: |
         Confirm this is a defect in shipped behavior. For feature requests, use the enhancement or feature request forms.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Provide a concise title that highlights the problem.
+      placeholder: Cabinet doors render inside-out when mirrored.
+    validations:
+      required: true
   - type: textarea
     id: current_behavior
     attributes:

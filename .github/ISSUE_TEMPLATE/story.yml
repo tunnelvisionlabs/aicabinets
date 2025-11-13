@@ -1,8 +1,7 @@
 name: Story
 description: Capture a user-visible capability with goals and acceptance criteria.
 title: "[Story]: "
-labels:
-  - type:story
+type: Story
 body:
   - type: markdown
     attributes:

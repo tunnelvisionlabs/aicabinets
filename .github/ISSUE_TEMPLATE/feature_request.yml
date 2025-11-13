@@ -1,8 +1,7 @@
 name: Feature request
 description: Propose a brand-new capability for AI Cabinets.
 title: "[Feature]: "
-labels:
-  - type:feature
+type: Feature
 body:
   - type: markdown
     attributes:

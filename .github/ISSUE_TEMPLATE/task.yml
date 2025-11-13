@@ -1,8 +1,7 @@
 name: Task
 description: Track a focused unit of work with expected behavior and acceptance criteria.
 title: "[Task]: "
-labels:
-  - type:task
+type: Task
 body:
   - type: markdown
     attributes:

@@ -78,11 +78,9 @@ Start new issues with the structured GitHub forms so titles, labels, and require
 * [Enhancement issue form](https://github.com/tunnelvisionlabs/aicabinets/issues/new?template=enhancement.yml)
 * [Feature request form](https://github.com/tunnelvisionlabs/aicabinets/issues/new?template=feature_request.yml)
 
-> **Formatting rule:** Prefer **markdown headings** for section titles (no bold section headers).
+> **Formatting rule:** Prefer **markdown headings** for section titles (no bold section headers), and follow each heading with a blank line before the next content.
 
-Use the sections provided by each form; include optional sections only when they are explicitly requested.
-
-> **Omit by default for tasks:** Test Plan, Docs, and Dependencies. Include them **only** when they were explicitly requested for that issue.
+Use the sections provided by each form; include optional sections when the details are specific, accurate, and materially help contributors complete the work.
 
 ## Labels
 
