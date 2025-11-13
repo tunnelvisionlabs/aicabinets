@@ -113,12 +113,12 @@ class TC_FivePieceDoorParams < TestUp::TestCase
   def test_write_instance_scope_makes_unique_definition
     model = Sketchup.active_model
     definition = model.definitions.add('Five Piece Shared Definition')
-    definition.entities.add_line(ORIGIN, Geom::Point3d.new(100.mm, 0, 0))
+    definition.entities.add_line(ORIGIN, ::Geom::Point3d.new(100.mm, 0, 0))
 
-    first = model.active_entities.add_instance(definition, Geom::Transformation.new)
+    first = model.active_entities.add_instance(definition, ::Geom::Transformation.new)
     second = model.active_entities.add_instance(
       definition,
-      Geom::Transformation.translation([250.mm, 0, 0])
+      ::Geom::Transformation.translation([250.mm, 0, 0])
     )
 
     AICabinets::Params::FivePiece.write!(

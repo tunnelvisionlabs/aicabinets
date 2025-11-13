@@ -219,23 +219,23 @@ module AICabinets
             next unless bounds
 
             min = bounds.min
-            Geom::Point3d.new(min.x, min.y, min.z)
+            ::Geom::Point3d.new(min.x, min.y, min.z)
           rescue StandardError
             nil
           end
         end
 
         def build_origin_segments(origin)
-          return [] unless origin.is_a?(Geom::Point3d)
+          return [] unless origin.is_a?(::Geom::Point3d)
 
           size = ORIGIN_MARKER_SIZE_MM.mm
           [
-            Geom::Point3d.new(origin.x - size, origin.y, origin.z),
-            Geom::Point3d.new(origin.x + size, origin.y, origin.z),
-            Geom::Point3d.new(origin.x, origin.y, origin.z - size),
-            Geom::Point3d.new(origin.x, origin.y, origin.z + size),
-            Geom::Point3d.new(origin.x, origin.y - size, origin.z),
-            Geom::Point3d.new(origin.x, origin.y + size, origin.z)
+            ::Geom::Point3d.new(origin.x - size, origin.y, origin.z),
+            ::Geom::Point3d.new(origin.x + size, origin.y, origin.z),
+            ::Geom::Point3d.new(origin.x, origin.y, origin.z - size),
+            ::Geom::Point3d.new(origin.x, origin.y, origin.z + size),
+            ::Geom::Point3d.new(origin.x, origin.y - size, origin.z),
+            ::Geom::Point3d.new(origin.x, origin.y + size, origin.z)
           ]
         end
       end

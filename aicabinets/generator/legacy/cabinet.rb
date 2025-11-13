@@ -735,29 +735,29 @@ module AICabinets
 
     # Bottom rail from the left stile
     bottom = left.copy
-    rotate_bottom = Geom::Transformation.rotation([x, 0, z], Geom::Vector3d.new(0, 1, 0), -90.degrees)
+    rotate_bottom = ::Geom::Transformation.rotation([x, 0, z], ::Geom::Vector3d.new(0, 1, 0), -90.degrees)
     bottom.transform!(rotate_bottom)
     rail_length = width - (2 * stile) + (2 * groove_depth)
     length_scale = rail_length / height.to_f
-    bottom.transform!(Geom::Transformation.scaling([x, 0, z], length_scale, 1, 1))
+    bottom.transform!(::Geom::Transformation.scaling([x, 0, z], length_scale, 1, 1))
     if rail != stile
       delta = rail - stile
       bottom.entities.grep(Sketchup::Face).each do |f|
-        next unless f.normal.parallel?(Geom::Vector3d.new(0, 0, -1))
+        next unless f.normal.parallel?(::Geom::Vector3d.new(0, 0, -1))
         f.pushpull(delta)
       end
     end
     bb = bottom.bounds
-    bottom.transform!(Geom::Transformation.translation([x + stile - groove_depth - bb.min.x, 0, z - bb.min.z]))
+    bottom.transform!(::Geom::Transformation.translation([x + stile - groove_depth - bb.min.x, 0, z - bb.min.z]))
 
     # Right stile by mirroring the left stile across the door width
     right = left.copy
-    mirror_right = Geom::Transformation.scaling([x + (width / 2), 0, 0], -1, 1, 1)
+    mirror_right = ::Geom::Transformation.scaling([x + (width / 2), 0, 0], -1, 1, 1)
     right.transform!(mirror_right)
 
     # Top rail by mirroring the bottom rail around the door's center
     top = bottom.copy
-    mirror_top = Geom::Transformation.scaling([0, 0, z + (height / 2)], 1, 1, -1)
+    mirror_top = ::Geom::Transformation.scaling([0, 0, z + (height / 2)], 1, 1, -1)
     top.transform!(mirror_top)
 
     # Trim rails where they intersect stiles
@@ -1300,7 +1300,7 @@ module AICabinets
     columns:,
     from_right: false
   )
-    normal = Geom::Vector3d.new(from_right ? -1 : 1, 0, 0)
+    normal = ::Geom::Vector3d.new(from_right ? -1 : 1, 0, 0)
 
     columns.each do |col|
       dist = col[:distance] || 0
@@ -1321,7 +1321,7 @@ module AICabinets
 
       count.times do |i|
         z = z_start + (spacing * i)
-        center = Geom::Point3d.new(x, y, z)
+        center = ::Geom::Point3d.new(x, y, z)
         edges = entities.add_circle(center, normal, radius_col)
         face = entities.add_face(edges)
         face ||= edges.first.faces.min_by(&:area)

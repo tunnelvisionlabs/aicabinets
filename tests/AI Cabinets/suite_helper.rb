@@ -80,7 +80,7 @@ module AICabinetsTestHelper
   #
   # @param definition_or_instance [Sketchup::ComponentDefinition,
   #   Sketchup::ComponentInstance, Sketchup::Group]
-  # @return [Geom::BoundingBox]
+  # @return [::Geom::BoundingBox]
   def bbox_local_of(definition_or_instance)
     case definition_or_instance
     when Sketchup::ComponentDefinition
@@ -167,12 +167,12 @@ module AICabinetsTestHelper
 
   # Compares two transformations with tolerance.
   #
-  # @param a [Geom::Transformation]
-  # @param b [Geom::Transformation]
+  # @param a [::Geom::Transformation]
+  # @param b [::Geom::Transformation]
   # @param tolerance [Numeric]
   # @return [Boolean]
   def transforms_approx_equal?(a, b, tolerance = TOL)
-    return false unless a.is_a?(Geom::Transformation) && b.is_a?(Geom::Transformation)
+    return false unless a.is_a?(::Geom::Transformation) && b.is_a?(::Geom::Transformation)
 
     tol = tolerance.respond_to?(:to_f) ? tolerance.to_f : Float(tolerance)
 

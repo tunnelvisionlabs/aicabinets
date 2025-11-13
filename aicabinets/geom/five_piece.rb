@@ -424,7 +424,7 @@ module AICabinets
       def translate_group!(group, x_mm: 0.0, y_mm: 0.0, z_mm: 0.0)
         return group unless group&.valid?
 
-        translation = Geom::Transformation.translation([
+        translation = ::Geom::Transformation.translation([
           Units.to_length_mm(x_mm),
           Units.to_length_mm(y_mm),
           Units.to_length_mm(z_mm)

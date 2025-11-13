@@ -54,7 +54,7 @@ module AICabinets
 
       FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
 
-      IDENTITY_TRANSFORMATION = Geom::Transformation.new
+      IDENTITY_TRANSFORMATION = ::Geom::Transformation.new
 
       def place_at_point!(model:, point3d:, params_mm:)
         validate_model!(model)
@@ -89,9 +89,9 @@ module AICabinets
       private_class_method :validate_model!
 
       def validate_point!(point3d)
-        return if point3d.is_a?(Geom::Point3d)
+        return if point3d.is_a?(::Geom::Point3d)
 
-        raise ArgumentError, 'point3d must be a Geom::Point3d'
+        raise ArgumentError, 'point3d must be a ::Geom::Point3d'
       end
       private_class_method :validate_point!
 
@@ -270,7 +270,7 @@ module AICabinets
       def placement_transform(model, point3d)
         context_transform = active_path_transform(model)
         local_point = point3d.transform(context_transform.inverse)
-        Geom::Transformation.translation(local_point)
+        ::Geom::Transformation.translation(local_point)
       end
       private_class_method :placement_transform
 

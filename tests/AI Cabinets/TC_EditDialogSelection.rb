@@ -72,7 +72,7 @@ class TC_EditDialogSelection < TestUp::TestCase
     )
     definition = first_instance.definition
 
-    translation = Geom::Transformation.translation([
+    translation = ::Geom::Transformation.translation([
       (params_mm[:width_mm] + 300.0).mm,
       0,
       0

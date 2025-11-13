@@ -35,20 +35,20 @@ module AICabinets
         result
       end
 
-      # Convenience constructor for Geom::Point3d using millimeter coordinates.
-      # @return [Geom::Point3d]
+      # Convenience constructor for ::Geom::Point3d using millimeter coordinates.
+      # @return [::Geom::Point3d]
       def point_mm(x_mm, y_mm, z_mm)
-        Geom::Point3d.new(
+        ::Geom::Point3d.new(
           to_length_mm(x_mm),
           to_length_mm(y_mm),
           to_length_mm(z_mm)
         )
       end
 
-      # Convenience constructor for Geom::Vector3d using millimeter components.
-      # @return [Geom::Vector3d]
+      # Convenience constructor for ::Geom::Vector3d using millimeter components.
+      # @return [::Geom::Vector3d]
       def vector_mm(x_mm, y_mm, z_mm)
-        Geom::Vector3d.new(
+        ::Geom::Vector3d.new(
           to_length_mm(x_mm),
           to_length_mm(y_mm),
           to_length_mm(z_mm)

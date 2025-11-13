@@ -263,7 +263,7 @@ module AICabinets
         def translated_preview_points
           return unless @current_point
 
-          translation = Geom::Transformation.translation(@current_point.to_a)
+          translation = ::Geom::Transformation.translation(@current_point.to_a)
           @preview_points.map { |pt| pt.transform(translation) }
         end
 

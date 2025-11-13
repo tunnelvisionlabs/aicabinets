@@ -28,7 +28,7 @@ begin
   spacing = 700.mm
 
   fronts.each_with_index do |front, index|
-    point = Geom::Point3d.new(index * spacing, 0, 0)
+    point = ::Geom::Point3d.new(index * spacing, 0, 0)
     params = base_params.merge(front: front)
     AICabinets::Ops::InsertBaseCabinet.place_at_point!(
       model: model,

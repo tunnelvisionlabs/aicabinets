@@ -104,7 +104,7 @@ class TC_EditPerBayScopes < TestUp::TestCase
     config = base_config
     definition, first_instance = AICabinets::TestHarness.insert!(config: config)
 
-    offset = Geom::Transformation.translation([(WIDTH_MM + 200.0).mm, 0, 0])
+    offset = ::Geom::Transformation.translation([(WIDTH_MM + 200.0).mm, 0, 0])
     second_instance = Sketchup.active_model.active_entities.add_instance(definition, offset)
 
     [definition, first_instance, second_instance]

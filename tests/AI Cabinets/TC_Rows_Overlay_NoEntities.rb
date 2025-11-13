@@ -59,7 +59,7 @@ class TC_Rows_Overlay_NoEntities < TestUp::TestCase
 
     count.times do |index|
       offset_mm = index * (BASE_PARAMS_MM[:width_mm] + 5.0)
-      point = Geom::Point3d.new(offset_mm.mm, 0, 0)
+      point = ::Geom::Point3d.new(offset_mm.mm, 0, 0)
       instance = AICabinets::Ops::InsertBaseCabinet.place_at_point!(
         model: model,
         point3d: point,
