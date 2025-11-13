@@ -6,6 +6,7 @@ module AICabinets
       extend self
 
       ROW_HIGHLIGHT_OVERLAY_ID = 'AICabinets.Rows.Highlight'.freeze
+      ROW_HIGHLIGHT_OVERLAY_NAME = 'Rows Highlight'.freeze
       ORIGIN_MARKER_SIZE_MM = 50.0
       POLYLINE_COLOR = Sketchup::Color.new(0xff, 0x66, 0x00).freeze
       LINE_WIDTH = 3
@@ -127,20 +128,6 @@ module AICabinets
         raise ArgumentError, 'model must be a SketchUp::Model'
       end
 
-      def overlay_constructor_arity
-        @overlay_constructor_arity ||= begin
-          return 0 unless defined?(Sketchup::Overlay)
-          Sketchup::Overlay.instance_method(:initialize).arity
-        rescue StandardError
-          0
-        end
-      end
-
-      def overlay_requires_priority_argument?
-        arity = overlay_constructor_arity
-        arity >= 2 || arity.negative?
-      end
-
       def overlay_priority
         @overlay_priority ||= begin
           if defined?(Sketchup::Overlay::PRIORITY_VIEWER)
@@ -153,6 +140,21 @@ module AICabinets
             50
           end
         end
+      end
+
+      def overlay_constructor_arguments
+        [
+          ROW_HIGHLIGHT_OVERLAY_ID,
+          ROW_HIGHLIGHT_OVERLAY_NAME,
+          overlay_priority
+        ]
+      end
+
+      def shrink_overlay_arguments(args)
+        return nil unless args.is_a?(Array)
+        return nil if args.length <= 1
+
+        args[0, args.length - 1]
       end
 
       def handle_tool_deactivated(model)
@@ -239,11 +241,14 @@ module AICabinets
 
         class Overlay < Sketchup::Overlay
           def initialize(model)
-            args = [ROW_HIGHLIGHT_OVERLAY_ID]
-            if Highlight.__send__(:overlay_requires_priority_argument?)
-              args << Highlight.__send__(:overlay_priority)
+            args = Highlight.__send__(:overlay_constructor_arguments)
+            begin
+              super(*args)
+            rescue ArgumentError, TypeError
+              args = Highlight.__send__(:shrink_overlay_arguments, args)
+              retry if args
+              raise
             end
-            super(*args)
             @model = model
             @geometry = nil
           end
