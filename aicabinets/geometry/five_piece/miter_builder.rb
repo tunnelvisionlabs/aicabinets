@@ -76,8 +76,7 @@ module AICabinets
           left = apply_stile_miters!(
             left,
             outside_height_mm,
-            orientation: :left,
-            name: 'Stile-L'
+            orientation: :left
           )
           apply_metadata(left, role: FivePiece::GROUP_ROLE_STILE, name: 'Stile-L')
           stiles << left
@@ -95,8 +94,7 @@ module AICabinets
           right = apply_stile_miters!(
             right,
             outside_height_mm,
-            orientation: :right,
-            name: 'Stile-R'
+            orientation: :right
           )
           FivePiece.send(:translate_group!, right, x_mm: outside_width_mm - @stile_width_mm)
           apply_metadata(right, role: FivePiece::GROUP_ROLE_STILE, name: 'Stile-R')
@@ -121,8 +119,7 @@ module AICabinets
           bottom = apply_rail_miters!(
             bottom,
             outside_width_mm,
-            position: :bottom,
-            name: 'Rail-Bottom'
+            position: :bottom
           )
           apply_metadata(bottom, role: FivePiece::GROUP_ROLE_RAIL, name: 'Rail-Bottom')
           rails << bottom
@@ -140,8 +137,7 @@ module AICabinets
           top = apply_rail_miters!(
             top,
             outside_width_mm,
-            position: :top,
-            name: 'Rail-Top'
+            position: :top
           )
           FivePiece.send(:translate_group!, top, z_mm: outside_height_mm - @rail_width_mm)
           apply_metadata(top, role: FivePiece::GROUP_ROLE_RAIL, name: 'Rail-Top')
@@ -154,7 +150,7 @@ module AICabinets
           FivePiece.send(:apply_group_metadata, group, role: role, name: name, tag: @front_tag, material: @material)
         end
 
-        def apply_stile_miters!(group, outside_height_mm, orientation:, name:)
+        def apply_stile_miters!(group, outside_height_mm, orientation:)
           interior_point = [@stile_width_mm * 0.5, @thickness_mm * 0.5, outside_height_mm * 0.5]
 
           group =
@@ -193,10 +189,10 @@ module AICabinets
               group
             end
 
-          apply_metadata(group, role: FivePiece::GROUP_ROLE_STILE, name: name)
+          group
         end
 
-        def apply_rail_miters!(group, outside_width_mm, position:, name:)
+        def apply_rail_miters!(group, outside_width_mm, position:)
           inside_z = position == :bottom ? @rail_width_mm : 0.0
           outer_z = position == :bottom ? 0.0 : @rail_width_mm
           mid_z = (inside_z + outer_z) * 0.5
@@ -218,7 +214,7 @@ module AICabinets
             keep_point: interior_point
           )
 
-          apply_metadata(group, role: FivePiece::GROUP_ROLE_RAIL, name: name)
+          group
         end
 
         def cut_with_plane_points!(group, a:, b:, c:, keep_point:)
@@ -234,15 +230,11 @@ module AICabinets
           keep = determine_keep_side(normal, point, keep, keep_point)
 
           if boolean_mode?
-            replacement = cut_with_boolean!(group, normal: normal, point: point, keep: keep)
-            if replacement
-              @miter_mode ||= :boolean
-              return replacement
-            end
+            @miter_mode ||= :boolean
+          else
+            @miter_mode ||= :intersect
+            warn_once('SketchUp solid boolean operations unavailable; used geometric intersection for miters.')
           end
-
-          @miter_mode = :intersect if @miter_mode.nil? || @miter_mode == :boolean
-          warn_once('SketchUp solid boolean operations unavailable; used geometric intersection for miters.')
 
           cut_with_intersection!(group, normal: normal, point: point, keep: keep)
         end
@@ -266,26 +258,6 @@ module AICabinets
           return if @warnings.any? { |existing| existing == message }
 
           @warnings << message
-        end
-
-        def cut_with_boolean!(group, normal:, point:, keep:)
-          parent = group.parent
-          return nil unless parent.respond_to?(:entities)
-
-          cutter = parent.entities.add_group
-          begin
-            build_cutter!(cutter.entities, group.bounds, normal, point, keep)
-            result = group.subtract(cutter)
-            if result.is_a?(Sketchup::Group) && result.valid? && result != group
-              group.erase! if group.valid?
-              group = result
-            end
-            group
-          rescue StandardError
-            nil
-          ensure
-            cutter.erase! if cutter.valid?
-          end
         end
 
         def build_cutter!(entities, bounds, normal, point, keep)
@@ -330,7 +302,7 @@ module AICabinets
           begin
             build_cutter!(helper.entities, group.bounds, normal, point, :positive)
             transformation = Geom::Transformation.new
-            group.entities.intersect_with(true, transformation, group.entities, transformation, false, helper)
+            group.entities.intersect_with(true, transformation, group.entities, transformation, false, helper.entities)
           ensure
             helper.erase! if helper.valid?
           end
@@ -456,7 +428,7 @@ module AICabinets
         def signed_distance_mm(normal, point, geom_point)
           coords = [geom_point.x, geom_point.y, geom_point.z].map { |component| component.to_f * MM_PER_INCH }
           vector = [coords[0] - point[0], coords[1] - point[1], coords[2] - point[2]]
-          dot = normal[0] * vector[0] + normal[1] * vector[1] + normal[2] * vector[2]
+          dot = (normal[0] * vector[0]) + (normal[1] * vector[1]) + (normal[2] * vector[2])
           normal_length = vector_length(normal)
           return dot if normal_length <= EPSILON_MM
 

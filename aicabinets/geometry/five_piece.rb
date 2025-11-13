@@ -68,10 +68,9 @@ module AICabinets
         miter_mode = nil
         joint_symbol = nil
 
-        operation_open = false
+        model.start_operation(OPERATION_NAME, true)
+        committed = false
         begin
-          operation_open = model.start_operation(OPERATION_NAME, true)
-
           remove_existing_frame_groups(definition.entities)
 
           case joint_type
@@ -111,10 +110,10 @@ module AICabinets
             raise ArgumentError, "Unsupported joint_type: #{joint_type.inspect}"
           end
 
-          model.commit_operation if operation_open
-          operation_open = false
+          model.commit_operation
+          committed = true
         ensure
-          model.abort_operation if operation_open
+          model.abort_operation unless committed
         end
 
         {
@@ -261,11 +260,13 @@ module AICabinets
       private_class_method :positive_length!
 
       def remove_existing_frame_groups(entities)
-        groups = entities.grep(Sketchup::Group).select do |group|
-          dictionary = group.attribute_dictionary(GROUP_DICTIONARY)
+        removable = entities.select do |entity|
+          next unless entity.respond_to?(:attribute_dictionary)
+
+          dictionary = entity.attribute_dictionary(GROUP_DICTIONARY)
           dictionary && dictionary[GROUP_ROLE_KEY]
         end
-        entities.erase_entities(groups) if groups.any?
+        entities.erase_entities(removable) if removable.any?
       end
       private_class_method :remove_existing_frame_groups
 
@@ -352,17 +353,12 @@ module AICabinets
           [0.0, thickness_mm]
         ]
 
-        points =
-          case inside_facing
-          when :positive
-            base
-          when :negative
-            base.map do |(x_mm, y_mm)|
-              [width_mm - x_mm, y_mm]
-            end
-          else
-            base
+        points = base
+        if inside_facing == :negative
+          points = base.map do |(x_mm, y_mm)|
+            [width_mm - x_mm, y_mm]
           end
+        end
 
         points.map { |(x_mm, y_mm)| Units.point_mm(x_mm, y_mm, 0.0) }
       end
