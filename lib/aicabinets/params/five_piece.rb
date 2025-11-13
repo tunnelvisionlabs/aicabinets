@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'lib/aicabinets/validation_error'
-require 'set'
 
 module AICabinets
   module Params
@@ -61,7 +60,6 @@ module AICabinets
       }.freeze
 
       RECOGNIZED_KEYS = DEFAULTS.keys.freeze
-      RECOGNIZED_KEY_SET = RECOGNIZED_KEYS.to_set
 
       def defaults
         params = duplicate_defaults
@@ -198,11 +196,11 @@ module AICabinets
 
         symbol = key_string.to_sym
         normalized = KEY_ALIASES.fetch(symbol, symbol)
-        return normalized if RECOGNIZED_KEY_SET.include?(normalized)
+        return normalized if RECOGNIZED_KEYS.include?(normalized)
 
         underscored = underscore_key(key_string)
         normalized = KEY_ALIASES.fetch(underscored, underscored)
-        return normalized if RECOGNIZED_KEY_SET.include?(normalized)
+        return normalized if RECOGNIZED_KEYS.include?(normalized)
 
         nil
       end
@@ -331,7 +329,7 @@ module AICabinets
         return unless stile_width.is_a?(Numeric) && groove_depth.is_a?(Numeric) && JOINT_TYPES.include?(joint_type)
 
         joint_min = MIN_STILE_WIDTH_BY_JOINT_MM.fetch(joint_type)
-        groove_min = groove_depth * 2.0 + GROOVE_DEPTH_BUFFER_MM
+        groove_min = (groove_depth * 2.0) + GROOVE_DEPTH_BUFFER_MM
         min_width = [joint_min, groove_min].max
 
         if stile_width < min_width
