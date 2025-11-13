@@ -2,6 +2,10 @@
 
 This repository contains Ruby scripts for SketchUp that generate simple cabinetry models from code.
 
+## Features
+
+- [Rows](docs/rows.md) – Create and manage cabinet rows, reflow widths, and keep reveals uniform across fronts.
+
 ## Contents
 
 - `lib/cabinet.rb` – library functions for creating cabinets. The generator builds a frameless carcass from two sides, a top (solid panel or pair of stringers), a bottom, and a back, and can optionally add shelves. Cabinets may also be partitioned with fixed panels so each section can have its own doors or drawers. Panels can be inset using `top_inset`, `bottom_inset`, and `back_inset` options. Use `top_type: :stringers` and `top_stringer_width` (default `100.mm`) to model stringers instead of a full top panel. Door overlays use `door_reveal` for the default gap to cabinet edges, `top_reveal` and `bottom_reveal` can override the edge clearances, and `door_gap` controls spacing between adjacent fronts.

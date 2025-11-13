@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">Uniform row reveal split versus exposed end</title>
+  <desc id="desc">Left panel shows two adjacent doors sharing a 3 millimeter reveal, each trimmed by 1.5 millimeters. Right panel shows an exposed end keeping the full 3 millimeter reveal.</desc>
+  <style>
+    .label { font-family: 'Segoe UI', sans-serif; fill: #1f2933; font-size: 20px; }
+    .panel { fill: none; stroke: #cbd5e1; stroke-width: 2; }
+    .door { fill: #f1f5f9; stroke: #64748b; stroke-width: 2; }
+    .gap { fill: #bfdbfe; }
+    .measurement { font-family: 'Segoe UI', sans-serif; fill: #2563eb; font-size: 18px; }
+  </style>
+  <rect class="panel" x="40" y="60" width="360" height="240" rx="16" />
+  <text class="label" x="60" y="100">Shared boundary</text>
+  <rect class="door" x="80" y="140" width="120" height="140" rx="8" />
+  <rect class="door" x="220" y="140" width="120" height="140" rx="8" />
+  <rect class="gap" x="200" y="140" width="20" height="140" rx="4" />
+  <text class="measurement" x="190" y="310">3&nbsp;mm total (1.5&nbsp;mm per door)</text>
+  <rect class="panel" x="520" y="60" width="360" height="240" rx="16" />
+  <text class="label" x="540" y="100">Exposed end</text>
+  <rect class="door" x="560" y="140" width="140" height="140" rx="8" />
+  <rect class="gap" x="710" y="140" width="30" height="140" rx="4" />
+  <text class="measurement" x="640" y="310">Full 3&nbsp;mm reveal</text>
+</svg>

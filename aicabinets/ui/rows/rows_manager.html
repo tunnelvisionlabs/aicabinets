@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Cabinets — Rows Manager</title>
+    <link rel="stylesheet" href="rows_manager.css" />
+    <script src="../dialogs/console_bridge.js"></script>
+  </head>
+  <body>
+    <div class="rows-app">
+      <aside class="rows-list-pane">
+        <header class="pane-header">
+          <h1>Rows</h1>
+          <button id="create-row" class="primary">Create from Selection</button>
+        </header>
+        <ul id="rows-list" class="rows-list"></ul>
+      </aside>
+      <main class="rows-detail-pane">
+        <section class="row-summary">
+          <div class="summary-field">
+            <label>Row ID</label>
+            <span id="row-id" class="summary-value">—</span>
+          </div>
+          <div class="summary-field">
+            <label>Members</label>
+            <span id="row-members-count" class="summary-value">0</span>
+          </div>
+          <div class="summary-field">
+            <label for="row-reveal">Reveal</label>
+            <input id="row-reveal" type="text" class="length-input" />
+            <button id="apply-reveal">Apply</button>
+            <span id="row-reveal-formatted" class="hint"></span>
+          </div>
+          <div class="summary-field">
+            <label class="checkbox">
+              <input type="checkbox" id="row-lock-length" />
+              Lock total length
+            </label>
+          </div>
+          <div class="row-actions">
+            <button id="add-selection">Add Selection</button>
+            <button id="remove-selection">Remove Selection</button>
+            <button id="toggle-highlight">Enable Highlight</button>
+            <label class="checkbox preference-toggle">
+              <input type="checkbox" id="auto-select-row" />
+              Auto-select row on member select
+            </label>
+          </div>
+        </section>
+        <section class="row-members">
+          <header class="pane-header">
+            <h2>Members</h2>
+          </header>
+          <ul id="members-list" class="members-list"></ul>
+          <div class="member-controls">
+            <button id="move-up">Move Up</button>
+            <button id="move-down">Move Down</button>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="rows_manager.js"></script>
+  </body>
+</html>

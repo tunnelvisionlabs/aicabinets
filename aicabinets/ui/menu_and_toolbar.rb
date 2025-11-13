@@ -23,24 +23,55 @@ module AICabinets
       def attach_menu
         extensions_menu = ::UI.menu('Extensions')
         @menu ||= extensions_menu.add_submenu(MENU_TITLE)
-        menu_commands = [
+
+        primary_commands = [
           commands[:insert_base_cabinet],
           commands[:edit_base_cabinet]
         ].compact
 
-        menu_commands.each do |command|
+        primary_commands.each do |command|
           @menu.add_item(command)
+        end
+
+        primary_group_has_items = primary_commands.any?
+
+        rows_commands = [
+          commands[:create_row_from_selection],
+          commands[:rows_manage],
+          commands[:rows_add_selection],
+          commands[:rows_remove_selection],
+          commands[:rows_toggle_highlight],
+          commands[:rows_toggle_auto_select]
+        ].compact
+
+        if rows_commands.any?
+          @menu.add_separator if primary_group_has_items
+          rows_menu = @menu.add_submenu('Rows')
+          rows_commands.each do |command|
+            rows_menu.add_item(command)
+          end
         end
       end
 
       def attach_toolbar
-        command = commands[:insert_base_cabinet]
-        return unless command
+        @toolbar ||= ::UI::Toolbar.new(TOOLBAR_NAME)
+        return unless @toolbar
 
-        @toolbar ||= begin
-          toolbar = ::UI::Toolbar.new(TOOLBAR_NAME)
-          toolbar.add_item(command)
-          toolbar
+        toolbar_commands = [
+          commands[:insert_base_cabinet],
+          commands[:create_row_from_selection],
+          commands[:rows_manage],
+          commands[:rows_add_selection],
+          commands[:rows_remove_selection],
+          commands[:rows_toggle_highlight]
+        ].compact
+
+        toolbar_commands.each do |command|
+          next unless command
+          next if toolbar_contains?(@toolbar, command)
+
+          @toolbar.add_item(command)
+          toolbar_added_commands << command
         end
 
         show_toolbar_if_appropriate(@toolbar)
@@ -76,6 +107,16 @@ module AICabinets
         rescue NameError
           nil
         end
+      end
+
+      def toolbar_contains?(toolbar, command)
+        return false unless toolbar && command
+
+        toolbar_added_commands.include?(command)
+      end
+
+      def toolbar_added_commands
+        @toolbar_added_commands ||= []
       end
 
       def attach_context_menu
