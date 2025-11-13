@@ -4,6 +4,7 @@ require 'sketchup.rb'
 
 Sketchup.require('aicabinets/capabilities')
 Sketchup.require('aicabinets/generator/fronts')
+Sketchup.require('aicabinets/geometry/five_piece/miter_builder')
 Sketchup.require('aicabinets/ops/materials')
 Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/ops/units')
@@ -52,6 +53,8 @@ module AICabinets
         open_width_mm = positive_length!(open_w_mm, 'open_w_mm')
         open_height_mm = positive_length!(open_h_mm, 'open_h_mm')
 
+        joint_type = validated[:joint_type].to_s
+
         raise ArgumentError, 'Opening width must exceed twice the stile width' if open_width_mm <= (2.0 * stile_width_mm) + MIN_DIMENSION_MM
         raise ArgumentError, 'Opening height must exceed twice the rail width' if open_height_mm <= (2.0 * rail_width_mm) + MIN_DIMENSION_MM
 
@@ -62,6 +65,8 @@ module AICabinets
         stiles = []
         rails = []
         coping_mode = nil
+        miter_mode = nil
+        joint_symbol = nil
 
         operation_open = false
         begin
@@ -69,56 +74,41 @@ module AICabinets
 
           remove_existing_frame_groups(definition.entities)
 
-          profile_depth_mm = [[SHAKER_PROFILE_DEPTH_MM, thickness_mm].min, MIN_DIMENSION_MM].max
-          stile_profile_run_mm = [[SHAKER_PROFILE_RUN_MM, stile_width_mm].min, MIN_DIMENSION_MM].max
-          rail_profile_run_mm = [[SHAKER_PROFILE_RUN_MM, rail_width_mm].min, MIN_DIMENSION_MM].max
-
-          stiles = build_stiles(
-            definition.entities,
-            open_width_mm: open_width_mm,
-            stile_width_mm: stile_width_mm,
-            height_mm: open_height_mm,
-            thickness_mm: thickness_mm,
-            profile_depth_mm: profile_depth_mm,
-            profile_run_mm: stile_profile_run_mm,
-            material: material,
-            front_tag: front_tag
-          )
-
-          inner_length_mm = open_width_mm - (2.0 * stile_width_mm)
-          raise ArgumentError, 'Opening width too small for rails' unless inner_length_mm > MIN_DIMENSION_MM
-
-          if AICabinets::Capabilities.solid_booleans?
-            rails = build_rails(
-              definition.entities,
+          case joint_type
+          when 'cope_stick'
+            branch = build_cope_stick_frame(
+              entities: definition.entities,
+              open_width_mm: open_width_mm,
+              open_height_mm: open_height_mm,
               stile_width_mm: stile_width_mm,
-              inner_length_mm: inner_length_mm,
               rail_width_mm: rail_width_mm,
               thickness_mm: thickness_mm,
-              profile_depth_mm: profile_depth_mm,
-              profile_run_mm: rail_profile_run_mm,
-              open_height_mm: open_height_mm,
               material: material,
-              front_tag: front_tag,
-              _coping: true
+              front_tag: front_tag
             )
-            coping_mode = :boolean_subtract
+            stiles = branch[:stiles]
+            rails = branch[:rails]
+            coping_mode = branch[:coping_mode]
+            warnings.concat(branch[:warnings])
+            joint_symbol = :cope_stick
+          when 'miter'
+            branch = build_miter_frame(
+              entities: definition.entities,
+              open_width_mm: open_width_mm,
+              open_height_mm: open_height_mm,
+              stile_width_mm: stile_width_mm,
+              rail_width_mm: rail_width_mm,
+              thickness_mm: thickness_mm,
+              material: material,
+              front_tag: front_tag
+            )
+            stiles = branch[:stiles]
+            rails = branch[:rails]
+            miter_mode = branch[:miter_mode]
+            warnings.concat(branch[:warnings])
+            joint_symbol = :miter
           else
-            rails = build_rails(
-              definition.entities,
-              stile_width_mm: stile_width_mm,
-              inner_length_mm: inner_length_mm,
-              rail_width_mm: rail_width_mm,
-              thickness_mm: thickness_mm,
-              profile_depth_mm: profile_depth_mm,
-              profile_run_mm: rail_profile_run_mm,
-              open_height_mm: open_height_mm,
-              material: material,
-              front_tag: front_tag,
-              _coping: false
-            )
-            coping_mode = :square_fallback
-            warnings << 'SketchUp solid boolean operations unavailable; generated square rail ends.'
+            raise ArgumentError, "Unsupported joint_type: #{joint_type.inspect}"
           end
 
           model.commit_operation if operation_open
@@ -130,7 +120,9 @@ module AICabinets
         {
           stiles: stiles,
           rails: rails,
+          joint_type: joint_symbol,
           coping_mode: coping_mode,
+          miter_mode: miter_mode,
           warnings: warnings
         }
       end
@@ -176,11 +168,89 @@ module AICabinets
       private_class_method :ensure_supported_profile!
 
       def ensure_joint_type!(joint_type)
-        return if joint_type.to_s == 'cope_stick'
+        return if %w[cope_stick miter].include?(joint_type.to_s)
 
-        raise ArgumentError, 'Five-piece frame generator only supports joint_type "cope_stick"'
+        raise ArgumentError, 'Five-piece frame generator only supports joint_type "cope_stick" or "miter"'
       end
       private_class_method :ensure_joint_type!
+
+      def build_cope_stick_frame(entities:, open_width_mm:, open_height_mm:, stile_width_mm:, rail_width_mm:, thickness_mm:, material:, front_tag:)
+        profile_depth_mm = [[SHAKER_PROFILE_DEPTH_MM, thickness_mm].min, MIN_DIMENSION_MM].max
+        stile_profile_run_mm = [[SHAKER_PROFILE_RUN_MM, stile_width_mm].min, MIN_DIMENSION_MM].max
+        rail_profile_run_mm = [[SHAKER_PROFILE_RUN_MM, rail_width_mm].min, MIN_DIMENSION_MM].max
+
+        stiles = build_stiles(
+          entities,
+          open_width_mm: open_width_mm,
+          stile_width_mm: stile_width_mm,
+          height_mm: open_height_mm,
+          thickness_mm: thickness_mm,
+          profile_depth_mm: profile_depth_mm,
+          profile_run_mm: stile_profile_run_mm,
+          material: material,
+          front_tag: front_tag
+        )
+
+        inner_length_mm = open_width_mm - (2.0 * stile_width_mm)
+        raise ArgumentError, 'Opening width too small for rails' unless inner_length_mm > MIN_DIMENSION_MM
+
+        if AICabinets::Capabilities.solid_booleans?
+          rails = build_rails(
+            entities,
+            stile_width_mm: stile_width_mm,
+            inner_length_mm: inner_length_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            profile_depth_mm: profile_depth_mm,
+            profile_run_mm: rail_profile_run_mm,
+            open_height_mm: open_height_mm,
+            material: material,
+            front_tag: front_tag,
+            _coping: true
+          )
+          coping_mode = :boolean_subtract
+          warnings = []
+        else
+          rails = build_rails(
+            entities,
+            stile_width_mm: stile_width_mm,
+            inner_length_mm: inner_length_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            profile_depth_mm: profile_depth_mm,
+            profile_run_mm: rail_profile_run_mm,
+            open_height_mm: open_height_mm,
+            material: material,
+            front_tag: front_tag,
+            _coping: false
+          )
+          coping_mode = :square_fallback
+          warnings = ['SketchUp solid boolean operations unavailable; generated square rail ends.']
+        end
+
+        {
+          stiles: stiles,
+          rails: rails,
+          coping_mode: coping_mode,
+          warnings: warnings
+        }
+      end
+      private_class_method :build_cope_stick_frame
+
+      def build_miter_frame(entities:, open_width_mm:, open_height_mm:, stile_width_mm:, rail_width_mm:, thickness_mm:, material:, front_tag:)
+        builder = MiterBuilder.new(
+          entities: entities,
+          open_width_mm: open_width_mm,
+          open_height_mm: open_height_mm,
+          stile_width_mm: stile_width_mm,
+          rail_width_mm: rail_width_mm,
+          thickness_mm: thickness_mm,
+          material: material,
+          front_tag: front_tag
+        )
+        builder.build
+      end
+      private_class_method :build_miter_frame
 
       def positive_length!(value, name)
         numeric = Float(value)
@@ -254,9 +324,17 @@ module AICabinets
       end
       private_class_method :build_rails
 
-      def create_stile_group(entities, width_mm:, height_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:)
+      def create_stile_group(entities, width_mm:, height_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, inside_facing: :positive)
         group = entities.add_group
-        face = group.entities.add_face(stile_profile_points(width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:))
+        face = group.entities.add_face(
+          stile_profile_points(
+            width_mm: width_mm,
+            thickness_mm: thickness_mm,
+            profile_depth_mm: profile_depth_mm,
+            profile_run_mm: profile_run_mm,
+            inside_facing: inside_facing
+          )
+        )
         raise 'Failed to create stile profile face' unless face
 
         ensure_face_normal!(face, axis: :z)
@@ -265,14 +343,28 @@ module AICabinets
       end
       private_class_method :create_stile_group
 
-      def stile_profile_points(width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:)
-        [
-          Units.point_mm(0.0, 0.0, 0.0),
-          Units.point_mm(width_mm - profile_run_mm, 0.0, 0.0),
-          Units.point_mm(width_mm, profile_depth_mm, 0.0),
-          Units.point_mm(width_mm, thickness_mm, 0.0),
-          Units.point_mm(0.0, thickness_mm, 0.0)
+      def stile_profile_points(width_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, inside_facing: :positive)
+        base = [
+          [0.0, 0.0],
+          [width_mm - profile_run_mm, 0.0],
+          [width_mm, profile_depth_mm],
+          [width_mm, thickness_mm],
+          [0.0, thickness_mm]
         ]
+
+        points =
+          case inside_facing
+          when :positive
+            base
+          when :negative
+            base.map do |(x_mm, y_mm)|
+              [width_mm - x_mm, y_mm]
+            end
+          else
+            base
+          end
+
+        points.map { |(x_mm, y_mm)| Units.point_mm(x_mm, y_mm, 0.0) }
       end
       private_class_method :stile_profile_points
 
