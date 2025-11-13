@@ -79,6 +79,7 @@ module AICabinets
             orientation: :left,
             name: 'Stile-L'
           )
+          apply_metadata(left, role: FivePiece::GROUP_ROLE_STILE, name: 'Stile-L')
           stiles << left
 
           right = FivePiece.send(
@@ -91,13 +92,14 @@ module AICabinets
             profile_run_mm: profile_run_mm,
             inside_facing: :negative
           )
-          FivePiece.send(:translate_group!, right, x_mm: outside_width_mm - @stile_width_mm)
           right = apply_stile_miters!(
             right,
             outside_height_mm,
             orientation: :right,
             name: 'Stile-R'
           )
+          FivePiece.send(:translate_group!, right, x_mm: outside_width_mm - @stile_width_mm)
+          apply_metadata(right, role: FivePiece::GROUP_ROLE_STILE, name: 'Stile-R')
           stiles << right
 
           stiles
@@ -122,6 +124,7 @@ module AICabinets
             position: :bottom,
             name: 'Rail-Bottom'
           )
+          apply_metadata(bottom, role: FivePiece::GROUP_ROLE_RAIL, name: 'Rail-Bottom')
           rails << bottom
 
           top = FivePiece.send(
@@ -134,13 +137,14 @@ module AICabinets
             profile_run_mm: profile_run_mm,
             inside_edge: :bottom
           )
-          FivePiece.send(:translate_group!, top, z_mm: outside_height_mm - @rail_width_mm)
           top = apply_rail_miters!(
             top,
             outside_width_mm,
             position: :top,
             name: 'Rail-Top'
           )
+          FivePiece.send(:translate_group!, top, z_mm: outside_height_mm - @rail_width_mm)
+          apply_metadata(top, role: FivePiece::GROUP_ROLE_RAIL, name: 'Rail-Top')
           rails << top
 
           rails
