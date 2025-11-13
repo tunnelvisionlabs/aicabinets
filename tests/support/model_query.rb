@@ -79,7 +79,7 @@ module ModelQuery
   private_class_method :bay_index_for
 
   def width_mm(bounds)
-    return 0.0 unless bounds.is_a?(::Geom::BoundingBox)
+    return 0.0 unless bounds.is_a?(Geom::BoundingBox)
 
     length_to_mm(bounds.max.x - bounds.min.x)
   end

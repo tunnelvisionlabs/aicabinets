@@ -52,7 +52,7 @@ module RowsTestHarness
     definition, instance = AICabinets::TestHarness.insert!(config: config)
     raise 'Failed to insert cabinet for tests.' unless instance&.valid?
 
-    translation = ::Geom::Transformation.translation([origin_x_mm.to_f.mm, 0.0, 0.0])
+    translation = Geom::Transformation.translation([origin_x_mm.to_f.mm, 0.0, 0.0])
     instance.transform!(translation)
     instance
   end
@@ -168,7 +168,7 @@ module RowsTestHarness
     raise 'Cabinet has no door fronts.' if entries.empty?
 
     base_transform = instance.transformation
-    world_bbox = ::Geom::BoundingBox.new
+    world_bbox = Geom::BoundingBox.new
 
     entries.each do |info|
       entity = info[:entity]
@@ -337,7 +337,7 @@ module RowsTestHarness
 
     return unless source_bounds
 
-    bounds = ::Geom::BoundingBox.new
+    bounds = Geom::BoundingBox.new
     8.times do |index|
       point = source_bounds.corner(index)
       next unless point

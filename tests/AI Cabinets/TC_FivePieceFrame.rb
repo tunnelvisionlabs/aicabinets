@@ -3,7 +3,7 @@
 require 'testup/testcase'
 require_relative 'suite_helper'
 
-Sketchup.require('aicabinets/geom/five_piece')
+Sketchup.require('aicabinets/geometry/five_piece')
 Sketchup.require('aicabinets/params/five_piece')
 Sketchup.require('aicabinets/capabilities')
 
@@ -26,7 +26,7 @@ class TC_FivePieceFrame < TestUp::TestCase
     definition = Sketchup.active_model.definitions.add('Five Piece Frame AC1')
 
     with_solid_booleans(true) do
-      result = AICabinets::Geom::FivePiece.build_frame!(
+      result = AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: 600.0,
@@ -59,11 +59,11 @@ class TC_FivePieceFrame < TestUp::TestCase
   def test_inside_edges_include_shaker_profile
     params = build_params
     definition = Sketchup.active_model.definitions.add('Five Piece Frame AC2')
-    profile_depth = AICabinets::Geom::FivePiece::SHAKER_PROFILE_DEPTH_MM
-    profile_run = AICabinets::Geom::FivePiece::SHAKER_PROFILE_RUN_MM
+    profile_depth = AICabinets::Geometry::FivePiece::SHAKER_PROFILE_DEPTH_MM
+    profile_run = AICabinets::Geometry::FivePiece::SHAKER_PROFILE_RUN_MM
 
     with_solid_booleans(true) do
-      AICabinets::Geom::FivePiece.build_frame!(
+      AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: 620.0,
@@ -89,7 +89,7 @@ class TC_FivePieceFrame < TestUp::TestCase
 
     result = nil
     with_solid_booleans(true) do
-      result = AICabinets::Geom::FivePiece.build_frame!(
+      result = AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: open_w_mm,
@@ -114,7 +114,7 @@ class TC_FivePieceFrame < TestUp::TestCase
 
     result = nil
     with_solid_booleans(false) do
-      result = AICabinets::Geom::FivePiece.build_frame!(
+      result = AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: open_w_mm,
@@ -138,7 +138,7 @@ class TC_FivePieceFrame < TestUp::TestCase
     model = Sketchup.active_model
 
     with_solid_booleans(true) do
-      AICabinets::Geom::FivePiece.build_frame!(
+      AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: 600.0,
@@ -160,7 +160,7 @@ class TC_FivePieceFrame < TestUp::TestCase
 
     result = nil
     with_solid_booleans(true) do
-      result = AICabinets::Geom::FivePiece.build_frame!(
+      result = AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: 620.0,
@@ -180,7 +180,7 @@ class TC_FivePieceFrame < TestUp::TestCase
     definition = Sketchup.active_model.definitions.add('Five Piece Frame AC7')
 
     with_solid_booleans(true) do
-      AICabinets::Geom::FivePiece.build_frame!(
+      AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: 600.0,
@@ -202,7 +202,7 @@ class TC_FivePieceFrame < TestUp::TestCase
 
     result = nil
     with_solid_booleans(true) do
-      result = AICabinets::Geom::FivePiece.build_frame!(
+      result = AICabinets::Geometry::FivePiece.build_frame!(
         target: definition,
         params: params,
         open_w_mm: 640.0,

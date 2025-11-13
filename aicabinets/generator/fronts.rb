@@ -141,15 +141,15 @@ module AICabinets
         group.name = placement.name if group.respond_to?(:name=)
 
         face = group.entities.add_face(
-          ::Geom::Point3d.new(0, 0, 0),
-          ::Geom::Point3d.new(width, 0, 0),
-          ::Geom::Point3d.new(width, 0, height),
-          ::Geom::Point3d.new(0, 0, height)
+          Geom::Point3d.new(0, 0, 0),
+          Geom::Point3d.new(width, 0, 0),
+          Geom::Point3d.new(width, 0, height),
+          Geom::Point3d.new(0, 0, height)
         )
         face.reverse! if face.normal.y.positive?
         face.pushpull(thickness)
 
-        translation = ::Geom::Transformation.translation([
+        translation = Geom::Transformation.translation([
           length_mm(placement.x_start_mm),
           0,
           length_mm(placement.bottom_z_mm)

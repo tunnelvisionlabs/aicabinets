@@ -30,7 +30,7 @@ class TC_Smoke < TestUp::TestCase
     model = Sketchup.active_model
 
     AICabinetsTestHelper.with_undo('Create geometry') do |m|
-      edge = m.active_entities.add_line(ORIGIN, ::Geom::Point3d.new(12, 0, 0))
+      edge = m.active_entities.add_line(ORIGIN, Geom::Point3d.new(12, 0, 0))
       m.selection.add(edge)
     end
 

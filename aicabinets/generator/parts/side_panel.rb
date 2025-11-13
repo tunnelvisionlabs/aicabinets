@@ -13,10 +13,10 @@ module AICabinets
           group.name = name
 
           face = group.entities.add_face(
-            ::Geom::Point3d.new(0, 0, 0),
-            ::Geom::Point3d.new(0, depth, 0),
-            ::Geom::Point3d.new(0, depth, height),
-            ::Geom::Point3d.new(0, 0, height)
+            Geom::Point3d.new(0, 0, 0),
+            Geom::Point3d.new(0, depth, 0),
+            Geom::Point3d.new(0, depth, height),
+            Geom::Point3d.new(0, 0, height)
           )
           face.reverse! if face.normal.x < 0
           distance = face.normal.x.positive? ? panel_thickness : -panel_thickness
@@ -30,7 +30,7 @@ module AICabinets
             toe_kick_thickness
           )
 
-          translation = ::Geom::Transformation.translation([x_offset, 0, 0])
+          translation = Geom::Transformation.translation([x_offset, 0, 0])
           group.transform!(translation)
           group
         end
@@ -42,10 +42,10 @@ module AICabinets
           total_depth = toe_kick_depth + effective_thickness
 
           notch = entities.add_face(
-            ::Geom::Point3d.new(0, 0, 0),
-            ::Geom::Point3d.new(panel_thickness, 0, 0),
-            ::Geom::Point3d.new(panel_thickness, 0, toe_kick_height),
-            ::Geom::Point3d.new(0, 0, toe_kick_height)
+            Geom::Point3d.new(0, 0, 0),
+            Geom::Point3d.new(panel_thickness, 0, 0),
+            Geom::Point3d.new(panel_thickness, 0, toe_kick_height),
+            Geom::Point3d.new(0, 0, toe_kick_height)
           )
 
           return unless notch

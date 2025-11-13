@@ -261,7 +261,7 @@ module AICabinets
 
         delta_length = shift_mm.mm
         member.transform!(
-          ::Geom::Transformation.translation([delta_length.to_f, 0.0, 0.0])
+          Geom::Transformation.translation([delta_length.to_f, 0.0, 0.0])
         )
       end
       private_class_method :translate_x_mm!

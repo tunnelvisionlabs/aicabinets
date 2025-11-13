@@ -112,7 +112,7 @@ class TC_PlacementTool < TestUp::TestCase
   end
 
   def stub_input_point(tool)
-    point = ::Geom::Point3d.new(0, 0, 0)
+    point = Geom::Point3d.new(0, 0, 0)
     input_point = Object.new
     input_point.define_singleton_method(:pick) { |_view, _x, _y| self }
     input_point.define_singleton_method(:valid?) { true }

@@ -250,7 +250,7 @@ module AICabinets
             apply_category(fronts, 'AICabinets/Fronts', front_material)
           end
 
-          bounds = ::Geom::BoundingBox.new
+          bounds = Geom::BoundingBox.new
           instances.each_value do |container|
             Array(container).each do |entity|
               next unless entity&.valid?

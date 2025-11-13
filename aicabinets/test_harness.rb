@@ -372,7 +372,7 @@ module AICabinets
       params = build_params(config)
       instance = AICabinets::Ops::InsertBaseCabinet.place_at_point!(
         model: model,
-        point3d: ::Geom::Point3d.new(0, 0, 0),
+        point3d: Geom::Point3d.new(0, 0, 0),
         params_mm: params
       )
       [instance.definition, instance]
