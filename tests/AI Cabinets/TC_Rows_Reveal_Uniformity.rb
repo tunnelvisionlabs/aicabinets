@@ -5,6 +5,7 @@ require 'testup/testcase'
 require_relative 'suite_helper'
 require_relative '../support/model_query'
 require_relative '../support/rows_reveal_helpers'
+require_relative '../support/rows_test_harness'
 
 Sketchup.require('aicabinets/rows')
 Sketchup.require('aicabinets/rows/reflow')
@@ -18,32 +19,25 @@ class TC_Rows_Reveal_Uniformity < TestUp::TestCase
   TOLERANCE_MM = 0.1
 
   def setup
-    AICabinetsTestHelper.clean_model!
+    RowsTestHarness.reset_model!
   end
 
   def teardown
-    AICabinetsTestHelper.clean_model!
+    RowsTestHarness.reset_model!
   end
 
   def test_uniform_interior_and_end_gaps
-    model = Sketchup.active_model
-    row_id, instances = build_row(widths_mm: [600.0, 450.0, 500.0])
+    _model = Sketchup.active_model
+    row_id, _instances = build_row(widths_mm: [600.0, 450.0, 500.0])
     refute_nil(row_id)
 
     apply_row_reveal!(row_id: row_id, reveal_mm: REVEAL_MM)
 
-    first, second, third = instances
+    gaps = RowsTestHarness.measure_boundary_gaps_mm(row_id: row_id)
+    refute_empty(gaps)
 
-    gap_left_middle = interior_gap_mm(first, second)
-    gap_middle_right = interior_gap_mm(second, third)
-
-    AICabinetsTestHelper.assert_within_tolerance(self, REVEAL_MM, gap_left_middle, TOLERANCE_MM)
-    AICabinetsTestHelper.assert_within_tolerance(self, REVEAL_MM, gap_middle_right, TOLERANCE_MM)
-
-    left_end_gap = left_end_gap_mm(first)
-    right_end_gap = right_end_gap_mm(third)
-
-    AICabinetsTestHelper.assert_within_tolerance(self, REVEAL_MM, left_end_gap, TOLERANCE_MM)
-    AICabinetsTestHelper.assert_within_tolerance(self, REVEAL_MM, right_end_gap, TOLERANCE_MM)
+    gaps.each do |gap|
+      AICabinetsTestHelper.assert_within_tolerance(self, REVEAL_MM, gap, TOLERANCE_MM)
+    end
   end
 end
