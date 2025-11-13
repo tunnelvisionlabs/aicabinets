@@ -1,24 +1,19 @@
 # frozen_string_literal: true
 
+# Consolidated core Rows scenarios covering persistence, membership, and
+# validation flows. Shared placement helpers live in
+# tests/support/rows_shared_helpers.rb.
 require 'json'
 require 'testup/testcase'
+
 require_relative 'suite_helper'
+require_relative '../support/rows_shared_helpers'
 
 Sketchup.require('aicabinets/rows')
 Sketchup.require('aicabinets/ops/insert_base_cabinet')
 
 class TC_Rows < TestUp::TestCase
-  BASE_PARAMS_MM = {
-    width_mm: 762.0,
-    depth_mm: 609.6,
-    height_mm: 914.4,
-    panel_thickness_mm: 18.0,
-    toe_kick_height_mm: 101.6,
-    toe_kick_depth_mm: 76.2,
-    bay_count: 1,
-    partitions_enabled: false,
-    fronts_enabled: false
-  }.freeze
+  include RowsSharedTestHelpers
 
   def setup
     AICabinetsTestHelper.clean_model!
@@ -132,32 +127,5 @@ class TC_Rows < TestUp::TestCase
     row = rows.first
     expected_pids = [first, second].map { |instance| instance.persistent_id.to_i }
     assert_equal(expected_pids, row[:member_pids])
-  end
-
-  private
-
-  def place_cabinets(model, count: 1)
-    instances = []
-
-    count.times do |index|
-      offset_mm = index * (BASE_PARAMS_MM[:width_mm] + 5.0)
-      point = Geom::Point3d.new(offset_mm.mm, 0, 0)
-      instance = AICabinets::Ops::InsertBaseCabinet.place_at_point!(
-        model: model,
-        point3d: point,
-        params_mm: BASE_PARAMS_MM
-      )
-      instances << instance
-    end
-
-    instances
-  end
-
-  def select_instances(model, entities)
-    selection = model.selection
-    selection.clear
-    entities.each do |entity|
-      selection.add(entity)
-    end
   end
 end
