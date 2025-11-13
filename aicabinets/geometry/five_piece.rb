@@ -53,7 +53,7 @@ module AICabinets
         raise ArgumentError, 'Opening width must exceed twice the stile width' if open_width_mm <= (2.0 * stile_width_mm) + MIN_DIMENSION_MM
         raise ArgumentError, 'Opening height must exceed twice the rail width' if open_height_mm <= (2.0 * rail_width_mm) + MIN_DIMENSION_MM
 
-        front_tag = AICabinets::Tags.ensure_owned_tag(model, 'Fronts')
+        front_tag = AICabinets::Tags.ensure_owned_tag(model, 'AICabinets/Fronts')
         material = resolve_frame_material(model, validated[:frame_material_id])
 
         warnings = []
