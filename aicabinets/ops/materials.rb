@@ -19,6 +19,12 @@ module AICabinets
                                       'MDF'
                                     end
       DEFAULT_DOOR_MATERIAL_COLOR = [164, 143, 122].freeze
+      DEFAULT_DOOR_FRAME_MATERIAL_NAME = if defined?(AICabinets::DEFAULT_DOOR_FRAME_MATERIAL)
+                                            AICabinets::DEFAULT_DOOR_FRAME_MATERIAL
+                                          else
+                                            'Maple'
+                                          end
+      DEFAULT_DOOR_FRAME_MATERIAL_COLOR = [224, 200, 160].freeze
 
       # Resolves (and creates if necessary) the default carcass material for
       # the given model. When the configured name is blank, callers can fall
@@ -48,6 +54,20 @@ module AICabinets
         return nil if name.to_s.empty?
 
         ensure_material(model, name, DEFAULT_DOOR_MATERIAL_COLOR)
+      end
+
+      # Resolves the default frame material used for five-piece door frames.
+      # Maple is used when the project has not provided a specific override.
+      #
+      # @param model [Sketchup::Model]
+      # @return [Sketchup::Material, nil]
+      def default_frame(model)
+        raise ArgumentError, 'model must be a Sketchup::Model' unless model.is_a?(Sketchup::Model)
+
+        name = DEFAULT_DOOR_FRAME_MATERIAL_NAME
+        return nil if name.to_s.empty?
+
+        ensure_material(model, name, DEFAULT_DOOR_FRAME_MATERIAL_COLOR)
       end
 
       def ensure_material(model, name, rgb)
