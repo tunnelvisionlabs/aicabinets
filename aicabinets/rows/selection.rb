@@ -69,19 +69,27 @@ module AICabinets
 
         target_entities = pids.filter_map do |pid|
           entity = model.find_entity_by_persistent_id(pid)
-          entity if entity.is_a?(Sketchup::ComponentInstance)
+          next unless entity.is_a?(Sketchup::ComponentInstance)
+          next unless entity_valid?(entity)
+
+          entity
         end
         return if target_entities.empty?
 
-        current_ids = instances.map { |entity| entity.persistent_id.to_i }.sort
-        target_ids = target_entities.map { |entity| entity.persistent_id.to_i }.sort
+        current_ids = canonical_entity_ids(instances)
+        target_ids = canonical_entity_ids(target_entities)
         return if current_ids == target_ids
 
         begin
           @updating_selection = true
           selection.clear
           target_entities.each { |entity| selection.add(entity) }
-          store_expansion_state(model, row_id:, base_ids: current_ids, target_ids: target_ids)
+          store_expansion_state(
+            model,
+            row_id: row_id,
+            base_entities: instances,
+            target_entities: target_entities
+          )
         ensure
           @updating_selection = false
         end
@@ -131,11 +139,16 @@ module AICabinets
         @expansion_states ||= {}.compare_by_identity
       end
 
-      def store_expansion_state(model, row_id:, base_ids:, target_ids:)
-        added_ids = target_ids - base_ids
+      def store_expansion_state(model, row_id:, base_entities:, target_entities:)
+        base_ids = canonical_entity_ids(base_entities)
+        added_entities = Array(target_entities).reject do |entity|
+          base_ids.include?(canonical_entity_id(entity))
+        end
+
         expansion_states[model] = {
           row_id: row_id,
-          added_ids: added_ids
+          added_entities: added_entities,
+          added_ids: canonical_entity_ids(added_entities)
         }
       end
 
@@ -147,16 +160,22 @@ module AICabinets
         state = expansion_states[model]
         return unless state
 
-        added_ids = Array(state[:added_ids])
-        if added_ids.empty?
-          clear_expansion_state(model)
-          return
+        entities_to_remove = Array(state[:added_entities]).filter_map do |entity|
+          next unless entity_valid?(entity)
+          entity if selection.include?(entity)
         end
 
-        entities_to_remove = added_ids.filter_map do |pid|
-          entity = model.find_entity_by_persistent_id(pid.to_i)
-          entity if entity && selection.include?(entity)
+        if entities_to_remove.empty?
+          added_ids = Array(state[:added_ids])
+          unless added_ids.empty?
+            selection.grep(Sketchup::ComponentInstance).each do |entity|
+              identifier = canonical_entity_id(entity)
+              next unless identifier
+              entities_to_remove << entity if added_ids.include?(identifier)
+            end
+          end
         end
+
         if entities_to_remove.empty?
           clear_expansion_state(model)
           return
@@ -183,6 +202,34 @@ module AICabinets
       def fetch_row_detail(model, row_id)
         AICabinets::Rows.get_row(model: model, row_id: row_id)
       rescue AICabinets::Rows::RowError
+        nil
+      end
+
+      def entity_valid?(entity)
+        entity.respond_to?(:valid?) ? entity.valid? : true
+      rescue StandardError
+        false
+      end
+
+      def canonical_entity_ids(entities)
+        Array(entities).map { |entity| canonical_entity_id(entity) }.compact.sort
+      end
+
+      def canonical_entity_id(entity)
+        return unless entity_valid?(entity)
+
+        if entity.respond_to?(:persistent_id)
+          pid = entity.persistent_id.to_i
+          return "pid:#{pid}" if pid.positive?
+        end
+
+        if entity.respond_to?(:entityID)
+          eid = entity.entityID.to_i
+          return "eid:#{eid}" if eid.positive?
+        end
+
+        "obj:#{entity.object_id}"
+      rescue StandardError
         nil
       end
 

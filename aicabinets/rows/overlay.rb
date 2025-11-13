@@ -165,6 +165,34 @@ module AICabinets
         state.delete(:active_row_id)
       end
 
+      def invalidate_overlay(overlay, model)
+        return unless overlay
+
+        if overlay.respond_to?(:invalidate)
+          begin
+            overlay.invalidate
+            return
+          rescue ArgumentError
+            view = model.respond_to?(:active_view) ? model.active_view : nil
+            begin
+              overlay.invalidate(view)
+              return
+            rescue StandardError
+              # fall through to view invalidation
+            end
+          rescue StandardError
+            # fall through to view invalidation
+          end
+        end
+
+        begin
+          view = model.respond_to?(:active_view) ? model.active_view : nil
+          view&.invalidate
+        rescue StandardError
+          nil
+        end
+      end
+
       class Geometry
         attr_reader :polyline, :origin_segments, :row_id
 
@@ -223,12 +251,12 @@ module AICabinets
 
         def show(geometry)
           @overlay.geometry = geometry
-          @overlay.invalidate
+          Highlight.__send__(:invalidate_overlay, @overlay, @model)
         end
 
         def hide
           @overlay.geometry = nil
-          @overlay.invalidate
+          Highlight.__send__(:invalidate_overlay, @overlay, @model)
         end
 
         def invalid?
@@ -265,7 +293,7 @@ module AICabinets
 
           def clear
             @geometry = nil
-            invalidate
+            Highlight.__send__(:invalidate_overlay, self, @model)
           end
 
           def draw(view)
