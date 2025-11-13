@@ -3,7 +3,7 @@
 module AICabinets
   module Rows
     module Selection
-      module_function
+      extend self
 
       def auto_select_row?
         !!@auto_select_row
@@ -24,31 +24,42 @@ module AICabinets
       end
 
       def reset!
-        observer_attached_models.dup.each do |model|
+        observer_attached_models.keys.each do |model|
           detach_observer(model)
         end
         @auto_select_row = false
         @updating_selection = false
+        @expansion_states = nil
       end
 
       def handle_selection_change(selection)
         return unless auto_select_row?
         return if @updating_selection
         return unless selection.is_a?(Sketchup::Selection)
+        model = resolve_model(selection.model) || resolve_model(nil)
+        return unless model.is_a?(Sketchup::Model)
+
+        instances = selection.grep(Sketchup::ComponentInstance).select(&:valid?)
+        selected_row_ids = instances.filter_map { |entity| row_id_for(entity) }.uniq
+
+        if selection.empty? || instances.empty?
+          clear_expansion_state(model)
+          return
+        end
+
+        if selected_row_ids.length > 1
+          prune_auto_added_members(selection, model)
+          return
+        end
+
         return unless selection.count == 1
 
-        instance = selection.first
-        return unless instance.is_a?(Sketchup::ComponentInstance)
-        return unless instance.valid?
-
+        instance = instances.first
         membership = AICabinets::Rows.for_instance(instance)
         return unless membership
 
         row_id = membership[:row_id]
         return if row_id.to_s.empty?
-
-        model = selection.model || instance.model
-        return unless model.is_a?(Sketchup::Model)
 
         detail = fetch_row_detail(model, row_id)
         return unless detail
@@ -58,18 +69,27 @@ module AICabinets
 
         target_entities = pids.filter_map do |pid|
           entity = model.find_entity_by_persistent_id(pid)
-          entity if entity.is_a?(Sketchup::ComponentInstance)
+          next unless entity.is_a?(Sketchup::ComponentInstance)
+          next unless entity_valid?(entity)
+
+          entity
         end
         return if target_entities.empty?
 
-        current_ids = selection.grep(Sketchup::ComponentInstance).map { |entity| entity.persistent_id.to_i }.sort
-        target_ids = target_entities.map { |entity| entity.persistent_id.to_i }.sort
+        current_ids = canonical_entity_ids(instances)
+        target_ids = canonical_entity_ids(target_entities)
         return if current_ids == target_ids
 
         begin
           @updating_selection = true
           selection.clear
           target_entities.each { |entity| selection.add(entity) }
+          store_expansion_state(
+            model,
+            row_id: row_id,
+            base_entities: instances,
+            target_entities: target_entities
+          )
         ensure
           @updating_selection = false
         end
@@ -90,10 +110,10 @@ module AICabinets
         selection = model.respond_to?(:selection) ? model.selection : nil
         return unless selection
 
-        return if observer_attached_models.include?(model)
+        return if observer_attached_models.key?(model)
 
         selection.add_observer(observer)
-        observer_attached_models << model
+        observer_attached_models[model] = true
       rescue StandardError
         nil
       end
@@ -112,12 +132,104 @@ module AICabinets
       end
 
       def observer_attached_models
-        @observer_attached_models ||= [].compare_by_identity
+        @observer_attached_models ||= {}.compare_by_identity
+      end
+
+      def expansion_states
+        @expansion_states ||= {}.compare_by_identity
+      end
+
+      def store_expansion_state(model, row_id:, base_entities:, target_entities:)
+        base_ids = canonical_entity_ids(base_entities)
+        added_entities = Array(target_entities).reject do |entity|
+          base_ids.include?(canonical_entity_id(entity))
+        end
+
+        expansion_states[model] = {
+          row_id: row_id,
+          added_entities: added_entities,
+          added_ids: canonical_entity_ids(added_entities)
+        }
+      end
+
+      def clear_expansion_state(model)
+        expansion_states.delete(model)
+      end
+
+      def prune_auto_added_members(selection, model)
+        state = expansion_states[model]
+        return unless state
+
+        entities_to_remove = Array(state[:added_entities]).filter_map do |entity|
+          next unless entity_valid?(entity)
+          entity if selection.include?(entity)
+        end
+
+        if entities_to_remove.empty?
+          added_ids = Array(state[:added_ids])
+          unless added_ids.empty?
+            selection.grep(Sketchup::ComponentInstance).each do |entity|
+              identifier = canonical_entity_id(entity)
+              next unless identifier
+              entities_to_remove << entity if added_ids.include?(identifier)
+            end
+          end
+        end
+
+        if entities_to_remove.empty?
+          clear_expansion_state(model)
+          return
+        end
+
+        begin
+          @updating_selection = true
+          entities_to_remove.each { |entity| selection.remove(entity) }
+        ensure
+          @updating_selection = false
+          clear_expansion_state(model)
+        end
+      end
+
+      def row_id_for(entity)
+        membership = AICabinets::Rows.for_instance(entity)
+        return unless membership
+
+        membership[:row_id]
+      rescue AICabinets::Rows::RowError
+        nil
       end
 
       def fetch_row_detail(model, row_id)
         AICabinets::Rows.get_row(model: model, row_id: row_id)
       rescue AICabinets::Rows::RowError
+        nil
+      end
+
+      def entity_valid?(entity)
+        entity.respond_to?(:valid?) ? entity.valid? : true
+      rescue StandardError
+        false
+      end
+
+      def canonical_entity_ids(entities)
+        Array(entities).map { |entity| canonical_entity_id(entity) }.compact.sort
+      end
+
+      def canonical_entity_id(entity)
+        return unless entity_valid?(entity)
+
+        if entity.respond_to?(:persistent_id)
+          pid = entity.persistent_id.to_i
+          return "pid:#{pid}" if pid.positive?
+        end
+
+        if entity.respond_to?(:entityID)
+          eid = entity.entityID.to_i
+          return "eid:#{eid}" if eid.positive?
+        end
+
+        "obj:#{entity.object_id}"
+      rescue StandardError
         nil
       end
 

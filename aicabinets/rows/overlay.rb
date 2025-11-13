@@ -3,9 +3,10 @@
 module AICabinets
   module Rows
     module Highlight
-      module_function
+      extend self
 
       ROW_HIGHLIGHT_OVERLAY_ID = 'AICabinets.Rows.Highlight'.freeze
+      ROW_HIGHLIGHT_OVERLAY_NAME = 'Rows Highlight'.freeze
       ORIGIN_MARKER_SIZE_MM = 50.0
       POLYLINE_COLOR = Sketchup::Color.new(0xff, 0x66, 0x00).freeze
       LINE_WIDTH = 3
@@ -127,12 +128,69 @@ module AICabinets
         raise ArgumentError, 'model must be a SketchUp::Model'
       end
 
+      def overlay_priority
+        @overlay_priority ||= begin
+          if defined?(Sketchup::Overlay::PRIORITY_VIEWER)
+            Sketchup::Overlay::PRIORITY_VIEWER
+          elsif defined?(Sketchup::Overlay::PRIORITY_DEFAULT)
+            Sketchup::Overlay::PRIORITY_DEFAULT
+          elsif defined?(Sketchup::Overlay::PRIORITY_NORMAL)
+            Sketchup::Overlay::PRIORITY_NORMAL
+          else
+            50
+          end
+        end
+      end
+
+      def overlay_constructor_arguments
+        [
+          ROW_HIGHLIGHT_OVERLAY_ID,
+          ROW_HIGHLIGHT_OVERLAY_NAME,
+          overlay_priority
+        ]
+      end
+
+      def shrink_overlay_arguments(args)
+        return nil unless args.is_a?(Array)
+        return nil if args.length <= 1
+
+        args[0, args.length - 1]
+      end
+
       def handle_tool_deactivated(model)
         state = states[model]
         return unless state
 
         state.delete(:provider)
         state.delete(:active_row_id)
+      end
+
+      def invalidate_overlay(overlay, model)
+        return unless overlay
+
+        if overlay.respond_to?(:invalidate)
+          begin
+            overlay.invalidate
+            return
+          rescue ArgumentError
+            view = model.respond_to?(:active_view) ? model.active_view : nil
+            begin
+              overlay.invalidate(view)
+              return
+            rescue StandardError
+              # fall through to view invalidation
+            end
+          rescue StandardError
+            # fall through to view invalidation
+          end
+        end
+
+        begin
+          view = model.respond_to?(:active_view) ? model.active_view : nil
+          view&.invalidate
+        rescue StandardError
+          nil
+        end
       end
 
       class Geometry
@@ -193,12 +251,12 @@ module AICabinets
 
         def show(geometry)
           @overlay.geometry = geometry
-          @overlay.invalidate
+          Highlight.__send__(:invalidate_overlay, @overlay, @model)
         end
 
         def hide
           @overlay.geometry = nil
-          @overlay.invalidate
+          Highlight.__send__(:invalidate_overlay, @overlay, @model)
         end
 
         def invalid?
@@ -211,7 +269,14 @@ module AICabinets
 
         class Overlay < Sketchup::Overlay
           def initialize(model)
-            super(ROW_HIGHLIGHT_OVERLAY_ID)
+            args = Highlight.__send__(:overlay_constructor_arguments)
+            begin
+              super(*args)
+            rescue ArgumentError, TypeError
+              args = Highlight.__send__(:shrink_overlay_arguments, args)
+              retry if args
+              raise
+            end
             @model = model
             @geometry = nil
           end
@@ -228,7 +293,7 @@ module AICabinets
 
           def clear
             @geometry = nil
-            invalidate
+            Highlight.__send__(:invalidate_overlay, self, @model)
           end
 
           def draw(view)
