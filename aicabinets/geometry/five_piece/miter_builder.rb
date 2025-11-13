@@ -301,8 +301,15 @@ module AICabinets
           helper = parent.entities.add_group
           begin
             build_cutter!(helper.entities, group.bounds, normal, point, :positive)
-            transformation = Geom::Transformation.new
-            group.entities.intersect_with(true, transformation, group.entities, transformation, false, helper)
+            identity = Geom::Transformation.new
+            group.entities.intersect_with(
+              false,
+              identity,
+              helper,
+              identity,
+              false,
+              group.entities
+            )
           ensure
             helper.erase! if helper.valid?
           end
