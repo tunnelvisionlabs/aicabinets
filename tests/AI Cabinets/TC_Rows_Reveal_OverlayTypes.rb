@@ -5,6 +5,7 @@ require 'testup/testcase'
 require_relative 'suite_helper'
 require_relative '../support/model_query'
 require_relative '../support/rows_reveal_helpers'
+require_relative '../support/rows_test_harness'
 
 Sketchup.require('aicabinets/rows')
 Sketchup.require('aicabinets/rows/reveal')
@@ -17,11 +18,11 @@ class TC_Rows_Reveal_OverlayTypes < TestUp::TestCase
   TOLERANCE_MM = 0.1
 
   def setup
-    AICabinetsTestHelper.clean_model!
+    RowsTestHarness.reset_model!
   end
 
   def teardown
-    AICabinetsTestHelper.clean_model!
+    RowsTestHarness.reset_model!
   end
 
   def test_reveal_applies_to_supported_overlay_types
@@ -42,7 +43,7 @@ class TC_Rows_Reveal_OverlayTypes < TestUp::TestCase
       AICabinetsTestHelper.assert_within_tolerance(self, REVEAL_MM, left_end, TOLERANCE_MM)
       AICabinetsTestHelper.assert_within_tolerance(self, REVEAL_MM, right_end, TOLERANCE_MM)
 
-      AICabinetsTestHelper.clean_model!
+      RowsTestHarness.reset_model!
     end
   end
 end

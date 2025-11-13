@@ -5,6 +5,7 @@ require 'testup/testcase'
 require_relative 'suite_helper'
 require_relative '../support/model_query'
 require_relative '../support/rows_reveal_helpers'
+require_relative '../support/rows_test_harness'
 
 Sketchup.require('aicabinets/rows')
 Sketchup.require('aicabinets/rows/reflow')
@@ -19,11 +20,11 @@ class TC_Rows_Reveal_Reflow < TestUp::TestCase
   TOLERANCE_MM = 0.1
 
   def setup
-    AICabinetsTestHelper.clean_model!
+    RowsTestHarness.reset_model!
   end
 
   def teardown
-    AICabinetsTestHelper.clean_model!
+    RowsTestHarness.reset_model!
   end
 
   def test_reveal_stays_uniform_after_reflow
