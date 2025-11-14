@@ -288,10 +288,13 @@ module AICabinets
 
         def cut_with_intersection!(group, normal:, point:, keep:)
           add_plane_intersection_edges!(group, normal, point)
+          group.entities.find_faces
           remove_faces_by_plane!(group, normal, point, keep)
-          add_cap_faces!(group, normal, point)
           remove_plane_faces!(group, normal, point)
+          group.entities.find_faces
+          add_cap_faces!(group, normal, point)
           purge_edges!(group)
+          group.entities.find_faces
           group
         end
 
