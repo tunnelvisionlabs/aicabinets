@@ -21,6 +21,20 @@ module AICabinets
 
         Result = Struct.new(:stiles, :rails, :miter_mode, :warnings, keyword_init: true)
 
+        class << self
+          attr_reader :last_debug_reports
+
+          def debug_report_for(group)
+            return unless group && group.respond_to?(:entityID)
+
+            (@last_debug_reports || {})[group.entityID]
+          end
+
+          def store_debug_reports(reports)
+            @last_debug_reports = reports
+          end
+        end
+
         def initialize(entities:, open_width_mm:, open_height_mm:, stile_width_mm:, rail_width_mm:, thickness_mm:, material:, front_tag:)
           @entities = entities
           @open_width_mm = open_width_mm
@@ -33,6 +47,7 @@ module AICabinets
 
           @warnings = []
           @miter_mode = nil
+          @debug_reports = {}
         end
 
         def build
@@ -45,6 +60,8 @@ module AICabinets
 
           stiles = build_stiles(outside_height_mm, profile_depth_mm, stile_profile_run_mm, outside_width_mm)
           rails = build_rails(outside_width_mm, profile_depth_mm, rail_profile_run_mm, outside_height_mm)
+
+          self.class.store_debug_reports(@debug_reports)
 
           Result.new(
             stiles: stiles,
@@ -161,14 +178,16 @@ module AICabinets
                 a: [0.0, 0.0, 0.0],
                 b: [0.0, @thickness_mm, 0.0],
                 c: [@stile_width_mm, 0.0, @rail_width_mm],
-                keep_point: interior_point
+                keep_point: interior_point,
+                debug: { inside_span: { outer_z_mm: 0.0, inside_z_mm: @rail_width_mm } }
               )
               cut_with_plane_points!(
                 group,
                 a: [0.0, 0.0, outside_height_mm],
                 b: [0.0, @thickness_mm, outside_height_mm],
                 c: [@stile_width_mm, 0.0, outside_height_mm - @rail_width_mm],
-                keep_point: interior_point
+                keep_point: interior_point,
+                debug: { inside_span: { outer_z_mm: outside_height_mm, inside_z_mm: outside_height_mm - @rail_width_mm } }
               )
             when :right
               group = cut_with_plane_points!(
@@ -176,14 +195,16 @@ module AICabinets
                 a: [@stile_width_mm, 0.0, 0.0],
                 b: [@stile_width_mm, @thickness_mm, 0.0],
                 c: [0.0, 0.0, @rail_width_mm],
-                keep_point: interior_point
+                keep_point: interior_point,
+                debug: { inside_span: { outer_z_mm: 0.0, inside_z_mm: @rail_width_mm } }
               )
               cut_with_plane_points!(
                 group,
                 a: [@stile_width_mm, 0.0, outside_height_mm],
                 b: [@stile_width_mm, @thickness_mm, outside_height_mm],
                 c: [0.0, 0.0, outside_height_mm - @rail_width_mm],
-                keep_point: interior_point
+                keep_point: interior_point,
+                debug: { inside_span: { outer_z_mm: outside_height_mm, inside_z_mm: outside_height_mm - @rail_width_mm } }
               )
             else
               group
@@ -203,7 +224,8 @@ module AICabinets
             a: [0.0, 0.0, outer_z],
             b: [0.0, @thickness_mm, outer_z],
             c: [@stile_width_mm, 0.0, inside_z],
-            keep_point: interior_point
+            keep_point: interior_point,
+            debug: { inside_span: { outer_z_mm: outer_z, inside_z_mm: inside_z } }
           )
 
           group = cut_with_plane_points!(
@@ -211,32 +233,50 @@ module AICabinets
             a: [outside_width_mm, 0.0, outer_z],
             b: [outside_width_mm, @thickness_mm, outer_z],
             c: [outside_width_mm - @stile_width_mm, 0.0, inside_z],
-            keep_point: interior_point
+            keep_point: interior_point,
+            debug: { inside_span: { outer_z_mm: outer_z, inside_z_mm: inside_z } }
           )
 
           group
         end
 
-        def cut_with_plane_points!(group, a:, b:, c:, keep_point:)
+        def cut_with_plane_points!(group, a:, b:, c:, keep_point:, debug: nil)
           normal = cross_product(sub_vectors(b, a), sub_vectors(c, a))
           return group if vector_length(normal).zero?
 
-          cut_with_plane!(group, normal: normal, point: a, keep_point: keep_point)
+          cut_with_plane!(group, normal: normal, point: a, keep_point: keep_point, debug: debug)
         end
 
-        def cut_with_plane!(group, normal:, point:, keep: nil, keep_point: nil)
+        def cut_with_plane!(group, normal:, point:, keep: nil, keep_point: nil, debug: nil)
           return group unless group&.valid?
 
           keep = determine_keep_side(normal, point, keep, keep_point)
 
+          debug_entry = build_debug_entry(group, normal, point, keep_point, debug)
+
           if boolean_mode?
             @miter_mode ||= :boolean
-            cut_with_boolean!(group, normal: normal, point: point, keep: keep)
+            boolean_result = cut_with_boolean!(group, normal: normal, point: point, keep: keep)
+            if boolean_result[:fallback]
+              debug_entry[:reason_if_fallback] = boolean_result[:fallback]
+              @miter_mode = :intersect
+              warn_once('SketchUp solid booleans failed; reverted to geometric intersection for miters.')
+              fallback = cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+              debug_entry.merge!(fallback)
+            else
+              debug_entry.merge!(boolean_result)
+            end
           else
             @miter_mode ||= :intersect
             warn_once('SketchUp solid boolean operations unavailable; used geometric intersection for miters.')
-            cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+            debug_entry.merge!(cut_with_intersection!(group, normal: normal, point: point, keep: keep))
           end
+
+          debug_entry[:member][:volume_after_mm3] = safe_volume(group)
+
+          record_debug(group, debug_entry)
+
+          group
         end
 
         def determine_keep_side(normal, point, keep, keep_point)
@@ -293,7 +333,13 @@ module AICabinets
           add_cap_faces!(group, normal, point)
           purge_edges!(group)
           heal_plane_edges!(group, normal, point, new_edges)
-          group
+
+          {
+            group: group,
+            mode: :intersect,
+            new_edges_count: Array(new_edges).length,
+            faces_on_plane_count: faces_on_plane_count(group, normal, point)
+          }
         end
 
         def add_plane_intersection_edges!(group, normal, point)
@@ -312,7 +358,7 @@ module AICabinets
               target_entities,
               group.transformation,
               false,
-              group
+              helper.entities.to_a
             )
           )
         ensure
@@ -340,14 +386,12 @@ module AICabinets
 
         def cut_with_boolean!(group, normal:, point:, keep:)
           unless group.respond_to?(:subtract)
-            @miter_mode = :intersect
-            return cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+            return { group: group, fallback: 'Group cannot perform boolean subtraction' }
           end
 
           parent = group.parent
           unless parent.respond_to?(:add_group)
-            @miter_mode = :intersect
-            return cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+            return { group: group, fallback: 'Parent cannot host cutter group' }
           end
 
           cutter = parent.add_group
@@ -365,16 +409,26 @@ module AICabinets
 
             cutter.transform!(group.transformation) if group.respond_to?(:transformation)
 
-            boolean_result = group.subtract(cutter)
-            if boolean_result.nil? || !group.valid?
-              raise 'Boolean subtraction failed'
-            end
+            cutter_volume = safe_volume(cutter)
+            cutter_solid = cutter_volume && cutter_volume.positive?
 
-            group
-          rescue StandardError
-            @miter_mode = :intersect
-            warn_once('SketchUp solid booleans failed; reverted to geometric intersection for miters.')
-            cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+            boolean_result = group.subtract(cutter)
+            raise 'Boolean subtraction returned nil' if boolean_result.nil?
+            raise 'Group became invalid after boolean subtraction' unless group.valid?
+
+            purge_edges!(group)
+
+            {
+              group: group,
+              mode: :boolean,
+              cutter: {
+                volume_mm3: cutter_volume,
+                solid: cutter_solid
+              },
+              faces_on_plane_count: faces_on_plane_count(group, normal, point)
+            }
+          rescue StandardError => error
+            { group: group, fallback: error.message }
           ensure
             cutter.erase! if cutter&.valid?
           end
@@ -459,6 +513,75 @@ module AICabinets
           end
         end
 
+        def record_debug(group, entry)
+          return unless group&.valid?
+
+          entity_id = group.entityID
+          report = (@debug_reports[entity_id] ||= new_debug_report(group))
+          report[:cuts] << entry.dup
+
+          %i[mode plane member cutter inside_span faces_on_plane_count new_edges_count reason_if_fallback].each do |key|
+            report[key] = entry[key]
+          end
+
+          log_debug_information(group, entry) if debug_logging?
+        end
+
+        def new_debug_report(group)
+          {
+            group_name: (group.respond_to?(:name) ? group.name : nil),
+            dims: {
+              opening_w_mm: @open_width_mm,
+              opening_h_mm: @open_height_mm
+            },
+            widths: {
+              stile_mm: @stile_width_mm,
+              rail_mm: @rail_width_mm
+            },
+            cuts: []
+          }
+        end
+
+        def debug_logging?
+          ENV['AIC_DEBUG'] == '1'
+        end
+
+        def log_debug_information(group, entry)
+          message = "[FivePiece::MiterBuilder] #{group.name || group.entityID}: #{entry.inspect}"
+          puts(message)
+        rescue StandardError
+          nil
+        end
+
+        def build_debug_entry(group, normal, point, keep_point, debug)
+          {
+            mode: nil,
+            plane: {
+              point: point.dup,
+              normal: normalize_vector(normal.dup),
+              tol_mm: CUT_TOLERANCE_MM
+            },
+            member: {
+              name: group.respond_to?(:name) ? group.name : nil,
+              volume_before_mm3: safe_volume(group)
+            },
+            cutter: nil,
+            inside_span: debug&.fetch(:inside_span, nil),
+            faces_on_plane_count: 0,
+            new_edges_count: nil,
+            reason_if_fallback: nil,
+            keep_point: keep_point
+          }
+        end
+
+        def faces_on_plane_count(group, normal, point)
+          group.entities.grep(Sketchup::Face).count do |face|
+            face.vertices.all? do |vertex|
+              signed_distance_mm(normal, point, vertex.position).abs <= CUT_TOLERANCE_MM
+            end
+          end
+        end
+
         def plane_extent(bounds)
           max = [
             bounds.width,
@@ -513,6 +636,17 @@ module AICabinets
           [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
         end
 
+        def safe_volume(entity)
+          return unless entity && entity.respond_to?(:volume)
+
+          volume = entity.volume
+          return unless volume.respond_to?(:to_f)
+
+          volume.to_f * (MM_PER_INCH**3)
+        rescue StandardError
+          nil
+        end
+
         def signed_distance_mm(normal, point, geom_point)
           coords = [geom_point.x, geom_point.y, geom_point.z].map { |component| component.to_f * MM_PER_INCH }
           vector = [coords[0] - point[0], coords[1] - point[1], coords[2] - point[2]]
@@ -524,9 +658,14 @@ module AICabinets
         end
 
         def length_to_mm(length)
-          return length if length.is_a?(Numeric)
-
-          length.to_f * MM_PER_INCH
+          length_class = Units.const_defined?(:LENGTH_CLASS) ? Units::LENGTH_CLASS : nil
+          if length_class && length.is_a?(length_class)
+            length.to_f * MM_PER_INCH
+          elsif length.respond_to?(:to_f)
+            length.to_f
+          else
+            length
+          end
         end
       end
     end
