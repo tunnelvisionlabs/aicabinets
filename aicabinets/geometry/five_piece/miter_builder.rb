@@ -290,6 +290,7 @@ module AICabinets
           add_plane_intersection_edges!(group, normal, point)
           remove_faces_by_plane!(group, normal, point, keep)
           add_cap_faces!(group, normal, point)
+          remove_plane_faces!(group, normal, point)
           purge_edges!(group)
           group
         end
@@ -298,19 +299,36 @@ module AICabinets
           return unless group&.valid?
 
           helper = group.entities.add_group
-          begin
-            build_cutter!(helper.entities, group.bounds, normal, point, :positive)
-            identity = Geom::Transformation.new
-            group.entities.intersect_with(
-              false,
-              identity,
-              helper.entities,
-              identity,
-              false,
-              group
-            )
-          ensure
-            helper.erase! if helper.valid?
+          build_cutter!(helper.entities, group.bounds, normal, point, :positive)
+
+          identity = Geom::Transformation.new
+          helper.entities.intersect_with(
+            false,
+            identity,
+            group.entities,
+            identity,
+            false,
+            helper
+          )
+
+          helper.explode
+        ensure
+          helper.erase! if helper&.valid?
+        end
+
+        def remove_plane_faces!(group, normal, point)
+          group.entities.grep(Sketchup::Face).each do |face|
+            vertices = face.vertices
+            next unless vertices.all? do |vertex|
+              signed_distance_mm(normal, point, vertex.position).abs <= CUT_TOLERANCE_MM
+            end
+
+            begin
+              face.erase!
+            rescue StandardError
+              # Ignore erase failures; stray fragments are removed by subsequent
+              # cleanup passes.
+            end
           end
         end
 
