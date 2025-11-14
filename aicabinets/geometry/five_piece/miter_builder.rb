@@ -307,7 +307,7 @@ module AICabinets
               helper.entities,
               identity,
               false,
-              group.entities
+              group
             )
           ensure
             helper.erase! if helper.valid?
