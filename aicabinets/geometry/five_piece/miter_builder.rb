@@ -248,7 +248,7 @@ module AICabinets
         end
 
         def cut_with_plane!(group, normal:, point:, keep: nil, keep_point: nil, debug: nil)
-          return group unless group&.valid?
+          return group unless group_valid?(group)
 
           keep = determine_keep_side(normal, point, keep, keep_point)
 
@@ -343,13 +343,15 @@ module AICabinets
         end
 
         def add_plane_intersection_edges!(group, normal, point)
-          return [] unless group&.valid?
+          return [] unless group_valid?(group)
 
-          helper = group.entities.add_group
+          target_entities = safe_entities(group)
+          return [] unless target_entities
+
+          helper = target_entities.add_group
           build_cutter!(helper.entities, group.bounds, normal, point)
 
           source_entities = helper.entities
-          target_entities = group.entities
 
           Array(
             source_entities.intersect_with(
@@ -366,15 +368,12 @@ module AICabinets
         end
 
         def heal_plane_edges!(group, normal, point, candidate_edges = nil)
-          return unless group&.valid?
+          return unless group_valid?(group)
 
           edges = Array(candidate_edges).compact.select { |edge| edge.respond_to?(:valid?) ? edge.valid? : true }
           if edges.empty?
-            edges = begin
-              group.entities.grep(Sketchup::Edge)
-            rescue TypeError
-              []
-            end
+            entities = safe_entities(group)
+            edges = entities ? entities.grep(Sketchup::Edge) : []
           end
 
           edges.each do |edge|
@@ -465,9 +464,12 @@ module AICabinets
         end
 
         def remove_plane_faces!(group, normal, point)
-          return unless group&.valid?
+          return unless group_valid?(group)
 
-          group.entities.grep(Sketchup::Face).each do |face|
+          entities = safe_entities(group)
+          return unless entities
+
+          entities.grep(Sketchup::Face).each do |face|
             vertices = face.vertices
             next unless vertices.all? do |vertex|
               signed_distance_mm(normal, point, vertex.position).abs <= CUT_TOLERANCE_MM
@@ -483,11 +485,11 @@ module AICabinets
         end
 
         def boolean_cutter_container(group)
-          return unless group&.valid?
+          return unless group_valid?(group)
 
-          container = group.respond_to?(:parent) ? group.parent : nil
-          container = group.model.entities if !container.respond_to?(:add_group) && group.respond_to?(:model)
-          return container if container.respond_to?(:add_group)
+          container = group.respond_to?(:parent) ? safe_parent(group) : nil
+          container = group.model.entities if !safe_can_add_group?(container) && group.respond_to?(:model)
+          return container if safe_can_add_group?(container)
 
           nil
         end
@@ -514,6 +516,20 @@ module AICabinets
           container.respond_to?(:add_group)
         rescue StandardError
           false
+        end
+
+        def group_valid?(group)
+          group.respond_to?(:valid?) ? group.valid? : false
+        rescue StandardError
+          false
+        end
+
+        def safe_entities(group)
+          return unless group_valid?(group)
+
+          group.entities
+        rescue StandardError
+          nil
         end
 
         def safe_parent(entity)
@@ -568,10 +584,10 @@ module AICabinets
         end
 
         def container_debug_info(group)
-          container = group.respond_to?(:parent) ? group.parent : nil
+          container = safe_parent(group)
           {
             class: container&.class&.name,
-            can_add_group: container.respond_to?(:add_group),
+            can_add_group: safe_can_add_group?(container),
             path: container_path(container)
           }
         end
@@ -602,7 +618,12 @@ module AICabinets
         end
 
         def remove_faces_by_plane!(group, normal, point, keep)
-          faces = group.entities.grep(Sketchup::Face)
+          return unless group_valid?(group)
+
+          entities = safe_entities(group)
+          return unless entities
+
+          faces = entities.grep(Sketchup::Face)
           faces.each do |face|
             distances = face.vertices.map { |vertex| signed_distance_mm(normal, point, vertex.position) }
             case keep
@@ -615,7 +636,12 @@ module AICabinets
         end
 
         def add_cap_faces!(group, normal, point)
-          plane_edges = group.entities.grep(Sketchup::Edge).select do |edge|
+          return unless group_valid?(group)
+
+          entities = safe_entities(group)
+          return unless entities
+
+          plane_edges = entities.grep(Sketchup::Edge).select do |edge|
             vertices = edge.vertices
             vertices.all? { |vertex| signed_distance_mm(normal, point, vertex.position).abs <= CUT_TOLERANCE_MM }
           end
@@ -625,7 +651,7 @@ module AICabinets
             next unless loop_points.length >= 3
 
             begin
-              face = group.entities.add_face(loop_points)
+              face = entities.add_face(loop_points)
               face.reverse! if face.normal.dot(Units.vector_mm(*normal)) < 0.0
             rescue StandardError
               # Ignore face creation errors; geometry may already be closed.
@@ -656,7 +682,10 @@ module AICabinets
         end
 
         def purge_edges!(group)
-          group.entities.grep(Sketchup::Edge).each do |edge|
+          entities = safe_entities(group)
+          return unless entities
+
+          entities.grep(Sketchup::Edge).each do |edge|
             next if edge.deleted?
             next if edge.faces.any?
 
@@ -665,7 +694,7 @@ module AICabinets
         end
 
         def record_debug(group, entry)
-          return unless group&.valid?
+          return unless group_valid?(group)
 
           entity_id = group.entityID
           report = (@debug_reports[entity_id] ||= new_debug_report(group))
@@ -744,7 +773,10 @@ module AICabinets
         end
 
         def faces_on_plane_count(group, normal, point)
-          group.entities.grep(Sketchup::Face).count do |face|
+          entities = safe_entities(group)
+          return 0 unless entities
+
+          entities.grep(Sketchup::Face).count do |face|
             face.vertices.all? do |vertex|
               signed_distance_mm(normal, point, vertex.position).abs <= CUT_TOLERANCE_MM
             end
