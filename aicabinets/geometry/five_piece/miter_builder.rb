@@ -14,7 +14,7 @@ module AICabinets
       class MiterBuilder
         Units = AICabinets::Ops::Units
 
-        CUT_TOLERANCE_MM = 0.1
+        CUT_TOLERANCE_MM = 0.02
         EPSILON_MM = 1.0e-6
         MM_PER_INCH = 25.4
         PLANE_SIZE_SCALE = 4.0
@@ -210,7 +210,7 @@ module AICabinets
             group,
             a: [outside_width_mm, 0.0, outer_z],
             b: [outside_width_mm, @thickness_mm, outer_z],
-            c: [outside_width_mm - @rail_width_mm, 0.0, inside_z],
+            c: [outside_width_mm - @stile_width_mm, 0.0, inside_z],
             keep_point: interior_point
           )
 
@@ -260,7 +260,7 @@ module AICabinets
           @warnings << message
         end
 
-        def build_cutter!(entities, bounds, normal, point, keep)
+        def build_cutter!(entities, bounds, normal, point)
           extent = plane_extent(bounds)
           basis = plane_basis(normal)
           origin = point
@@ -281,9 +281,7 @@ module AICabinets
 
           normal_vector = Units.vector_mm(*normal)
           face.reverse! if face.normal.dot(normal_vector) < 0.0
-
-          pushpull_distance = keep == :positive ? -extent : extent
-          face.pushpull(Units.to_length_mm(pushpull_distance))
+          face
         end
 
         def cut_with_intersection!(group, normal:, point:, keep:)
@@ -302,19 +300,20 @@ module AICabinets
           return unless group&.valid?
 
           helper = group.entities.add_group
-          build_cutter!(helper.entities, group.bounds, normal, point, :positive)
+          build_cutter!(helper.entities, group.bounds, normal, point)
 
           identity = Geom::Transformation.new
-          helper.entities.intersect_with(
-            false,
-            identity,
-            group.entities,
-            identity,
-            false,
-            helper
-          )
+          target_entities = group.entities
+          source_entities = helper.entities
 
-          helper.explode
+          target_entities.intersect_with(
+            false,
+            identity,
+            source_entities,
+            helper.transformation,
+            false,
+            target_entities
+          )
         ensure
           helper.erase! if helper&.valid?
         end
