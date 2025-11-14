@@ -465,6 +465,8 @@ module AICabinets
         end
 
         def remove_plane_faces!(group, normal, point)
+          return unless group&.valid?
+
           group.entities.grep(Sketchup::Face).each do |face|
             vertices = face.vertices
             next unless vertices.all? do |vertex|
