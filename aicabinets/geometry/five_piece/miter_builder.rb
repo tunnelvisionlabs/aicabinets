@@ -366,11 +366,19 @@ module AICabinets
         end
 
         def heal_plane_edges!(group, normal, point, candidate_edges = nil)
-          edges = Array(candidate_edges)
-          edges = group.entities.grep(Sketchup::Edge) if edges.empty?
+          return unless group&.valid?
+
+          edges = Array(candidate_edges).compact.select { |edge| edge.respond_to?(:valid?) ? edge.valid? : true }
+          if edges.empty?
+            edges = begin
+              group.entities.grep(Sketchup::Edge)
+            rescue TypeError
+              []
+            end
+          end
 
           edges.each do |edge|
-            next unless edge.valid?
+            next unless edge&.valid?
             next unless edge.faces.empty?
 
             start_distance = signed_distance_mm(normal, point, edge.start.position)
