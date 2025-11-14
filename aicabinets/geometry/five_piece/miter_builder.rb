@@ -353,7 +353,7 @@ module AICabinets
             }
           end
 
-          host_entities = resolve_cutter_host_entities(group)
+          host_entities, host_via = resolve_cutter_host_entities(group)
           unless host_entities
             return {
               group: group,
@@ -361,7 +361,18 @@ module AICabinets
               new_edges_count: 0,
               faces_on_plane_count: faces_on_plane_count(group, normal, point),
               fallback: 'Unable to resolve cutter host entities',
-              cutter_host: entities_debug_info(nil)
+              cutter_host: entities_debug_info(nil, host_via)
+            }
+          end
+
+          unless safe_can_add_group?(host_entities)
+            return {
+              group: group,
+              mode: :intersect,
+              new_edges_count: 0,
+              faces_on_plane_count: faces_on_plane_count(group, normal, point),
+              fallback: 'Cutter host cannot create helper group',
+              cutter_host: entities_debug_info(host_entities, host_via)
             }
           end
 
@@ -397,7 +408,7 @@ module AICabinets
               mode: :intersect,
               new_edges_count: new_edges.length,
               faces_on_plane_count: faces_on_plane_count(group, normal, point),
-              cutter_host: entities_debug_info(host_entities)
+              cutter_host: entities_debug_info(host_entities, host_via)
             }
           rescue StandardError => error
             {
@@ -406,7 +417,7 @@ module AICabinets
               new_edges_count: Array(new_edges).length,
               faces_on_plane_count: faces_on_plane_count(group, normal, point),
               fallback: error.message,
-              cutter_host: entities_debug_info(host_entities)
+              cutter_host: entities_debug_info(host_entities, host_via)
             }
           ensure
             helper.erase! if helper&.valid?
@@ -442,10 +453,10 @@ module AICabinets
             return { group: group, fallback: 'Group cannot perform boolean subtraction' }
           end
 
-          host_entities = resolve_cutter_host_entities(group)
-          host_debug = entities_debug_info(host_entities)
+          host_entities, host_via = resolve_cutter_host_entities(group)
+          host_debug = entities_debug_info(host_entities, host_via)
           unless host_entities
-            info = boolean_preconditions(group, nil, host_entities)
+            info = boolean_preconditions(group, nil, host_entities, host_via)
             info[:target_volume_after_mm3] = safe_volume(group)
             return {
               group: group,
@@ -456,11 +467,22 @@ module AICabinets
           end
 
           unless !defined?(Sketchup::Entities) || host_entities.is_a?(Sketchup::Entities)
-            info = boolean_preconditions(group, nil, host_entities)
+            info = boolean_preconditions(group, nil, host_entities, host_via)
             info[:target_volume_after_mm3] = safe_volume(group)
             return {
               group: group,
               fallback: 'Cutter host is not an Entities collection',
+              boolean_preconditions: info,
+              cutter_host: host_debug
+            }
+          end
+
+          unless safe_can_add_group?(host_entities)
+            info = boolean_preconditions(group, nil, host_entities, host_via)
+            info[:target_volume_after_mm3] = safe_volume(group)
+            return {
+              group: group,
+              fallback: 'Cutter host cannot create helper group',
               boolean_preconditions: info,
               cutter_host: host_debug
             }
@@ -473,6 +495,8 @@ module AICabinets
             raise 'Failed to create cutter face for boolean trim' unless face&.valid?
 
             distance_mm = plane_extent(group.bounds)
+            distance_mm = [distance_mm, @thickness_mm, @stile_width_mm, @rail_width_mm].compact.max
+            distance_mm *= 2.0
             distance_mm = 1.0 if distance_mm <= EPSILON_MM
 
             direction = keep == :positive ? -1.0 : 1.0
@@ -498,7 +522,7 @@ module AICabinets
             heal_group!(group)
             purge_edges!(group)
 
-            preconditions = boolean_preconditions(group, cutter, host_entities)
+            preconditions = boolean_preconditions(group, cutter, host_entities, host_via)
             preconditions[:cutter_volume_mm3] = cutter_volume
             preconditions[:cutter_solid] = cutter_solid
             preconditions[:target_volume_after_mm3] = safe_volume(group)
@@ -517,7 +541,7 @@ module AICabinets
               faces_on_plane_count: faces_on_plane_count(group, normal, point)
             }
           rescue StandardError => error
-            fallback_info = boolean_preconditions(group, cutter, host_entities)
+            fallback_info = boolean_preconditions(group, cutter, host_entities, host_via)
             fallback_info[:target_volume_after_mm3] = safe_volume(group)
 
             {
@@ -553,41 +577,42 @@ module AICabinets
         end
 
         def resolve_cutter_host_entities(group)
-          return unless group_valid?(group)
+          return [nil, :invalid_group] unless group_valid?(group)
 
           parent = safe_parent(group)
-          candidates = []
-
           if defined?(Sketchup::Entities) && parent.is_a?(Sketchup::Entities)
-            candidates << parent
+            return [parent, :parent_entities]
           end
 
           if parent.respond_to?(:entities)
-            candidates << parent.entities
+            entities = parent.entities
+            return [entities, :parent_entities_method] if entities
           end
 
           if parent.respond_to?(:definition) && parent.definition.respond_to?(:entities)
-            candidates << parent.definition.entities
+            entities = parent.definition.entities
+            return [entities, :definition_entities] if entities
           end
 
-          model = group.respond_to?(:model) ? group.model : nil
-          candidates << model.entities if model && model.respond_to?(:entities)
-
-          candidates.compact.each do |candidate|
-            next if defined?(Sketchup::Entities) && !candidate.is_a?(Sketchup::Entities)
-
-            return candidate
+          if group.respond_to?(:model)
+            model = group.model
+            if model && model.respond_to?(:entities)
+              entities = model.entities
+              return [entities, :model_entities] if entities
+            end
           end
 
-          nil
+          [nil, :unresolved]
         rescue StandardError
           model = group.respond_to?(:model) ? group.model : nil
-          model.respond_to?(:entities) ? model.entities : nil
+          if model && model.respond_to?(:entities)
+            [model.entities, :model_entities]
+          else
+            [nil, :error]
+          end
         end
 
-        alias boolean_cutter_container resolve_cutter_host_entities
-
-        def boolean_preconditions(group, cutter, container)
+        def boolean_preconditions(group, cutter, container, container_via)
           volume_before = safe_volume(group)
           cutter_valid = cutter&.valid?
           group_parent = safe_parent(group)
@@ -601,6 +626,7 @@ module AICabinets
             container_class: container&.class&.name,
             container_can_add_group: safe_can_add_group?(container),
             container_path: container_path(container),
+            container_via: container_via,
             same_context: cutter_valid && group_parent ? cutter_parent == group_parent : nil
           }
         end
@@ -700,16 +726,46 @@ module AICabinets
           }
         end
 
-        def entities_debug_info(entities)
+        def entities_debug_info(entities, resolved_via = nil)
           return nil unless entities
 
           {
             class: entities.class.name,
             parent_class: entities.respond_to?(:parent) ? entities.parent&.class&.name : nil,
-            path: container_path(entities)
+            path: container_path(entities),
+            resolved_via: resolved_via
           }
         rescue StandardError
           nil
+        end
+
+        def opening_face_stability(group)
+          entities = safe_entities(group)
+          return {} unless entities
+
+          front_faces = []
+          loops_valid = true
+
+          entities.grep(Sketchup::Face).each do |face|
+            normal = face.normal
+            next unless normal
+
+            if normal.respond_to?(:y) && normal.y.abs >= 0.99
+              front_faces << face
+              loops_valid &&= face.loops.all? do |loop|
+                !loop.respond_to?(:valid?) || loop.valid?
+              end
+            end
+          rescue StandardError
+            loops_valid = false
+          end
+
+          {
+            front_plane_faces_count: front_faces.length,
+            loops_valid: loops_valid
+          }
+        rescue StandardError
+          {}
         end
 
         def model_units_summary(group)
@@ -836,6 +892,7 @@ module AICabinets
           end
 
           report[:container] = entry[:container] if entry[:container]
+          report[:opening_face] = opening_face_stability(group)
 
           log_debug_information(group, entry) if debug_logging?
         end
@@ -853,6 +910,7 @@ module AICabinets
             },
             container: container_debug_info(group),
             model_units: model_units_summary(group),
+            opening_face: opening_face_stability(group),
             cuts: []
           }
         end

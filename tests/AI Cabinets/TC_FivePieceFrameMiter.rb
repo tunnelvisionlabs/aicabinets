@@ -380,6 +380,7 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
         "    dims: #{report[:dims].inspect}",
         "    widths: #{report[:widths].inspect}",
         "    container: #{container.inspect}",
+        "    opening_face: #{report[:opening_face].inspect}",
         "    model_units: #{model_units.inspect}",
         "    plane: #{plane.inspect}",
         "    boolean_preconditions: #{boolean_info.inspect}",
