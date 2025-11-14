@@ -275,13 +275,16 @@ module AICabinets
               warn_once('SketchUp solid booleans failed; reverted to geometric intersection for miters.')
               fallback = cut_with_intersection!(group, normal: normal, point: point, keep: keep)
               debug_entry.merge!(fallback)
+              debug_entry[:reason_if_fallback] ||= fallback[:fallback]
             else
               debug_entry.merge!(boolean_result)
             end
           else
             @miter_mode ||= :intersect
             warn_once('SketchUp solid boolean operations unavailable; used geometric intersection for miters.')
-            debug_entry.merge!(cut_with_intersection!(group, normal: normal, point: point, keep: keep))
+            intersect_result = cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+            debug_entry.merge!(intersect_result)
+            debug_entry[:reason_if_fallback] ||= intersect_result[:fallback]
           end
 
           debug_entry[:member][:volume_after_mm3] = safe_volume(group)
@@ -337,47 +340,77 @@ module AICabinets
         end
 
         def cut_with_intersection!(group, normal:, point:, keep:)
-          new_edges = add_plane_intersection_edges!(group, normal, point)
-          heal_plane_edges!(group, normal, point, new_edges)
-          remove_faces_by_plane!(group, normal, point, keep)
-          remove_plane_faces!(group, normal, point)
-          heal_plane_edges!(group, normal, point, new_edges)
-          add_cap_faces!(group, normal, point)
-          purge_edges!(group)
-          heal_plane_edges!(group, normal, point, new_edges)
-          heal_group!(group)
+          return { group: group, mode: :intersect, new_edges_count: 0, faces_on_plane_count: 0, fallback: 'Target group invalid' } unless group_valid?(group)
 
-          {
-            group: group,
-            mode: :intersect,
-            new_edges_count: Array(new_edges).length,
-            faces_on_plane_count: faces_on_plane_count(group, normal, point)
-          }
-        end
-
-        def add_plane_intersection_edges!(group, normal, point)
-          return [] unless group_valid?(group)
+          target_entities = safe_entities(group)
+          unless target_entities
+            return {
+              group: group,
+              mode: :intersect,
+              new_edges_count: 0,
+              faces_on_plane_count: 0,
+              fallback: 'Target group has no entities'
+            }
+          end
 
           host_entities = resolve_cutter_host_entities(group)
-          target_entities = safe_entities(group)
-          return [] unless host_entities && target_entities
+          unless host_entities
+            return {
+              group: group,
+              mode: :intersect,
+              new_edges_count: 0,
+              faces_on_plane_count: faces_on_plane_count(group, normal, point),
+              fallback: 'Unable to resolve cutter host entities',
+              cutter_host: entities_debug_info(nil)
+            }
+          end
 
           helper = host_entities.add_group
-          build_cutter!(helper.entities, group.bounds, normal, point)
-          helper.transform!(group.transformation) if helper.valid? && group.respond_to?(:transformation)
+          new_edges = []
 
-          Array(
-            helper.entities.intersect_with(
-              true,
-              helper.transformation,
-              target_entities,
-              group.transformation,
-              true,
-              [group]
+          begin
+            build_cutter!(helper.entities, group.bounds, normal, point)
+            helper.transform!(group.transformation) if helper.valid? && group.respond_to?(:transformation)
+
+            new_edges = Array(
+              helper.entities.intersect_with(
+                true,
+                helper.transformation,
+                target_entities,
+                group.transformation,
+                true,
+                [group]
+              )
             )
-          )
-        ensure
-          helper.erase! if helper&.valid?
+
+            heal_plane_edges!(group, normal, point, new_edges)
+            remove_faces_by_plane!(group, normal, point, keep)
+            remove_plane_faces!(group, normal, point)
+            heal_plane_edges!(group, normal, point, new_edges)
+            add_cap_faces!(group, normal, point)
+            purge_edges!(group)
+            heal_plane_edges!(group, normal, point, new_edges)
+            heal_group!(group)
+
+            {
+              group: group,
+              mode: :intersect,
+              new_edges_count: new_edges.length,
+              faces_on_plane_count: faces_on_plane_count(group, normal, point),
+              cutter_host: entities_debug_info(host_entities)
+            }
+          rescue StandardError => error
+            {
+              group: group,
+              mode: :intersect,
+              new_edges_count: Array(new_edges).length,
+              faces_on_plane_count: faces_on_plane_count(group, normal, point),
+              fallback: error.message,
+              cutter_host: entities_debug_info(host_entities)
+            }
+          ensure
+            helper.erase! if helper&.valid?
+          end
         end
 
         def heal_plane_edges!(group, normal, point, candidate_edges = nil)
@@ -410,13 +443,26 @@ module AICabinets
           end
 
           host_entities = resolve_cutter_host_entities(group)
+          host_debug = entities_debug_info(host_entities)
           unless host_entities
             info = boolean_preconditions(group, nil, host_entities)
             info[:target_volume_after_mm3] = safe_volume(group)
             return {
               group: group,
               fallback: 'Unable to resolve cutter host entities',
-              boolean_preconditions: info
+              boolean_preconditions: info,
+              cutter_host: host_debug
+            }
+          end
+
+          unless !defined?(Sketchup::Entities) || host_entities.is_a?(Sketchup::Entities)
+            info = boolean_preconditions(group, nil, host_entities)
+            info[:target_volume_after_mm3] = safe_volume(group)
+            return {
+              group: group,
+              fallback: 'Cutter host is not an Entities collection',
+              boolean_preconditions: info,
+              cutter_host: host_debug
             }
           end
 
@@ -435,11 +481,15 @@ module AICabinets
 
             cutter.transform!(group.transformation) if group.respond_to?(:transformation)
 
+            heal_group!(cutter)
             heal_group!(group)
 
             cutter_volume = safe_volume(cutter)
             cutter_solid = cutter_volume && cutter_volume.positive?
             raise 'Cutter is not a solid' unless cutter_solid
+
+            target_volume_before = safe_volume(group)
+            raise 'Target group is not a solid before subtraction' unless target_volume_before&.positive?
 
             boolean_result = group.subtract(cutter)
             raise 'Boolean subtraction returned nil' if boolean_result.nil?
@@ -463,6 +513,7 @@ module AICabinets
                 container_path: container_path(host_entities)
               },
               boolean_preconditions: preconditions,
+              cutter_host: host_debug,
               faces_on_plane_count: faces_on_plane_count(group, normal, point)
             }
           rescue StandardError => error
@@ -472,7 +523,8 @@ module AICabinets
             {
               group: group,
               fallback: error.message,
-              boolean_preconditions: fallback_info
+              boolean_preconditions: fallback_info,
+              cutter_host: host_debug
             }
           ensure
             cutter.erase! if cutter&.valid?
@@ -504,18 +556,33 @@ module AICabinets
           return unless group_valid?(group)
 
           parent = safe_parent(group)
+          candidates = []
 
           if defined?(Sketchup::Entities) && parent.is_a?(Sketchup::Entities)
-            parent
-          elsif parent.respond_to?(:entities)
-            parent.entities
-          elsif parent.respond_to?(:definition) && parent.definition.respond_to?(:entities)
-            parent.definition.entities
-          elsif group.respond_to?(:model) && group.model.respond_to?(:entities)
-            group.model.entities
+            candidates << parent
           end
+
+          if parent.respond_to?(:entities)
+            candidates << parent.entities
+          end
+
+          if parent.respond_to?(:definition) && parent.definition.respond_to?(:entities)
+            candidates << parent.definition.entities
+          end
+
+          model = group.respond_to?(:model) ? group.model : nil
+          candidates << model.entities if model && model.respond_to?(:entities)
+
+          candidates.compact.each do |candidate|
+            next if defined?(Sketchup::Entities) && !candidate.is_a?(Sketchup::Entities)
+
+            return candidate
+          end
+
+          nil
         rescue StandardError
-          group.respond_to?(:model) && group.model.respond_to?(:entities) ? group.model.entities : nil
+          model = group.respond_to?(:model) ? group.model : nil
+          model.respond_to?(:entities) ? model.entities : nil
         end
 
         alias boolean_cutter_container resolve_cutter_host_entities
@@ -633,6 +700,18 @@ module AICabinets
           }
         end
 
+        def entities_debug_info(entities)
+          return nil unless entities
+
+          {
+            class: entities.class.name,
+            parent_class: entities.respond_to?(:parent) ? entities.parent&.class&.name : nil,
+            path: container_path(entities)
+          }
+        rescue StandardError
+          nil
+        end
+
         def model_units_summary(group)
           model = group.respond_to?(:model) ? group.model : nil
           return {} unless model
@@ -746,6 +825,7 @@ module AICabinets
             plane
             member
             cutter
+            cutter_host
             inside_span
             faces_on_plane_count
             new_edges_count
