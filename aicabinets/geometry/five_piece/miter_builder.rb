@@ -288,13 +288,13 @@ module AICabinets
 
         def cut_with_intersection!(group, normal:, point:, keep:)
           add_plane_intersection_edges!(group, normal, point)
-          group.entities.find_faces
+          heal_plane_edges!(group, normal, point)
           remove_faces_by_plane!(group, normal, point, keep)
           remove_plane_faces!(group, normal, point)
-          group.entities.find_faces
+          heal_plane_edges!(group, normal, point)
           add_cap_faces!(group, normal, point)
           purge_edges!(group)
-          group.entities.find_faces
+          heal_plane_edges!(group, normal, point)
           group
         end
 
@@ -317,6 +317,22 @@ module AICabinets
           helper.explode
         ensure
           helper.erase! if helper&.valid?
+        end
+
+        def heal_plane_edges!(group, normal, point)
+          group.entities.grep(Sketchup::Edge).each do |edge|
+            next unless edge.valid?
+            next unless edge.faces.empty?
+
+            start_distance = signed_distance_mm(normal, point, edge.start.position)
+            end_distance = signed_distance_mm(normal, point, edge.end.position)
+            next unless start_distance.abs <= CUT_TOLERANCE_MM && end_distance.abs <= CUT_TOLERANCE_MM
+
+            edge.find_faces
+          rescue StandardError
+            # Ignore failures; subsequent cleanup will cull stray geometry.
+            next
+          end
         end
 
         def remove_plane_faces!(group, normal, point)
