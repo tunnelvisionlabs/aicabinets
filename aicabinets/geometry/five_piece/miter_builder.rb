@@ -210,7 +210,7 @@ module AICabinets
             group,
             a: [outside_width_mm, 0.0, outer_z],
             b: [outside_width_mm, @thickness_mm, outer_z],
-            c: [outside_width_mm - @stile_width_mm, 0.0, inside_z],
+            c: [outside_width_mm - @rail_width_mm, 0.0, inside_z],
             keep_point: interior_point
           )
 
