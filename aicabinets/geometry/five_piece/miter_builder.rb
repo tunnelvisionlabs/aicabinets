@@ -252,6 +252,18 @@ module AICabinets
 
           keep = determine_keep_side(normal, point, keep, keep_point)
 
+          # Skip if the member already contains a capped face on this plane. This
+          # protects the regeneration path from double-cutting the same corner,
+          # which previously produced duplicate inside corners (AC7).
+          if faces_on_plane_count(group, normal, point).positive?
+            record_debug(group, build_debug_entry(group, normal, point, keep_point, debug).merge(
+              mode: @miter_mode || default_miter_mode,
+              reason_if_fallback: :already_trimmed,
+              faces_on_plane_count: faces_on_plane_count(group, normal, point)
+            ))
+            return group
+          end
+
           debug_entry = build_debug_entry(group, normal, point, keep_point, debug)
 
           if boolean_mode?
@@ -333,6 +345,7 @@ module AICabinets
           add_cap_faces!(group, normal, point)
           purge_edges!(group)
           heal_plane_edges!(group, normal, point, new_edges)
+          heal_group!(group)
 
           {
             group: group,
@@ -345,22 +358,22 @@ module AICabinets
         def add_plane_intersection_edges!(group, normal, point)
           return [] unless group_valid?(group)
 
+          host_entities = resolve_cutter_host_entities(group)
           target_entities = safe_entities(group)
-          return [] unless target_entities
+          return [] unless host_entities && target_entities
 
-          helper = target_entities.add_group
+          helper = host_entities.add_group
           build_cutter!(helper.entities, group.bounds, normal, point)
-
-          source_entities = helper.entities
+          helper.transform!(group.transformation) if helper.valid? && group.respond_to?(:transformation)
 
           Array(
-            source_entities.intersect_with(
-              false,
+            helper.entities.intersect_with(
+              true,
               helper.transformation,
               target_entities,
               group.transformation,
-              false,
-              helper.entities.to_a
+              true,
+              [group]
             )
           )
         ensure
@@ -396,19 +409,18 @@ module AICabinets
             return { group: group, fallback: 'Group cannot perform boolean subtraction' }
           end
 
-          container = boolean_cutter_container(group)
-          unless container
-            info = boolean_preconditions(group, nil, container)
+          host_entities = resolve_cutter_host_entities(group)
+          unless host_entities
+            info = boolean_preconditions(group, nil, host_entities)
             info[:target_volume_after_mm3] = safe_volume(group)
-
             return {
               group: group,
-              fallback: 'Unable to determine cutter container',
+              fallback: 'Unable to resolve cutter host entities',
               boolean_preconditions: info
             }
           end
 
-          cutter = container.add_group
+          cutter = host_entities.add_group
 
           begin
             face = build_cutter!(cutter.entities, group.bounds, normal, point)
@@ -423,16 +435,20 @@ module AICabinets
 
             cutter.transform!(group.transformation) if group.respond_to?(:transformation)
 
+            heal_group!(group)
+
             cutter_volume = safe_volume(cutter)
             cutter_solid = cutter_volume && cutter_volume.positive?
+            raise 'Cutter is not a solid' unless cutter_solid
 
             boolean_result = group.subtract(cutter)
             raise 'Boolean subtraction returned nil' if boolean_result.nil?
             raise 'Group became invalid after boolean subtraction' unless group.valid?
 
+            heal_group!(group)
             purge_edges!(group)
 
-            preconditions = boolean_preconditions(group, cutter, container)
+            preconditions = boolean_preconditions(group, cutter, host_entities)
             preconditions[:cutter_volume_mm3] = cutter_volume
             preconditions[:cutter_solid] = cutter_solid
             preconditions[:target_volume_after_mm3] = safe_volume(group)
@@ -443,14 +459,14 @@ module AICabinets
               cutter: {
                 volume_mm3: cutter_volume,
                 solid: cutter_solid,
-                container_class: container.class.name,
-                container_path: container_path(container)
+                container_class: host_entities.class.name,
+                container_path: container_path(host_entities)
               },
               boolean_preconditions: preconditions,
               faces_on_plane_count: faces_on_plane_count(group, normal, point)
             }
           rescue StandardError => error
-            fallback_info = boolean_preconditions(group, cutter, container)
+            fallback_info = boolean_preconditions(group, cutter, host_entities)
             fallback_info[:target_volume_after_mm3] = safe_volume(group)
 
             {
@@ -484,15 +500,25 @@ module AICabinets
           end
         end
 
-        def boolean_cutter_container(group)
+        def resolve_cutter_host_entities(group)
           return unless group_valid?(group)
 
-          container = group.respond_to?(:parent) ? safe_parent(group) : nil
-          container = group.model.entities if !safe_can_add_group?(container) && group.respond_to?(:model)
-          return container if safe_can_add_group?(container)
+          parent = safe_parent(group)
 
-          nil
+          if defined?(Sketchup::Entities) && parent.is_a?(Sketchup::Entities)
+            parent
+          elsif parent.respond_to?(:entities)
+            parent.entities
+          elsif parent.respond_to?(:definition) && parent.definition.respond_to?(:entities)
+            parent.definition.entities
+          elsif group.respond_to?(:model) && group.model.respond_to?(:entities)
+            group.model.entities
+          end
+        rescue StandardError
+          group.respond_to?(:model) && group.model.respond_to?(:entities) ? group.model.entities : nil
         end
+
+        alias boolean_cutter_container resolve_cutter_host_entities
 
         def boolean_preconditions(group, cutter, container)
           volume_before = safe_volume(group)
@@ -530,6 +556,21 @@ module AICabinets
           group.entities
         rescue StandardError
           nil
+        end
+
+        def heal_group!(group)
+          entities = safe_entities(group)
+          return unless entities
+
+          entities.grep(Sketchup::Edge).each do |edge|
+            next unless edge&.valid?
+
+            begin
+              edge.find_faces
+            rescue StandardError
+              next
+            end
+          end
         end
 
         def safe_parent(entity)
