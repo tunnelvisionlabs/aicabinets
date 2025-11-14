@@ -389,12 +389,19 @@ module AICabinets
             return { group: group, fallback: 'Group cannot perform boolean subtraction' }
           end
 
-          parent = group.parent
-          unless parent.respond_to?(:add_group)
-            return { group: group, fallback: 'Parent cannot host cutter group' }
+          container = boolean_cutter_container(group)
+          unless container
+            info = boolean_preconditions(group, nil, container)
+            info[:target_volume_after_mm3] = safe_volume(group)
+
+            return {
+              group: group,
+              fallback: 'Unable to determine cutter container',
+              boolean_preconditions: info
+            }
           end
 
-          cutter = parent.add_group
+          cutter = container.add_group
 
           begin
             face = build_cutter!(cutter.entities, group.bounds, normal, point)
@@ -418,17 +425,32 @@ module AICabinets
 
             purge_edges!(group)
 
+            preconditions = boolean_preconditions(group, cutter, container)
+            preconditions[:cutter_volume_mm3] = cutter_volume
+            preconditions[:cutter_solid] = cutter_solid
+            preconditions[:target_volume_after_mm3] = safe_volume(group)
+
             {
               group: group,
               mode: :boolean,
               cutter: {
                 volume_mm3: cutter_volume,
-                solid: cutter_solid
+                solid: cutter_solid,
+                container_class: container.class.name,
+                container_path: container_path(container)
               },
+              boolean_preconditions: preconditions,
               faces_on_plane_count: faces_on_plane_count(group, normal, point)
             }
           rescue StandardError => error
-            { group: group, fallback: error.message }
+            fallback_info = boolean_preconditions(group, cutter, container)
+            fallback_info[:target_volume_after_mm3] = safe_volume(group)
+
+            {
+              group: group,
+              fallback: error.message,
+              boolean_preconditions: fallback_info
+            }
           ensure
             cutter.erase! if cutter&.valid?
           end
@@ -448,6 +470,103 @@ module AICabinets
               # cleanup passes.
             end
           end
+        end
+
+        def boolean_cutter_container(group)
+          return unless group&.valid?
+
+          container = group.respond_to?(:parent) ? group.parent : nil
+          container = group.model.entities if !container.respond_to?(:add_group) && group.respond_to?(:model)
+          return container if container.respond_to?(:add_group)
+
+          nil
+        end
+
+        def boolean_preconditions(group, cutter, container)
+          volume_before = safe_volume(group)
+          {
+            requested: boolean_mode?,
+            target_volume_before_mm3: volume_before,
+            target_solid_before: volume_before&.positive?,
+            cutter_exists: cutter&.valid?,
+            container_class: container&.class&.name,
+            container_can_add_group: container.respond_to?(:add_group),
+            container_path: container_path(container),
+            same_context: cutter ? cutter.parent == group.parent : nil
+          }
+        end
+
+        def container_path(container)
+          return nil unless container
+
+          labels = []
+          current = container
+          seen = {}.compare_by_identity
+
+          while current && !seen[current]
+            seen[current] = true
+            labels.unshift(container_label(current))
+            current =
+              if current.respond_to?(:parent)
+                current.parent
+              elsif current.respond_to?(:model)
+                current.model
+              end
+          end
+
+          labels.compact.join(' > ')
+        end
+
+        def container_label(object)
+          return 'Model' if defined?(Sketchup::Model) && object.is_a?(Sketchup::Model)
+          return '(Entities)' if defined?(Sketchup::Entities) && object.is_a?(Sketchup::Entities)
+          if object.respond_to?(:name)
+            if defined?(Sketchup::ComponentDefinition) && object.is_a?(Sketchup::ComponentDefinition)
+              return "Definition:#{object.name}"
+            end
+            if defined?(Sketchup::Group) && object.is_a?(Sketchup::Group)
+              return "Group:#{object.name}"
+            end
+            if defined?(Sketchup::ComponentInstance) && object.is_a?(Sketchup::ComponentInstance)
+              return "Instance:#{object.name}"
+            end
+          end
+
+          object.class.name
+        end
+
+        def container_debug_info(group)
+          container = group.respond_to?(:parent) ? group.parent : nil
+          {
+            class: container&.class&.name,
+            can_add_group: container.respond_to?(:add_group),
+            path: container_path(container)
+          }
+        end
+
+        def model_units_summary(group)
+          model = group.respond_to?(:model) ? group.model : nil
+          return {} unless model
+
+          begin
+            options = model.options['UnitsOptions']
+            return {} unless options
+
+            {
+              length_unit: options['LengthUnit'],
+              length_format: options['LengthFormat']
+            }
+          rescue StandardError
+            {}
+          end
+        end
+
+        def plane_angle_deg(normalized_normal)
+          x = normalized_normal[0].abs
+          z = normalized_normal[2].abs
+          return nil if x.zero? && z.zero?
+
+          Math.atan2(z, x) * 180.0 / Math::PI
         end
 
         def remove_faces_by_plane!(group, normal, point, keep)
@@ -520,9 +639,21 @@ module AICabinets
           report = (@debug_reports[entity_id] ||= new_debug_report(group))
           report[:cuts] << entry.dup
 
-          %i[mode plane member cutter inside_span faces_on_plane_count new_edges_count reason_if_fallback].each do |key|
+          %i[
+            mode
+            plane
+            member
+            cutter
+            inside_span
+            faces_on_plane_count
+            new_edges_count
+            reason_if_fallback
+            boolean_preconditions
+          ].each do |key|
             report[key] = entry[key]
           end
+
+          report[:container] = entry[:container] if entry[:container]
 
           log_debug_information(group, entry) if debug_logging?
         end
@@ -538,6 +669,8 @@ module AICabinets
               stile_mm: @stile_width_mm,
               rail_mm: @rail_width_mm
             },
+            container: container_debug_info(group),
+            model_units: model_units_summary(group),
             cuts: []
           }
         end
@@ -554,12 +687,14 @@ module AICabinets
         end
 
         def build_debug_entry(group, normal, point, keep_point, debug)
+          normalized = normalize_vector(normal.dup)
           {
             mode: nil,
             plane: {
               point: point.dup,
-              normal: normalize_vector(normal.dup),
-              tol_mm: CUT_TOLERANCE_MM
+              normal: normalized,
+              tol_mm: CUT_TOLERANCE_MM,
+              angle_deg: plane_angle_deg(normalized)
             },
             member: {
               name: group.respond_to?(:name) ? group.name : nil,
@@ -570,7 +705,9 @@ module AICabinets
             faces_on_plane_count: 0,
             new_edges_count: nil,
             reason_if_fallback: nil,
-            keep_point: keep_point
+            keep_point: keep_point,
+            container: container_debug_info(group),
+            boolean_preconditions: nil
           }
         end
 

@@ -299,7 +299,9 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
     diff = (expected_mm - actual_mm).abs
     return if diff <= tolerance_mm
 
-    reason = "#{label} expected #{expected_mm}mm ±#{tolerance_mm}mm, got #{actual_mm}mm (diff #{diff}mm)"
+    reason =
+      "#{label} expected #{format_mm_in(expected_mm)} ±#{format_mm_in(tolerance_mm)} " \
+      "got #{format_mm_in(actual_mm)} (diff #{format_mm_in(diff)})"
     flunk(dimension_failure_message(reason, groups))
   end
 
@@ -331,7 +333,9 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
   end
 
   def dimension_failure_message(reason, groups)
-    debug_failure_message(reason, groups)
+    extents = opening_loop_extents_message(groups)
+    message = [reason, extents].reject(&:empty?).join("\n")
+    debug_failure_message(message, groups)
   end
 
   def debug_failure_message(reason, groups)
@@ -362,6 +366,11 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
       cuts = Array(report[:cuts])
       last_cut = cuts.last || {}
       member = last_cut[:member] || {}
+      plane = last_cut[:plane] || report[:plane] || {}
+      boolean_info = report[:boolean_preconditions] || last_cut[:boolean_preconditions] || {}
+      container = report[:container] || {}
+      model_units = report[:model_units] || {}
+
       [
         "#{header}:",
         "    mode: #{report[:mode].inspect}",
@@ -370,6 +379,10 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
         "    reason_if_fallback: #{report[:reason_if_fallback].inspect}",
         "    dims: #{report[:dims].inspect}",
         "    widths: #{report[:widths].inspect}",
+        "    container: #{container.inspect}",
+        "    model_units: #{model_units.inspect}",
+        "    plane: #{plane.inspect}",
+        "    boolean_preconditions: #{boolean_info.inspect}",
         "    last_inside_span: #{last_cut[:inside_span].inspect}",
         "    cutter: #{last_cut[:cutter].inspect}",
         "    member_volumes_mm3: before=#{member[:volume_before_mm3].inspect} after=#{member[:volume_after_mm3].inspect}"
@@ -412,5 +425,45 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
     else
       length
     end
+  end
+
+  def format_mm_in(value_mm)
+    return value_mm.inspect unless value_mm.is_a?(Numeric)
+
+    inches = value_mm / 25.4
+    format('%.3fmm (%.3fin)', value_mm, inches)
+  end
+
+  def opening_loop_extents_message(groups)
+    loop = detect_opening_loop(groups)
+    return '' unless loop
+
+    xs = loop.vertices.map { |vertex| length_to_mm(vertex.position.x) }
+    zs = loop.vertices.map { |vertex| length_to_mm(vertex.position.z) }
+
+    [
+      "Opening inner-loop X extents: #{format_mm_range(xs)}",
+      "Opening inner-loop Z extents: #{format_mm_range(zs)}"
+    ].join("\n")
+  end
+
+  def detect_opening_loop(groups)
+    Array(groups).each do |group|
+      group.entities.grep(Sketchup::Face).each do |face|
+        inner = face.loops.find(&:inner?)
+        return inner if inner
+      end
+    end
+    nil
+  end
+
+  def format_mm_range(values)
+    return 'n/a' if values.empty?
+
+    min_mm = values.min
+    max_mm = values.max
+    span_mm = max_mm - min_mm
+
+    "#{format_mm_in(min_mm)}..#{format_mm_in(max_mm)} (span #{format_mm_in(span_mm)})"
   end
 end
