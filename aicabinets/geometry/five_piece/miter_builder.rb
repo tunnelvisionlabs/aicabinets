@@ -250,30 +250,39 @@ module AICabinets
         def cut_with_plane!(group, normal:, point:, keep: nil, keep_point: nil, debug: nil)
           return group unless group_valid?(group)
 
-          keep = determine_keep_side(normal, point, keep, keep_point)
+          plane = plane_data_for_group(group, normal, point)
+          return group unless plane
+
+          transformed_keep_point =
+            if keep_point
+              transform_point_mm(group, keep_point)
+            end
+
+          keep = determine_keep_side(plane[:normal_mm], plane[:point_mm], keep, transformed_keep_point)
 
           # Skip if the member already contains a capped face on this plane. This
           # protects the regeneration path from double-cutting the same corner,
           # which previously produced duplicate inside corners (AC7).
-          if faces_on_plane_count(group, normal, point).positive?
-            record_debug(group, build_debug_entry(group, normal, point, keep_point, debug).merge(
+          faces_on_plane = faces_on_plane_count(group, plane[:normal_mm], plane[:point_mm])
+          if faces_on_plane.positive?
+            record_debug(group, build_debug_entry(group, plane, transformed_keep_point, debug).merge(
               mode: @miter_mode || default_miter_mode,
               reason_if_fallback: :already_trimmed,
-              faces_on_plane_count: faces_on_plane_count(group, normal, point)
+              faces_on_plane_count: faces_on_plane
             ))
             return group
           end
 
-          debug_entry = build_debug_entry(group, normal, point, keep_point, debug)
+          debug_entry = build_debug_entry(group, plane, transformed_keep_point, debug)
 
           if boolean_mode?
             @miter_mode ||= :boolean
-            boolean_result = cut_with_boolean!(group, normal: normal, point: point, keep: keep)
+            boolean_result = cut_with_boolean!(group, plane: plane, keep: keep)
             if boolean_result[:fallback]
               debug_entry[:reason_if_fallback] = boolean_result[:fallback]
               @miter_mode = :intersect
               warn_once('SketchUp solid booleans failed; reverted to geometric intersection for miters.')
-              fallback = cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+              fallback = cut_with_intersection!(group, plane: plane, keep: keep)
               debug_entry.merge!(fallback)
               debug_entry[:reason_if_fallback] ||= fallback[:fallback]
             else
@@ -282,7 +291,7 @@ module AICabinets
           else
             @miter_mode ||= :intersect
             warn_once('SketchUp solid boolean operations unavailable; used geometric intersection for miters.')
-            intersect_result = cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+            intersect_result = cut_with_intersection!(group, plane: plane, keep: keep)
             debug_entry.merge!(intersect_result)
             debug_entry[:reason_if_fallback] ||= intersect_result[:fallback]
           end
@@ -294,9 +303,9 @@ module AICabinets
           group
         end
 
-        def determine_keep_side(normal, point, keep, keep_point)
-          if keep_point
-            distance = signed_distance_mm(normal, point, Units.point_mm(*keep_point))
+        def determine_keep_side(normal_mm, point_mm, keep, keep_point_mm)
+          if keep_point_mm
+            distance = signed_distance_mm(normal_mm, point_mm, keep_point_mm)
             if distance.abs > CUT_TOLERANCE_MM
               return distance.negative? ? :negative : :positive
             end
@@ -315,31 +324,82 @@ module AICabinets
           @warnings << message
         end
 
-        def build_cutter!(entities, bounds, normal, point)
-          extent = plane_extent(bounds)
-          basis = plane_basis(normal)
-          origin = point
+        def plane_data_for_group(group, normal_mm, point_mm)
+          point = Units.point_mm(*point_mm)
+          normal = Units.vector_mm(*normal_mm)
 
-          u = scale_vector(basis[:u], extent)
-          v = scale_vector(basis[:v], extent)
-          plane_point = origin
+          if group.respond_to?(:transformation)
+            transformation = group.transformation
+            point = point.transform(transformation)
+            normal.transform!(transformation)
+          end
 
-          points = [
-            add_vectors(add_vectors(plane_point, u), v),
-            add_vectors(sub_vectors(plane_point, u), v),
-            sub_vectors(sub_vectors(plane_point, u), v),
-            add_vectors(sub_vectors(plane_point, u), v)
-          ]
+          normal_length_mm = normal.length.to_f * MM_PER_INCH
+          return nil if normal_length_mm <= EPSILON_MM
 
-          face = entities.add_face(points.map { |coords| Units.point_mm(*coords) })
-          raise 'Failed to construct cutter plane' unless face
+          normal.normalize!
 
-          normal_vector = Units.vector_mm(*normal)
-          face.reverse! if face.normal.dot(normal_vector) < 0.0
-          face
+          {
+            point_mm: [point.x.to_f * MM_PER_INCH, point.y.to_f * MM_PER_INCH, point.z.to_f * MM_PER_INCH],
+            normal_mm: [normal.x.to_f * MM_PER_INCH, normal.y.to_f * MM_PER_INCH, normal.z.to_f * MM_PER_INCH],
+            point: point,
+            normal: normal
+          }
+        rescue StandardError
+          nil
         end
 
-        def cut_with_intersection!(group, normal:, point:, keep:)
+        def transform_point_mm(group, coords_mm)
+          point = Units.point_mm(*coords_mm)
+          if group.respond_to?(:transformation)
+            point = point.transform(group.transformation)
+          end
+
+          [point.x.to_f * MM_PER_INCH, point.y.to_f * MM_PER_INCH, point.z.to_f * MM_PER_INCH]
+        rescue StandardError
+          nil
+        end
+
+        def build_solid_cutter(host_entities, group, plane, keep)
+          cutter = host_entities.add_group
+          extent_mm = plane_extent(group.bounds)
+          extent_mm = 1.0 if extent_mm <= EPSILON_MM
+          extent_length = Units.to_length_mm(extent_mm * 2.0)
+          face = build_plane_face!(cutter.entities, plane, extent_length)
+          raise 'Failed to construct cutter plane' unless face&.valid?
+
+          waste_direction = plane[:normal].clone
+          waste_direction.reverse! if keep == :positive
+          waste_direction.normalize!
+          face.reverse! if face.normal.dot(waste_direction) < 0.0
+
+          thickness = Units.to_length_mm(extent_mm * 4.0)
+          face.pushpull(thickness)
+
+          heal_group!(cutter)
+          cutter
+        end
+
+        def build_plane_face!(entities, plane, extent_length)
+          u_vector, v_vector = plane_basis_vectors(plane[:normal])
+          return nil unless u_vector && v_vector
+
+          u_scaled = scaled_vector(u_vector, extent_length)
+          v_scaled = scaled_vector(v_vector, extent_length)
+          u_negative = u_scaled.clone.reverse!
+          v_negative = v_scaled.clone.reverse!
+
+          points = [
+            plane[:point].offset(u_scaled + v_scaled),
+            plane[:point].offset(u_negative + v_scaled),
+            plane[:point].offset(u_negative + v_negative),
+            plane[:point].offset(u_scaled + v_negative)
+          ]
+
+          entities.add_face(points)
+        end
+
+        def cut_with_intersection!(group, plane:, keep:)
           return { group: group, mode: :intersect, new_edges_count: 0, faces_on_plane_count: 0, fallback: 'Target group invalid' } unless group_valid?(group)
 
           target_entities = safe_entities(group)
@@ -354,34 +414,25 @@ module AICabinets
           end
 
           host_entities, host_via = resolve_cutter_host_entities(group)
-          unless host_entities
+          host_debug = entities_debug_info(host_entities, host_via)
+          unless host_entities.is_a?(Sketchup::Entities)
             return {
               group: group,
               mode: :intersect,
               new_edges_count: 0,
-              faces_on_plane_count: faces_on_plane_count(group, normal, point),
+              faces_on_plane_count: faces_on_plane_count(group, plane[:normal_mm], plane[:point_mm]),
               fallback: 'Unable to resolve cutter host entities',
-              cutter_host: entities_debug_info(nil, host_via)
+              cutter_host: host_debug
             }
           end
 
-          unless safe_can_add_group?(host_entities)
-            return {
-              group: group,
-              mode: :intersect,
-              new_edges_count: 0,
-              faces_on_plane_count: faces_on_plane_count(group, normal, point),
-              fallback: 'Cutter host cannot create helper group',
-              cutter_host: entities_debug_info(host_entities, host_via)
-            }
-          end
-
-          helper = host_entities.add_group
+          helper = nil
           new_edges = []
 
           begin
-            build_cutter!(helper.entities, group.bounds, normal, point)
-            helper.transform!(group.transformation) if helper.valid? && group.respond_to?(:transformation)
+            helper = host_entities.add_group
+            face = build_plane_face!(helper.entities, plane, Units.to_length_mm(plane_extent(group.bounds)))
+            raise 'Failed to construct cutter plane' unless face&.valid?
 
             new_edges = Array(
               helper.entities.intersect_with(
@@ -394,30 +445,30 @@ module AICabinets
               )
             )
 
-            heal_plane_edges!(group, normal, point, new_edges)
-            remove_faces_by_plane!(group, normal, point, keep)
-            remove_plane_faces!(group, normal, point)
-            heal_plane_edges!(group, normal, point, new_edges)
-            add_cap_faces!(group, normal, point)
+            heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
+            remove_faces_by_plane!(group, plane[:normal_mm], plane[:point_mm], keep)
+            remove_plane_faces!(group, plane[:normal_mm], plane[:point_mm])
+            heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
+            add_cap_faces!(group, plane[:normal_mm], plane[:point_mm])
             purge_edges!(group)
-            heal_plane_edges!(group, normal, point, new_edges)
+            heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
             heal_group!(group)
 
             {
               group: group,
               mode: :intersect,
               new_edges_count: new_edges.length,
-              faces_on_plane_count: faces_on_plane_count(group, normal, point),
-              cutter_host: entities_debug_info(host_entities, host_via)
+              faces_on_plane_count: faces_on_plane_count(group, plane[:normal_mm], plane[:point_mm]),
+              cutter_host: host_debug
             }
           rescue StandardError => error
             {
               group: group,
               mode: :intersect,
               new_edges_count: Array(new_edges).length,
-              faces_on_plane_count: faces_on_plane_count(group, normal, point),
+              faces_on_plane_count: faces_on_plane_count(group, plane[:normal_mm], plane[:point_mm]),
               fallback: error.message,
-              cutter_host: entities_debug_info(host_entities, host_via)
+              cutter_host: host_debug
             }
           ensure
             helper.erase! if helper&.valid?
@@ -448,14 +499,14 @@ module AICabinets
           end
         end
 
-        def cut_with_boolean!(group, normal:, point:, keep:)
+        def cut_with_boolean!(group, plane:, keep:)
           unless group.respond_to?(:subtract)
             return { group: group, fallback: 'Group cannot perform boolean subtraction' }
           end
 
           host_entities, host_via = resolve_cutter_host_entities(group)
           host_debug = entities_debug_info(host_entities, host_via)
-          unless host_entities
+          unless host_entities.is_a?(Sketchup::Entities)
             info = boolean_preconditions(group, nil, host_entities, host_via)
             info[:target_volume_after_mm3] = safe_volume(group)
             return {
@@ -466,48 +517,10 @@ module AICabinets
             }
           end
 
-          unless !defined?(Sketchup::Entities) || host_entities.is_a?(Sketchup::Entities)
-            info = boolean_preconditions(group, nil, host_entities, host_via)
-            info[:target_volume_after_mm3] = safe_volume(group)
-            return {
-              group: group,
-              fallback: 'Cutter host is not an Entities collection',
-              boolean_preconditions: info,
-              cutter_host: host_debug
-            }
-          end
-
-          unless safe_can_add_group?(host_entities)
-            info = boolean_preconditions(group, nil, host_entities, host_via)
-            info[:target_volume_after_mm3] = safe_volume(group)
-            return {
-              group: group,
-              fallback: 'Cutter host cannot create helper group',
-              boolean_preconditions: info,
-              cutter_host: host_debug
-            }
-          end
-
-          cutter = host_entities.add_group
+          cutter = nil
 
           begin
-            face = build_cutter!(cutter.entities, group.bounds, normal, point)
-            raise 'Failed to create cutter face for boolean trim' unless face&.valid?
-
-            distance_mm = plane_extent(group.bounds)
-            distance_mm = [distance_mm, @thickness_mm, @stile_width_mm, @rail_width_mm].compact.max
-            distance_mm *= 2.0
-            distance_mm = 1.0 if distance_mm <= EPSILON_MM
-
-            direction = keep == :positive ? -1.0 : 1.0
-            pushpull_length = Units.to_length_mm(distance_mm * direction)
-            face.pushpull(pushpull_length)
-
-            cutter.transform!(group.transformation) if group.respond_to?(:transformation)
-
-            heal_group!(cutter)
-            heal_group!(group)
-
+            cutter = build_solid_cutter(host_entities, group, plane, keep)
             cutter_volume = safe_volume(cutter)
             cutter_solid = cutter_volume && cutter_volume.positive?
             raise 'Cutter is not a solid' unless cutter_solid
@@ -522,33 +535,30 @@ module AICabinets
             heal_group!(group)
             purge_edges!(group)
 
-            preconditions = boolean_preconditions(group, cutter, host_entities, host_via)
-            preconditions[:cutter_volume_mm3] = cutter_volume
-            preconditions[:cutter_solid] = cutter_solid
-            preconditions[:target_volume_after_mm3] = safe_volume(group)
-
             {
               group: group,
               mode: :boolean,
               cutter: {
                 volume_mm3: cutter_volume,
                 solid: cutter_solid,
-                container_class: host_entities.class.name,
-                container_path: container_path(host_entities)
+                host: host_debug
               },
-              boolean_preconditions: preconditions,
-              cutter_host: host_debug,
-              faces_on_plane_count: faces_on_plane_count(group, normal, point)
+              boolean_preconditions: boolean_preconditions(group, cutter, host_entities, host_via),
+              faces_on_plane_count: faces_on_plane_count(group, plane[:normal_mm], plane[:point_mm])
             }
           rescue StandardError => error
-            fallback_info = boolean_preconditions(group, cutter, host_entities, host_via)
-            fallback_info[:target_volume_after_mm3] = safe_volume(group)
-
+            info = boolean_preconditions(group, cutter, host_entities, host_via)
+            info[:target_volume_after_mm3] = safe_volume(group)
             {
               group: group,
               fallback: error.message,
-              boolean_preconditions: fallback_info,
-              cutter_host: host_debug
+              cutter: {
+                volume_mm3: safe_volume(cutter),
+                solid: cutter&.valid? && safe_volume(cutter)&.positive?,
+                host: host_debug
+              },
+              boolean_preconditions: info,
+              faces_on_plane_count: faces_on_plane_count(group, plane[:normal_mm], plane[:point_mm])
             }
           ensure
             cutter.erase! if cutter&.valid?
@@ -926,12 +936,12 @@ module AICabinets
           nil
         end
 
-        def build_debug_entry(group, normal, point, keep_point, debug)
-          normalized = normalize_vector(normal.dup)
+        def build_debug_entry(group, plane, keep_point, debug)
+          normalized = normalize_vector(plane[:normal_mm].dup)
           {
             mode: nil,
             plane: {
-              point: point.dup,
+              point: plane[:point_mm].dup,
               normal: normalized,
               tol_mm: CUT_TOLERANCE_MM,
               angle_deg: plane_angle_deg(normalized)
@@ -985,6 +995,37 @@ module AICabinets
           { u: u, v: normalize_vector(v) }
         end
 
+        def plane_basis_vectors(normal)
+          return [Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 0, 1)] unless normal && normal.respond_to?(:clone)
+
+          basis_normal = normal.clone
+          length_mm = basis_normal.length.to_f * MM_PER_INCH
+          return [Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 0, 1)] if length_mm <= EPSILON_MM
+
+          basis_normal.normalize!
+          up = Geom::Vector3d.new(0, 0, 1)
+          up = Geom::Vector3d.new(1, 0, 0) if basis_normal.parallel?(up)
+          u = basis_normal.cross(up)
+          if u.length.to_f * MM_PER_INCH <= EPSILON_MM
+            up = Geom::Vector3d.new(0, 1, 0)
+            u = basis_normal.cross(up)
+          end
+          return [Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 0, 1)] if u.length.to_f * MM_PER_INCH <= EPSILON_MM
+
+          u.normalize!
+          v = basis_normal.cross(u)
+          v.normalize!
+
+          [u, v]
+        end
+
+        def scaled_vector(vector, length)
+          copy = vector.clone
+          scale = length.respond_to?(:to_f) ? length.to_f : length
+          copy.length = scale if scale
+          copy
+        end
+
         def normalize_vector(vector)
           length = vector_length(vector)
           return [0.0, 0.0, 0.0] if length <= EPSILON_MM
@@ -1027,9 +1068,17 @@ module AICabinets
           nil
         end
 
-        def signed_distance_mm(normal, point, geom_point)
-          coords = [geom_point.x, geom_point.y, geom_point.z].map { |component| component.to_f * MM_PER_INCH }
-          vector = [coords[0] - point[0], coords[1] - point[1], coords[2] - point[2]]
+        def signed_distance_mm(normal, point, candidate)
+          coords_mm =
+            if candidate.respond_to?(:x)
+              [candidate.x, candidate.y, candidate.z].map { |component| component.to_f * MM_PER_INCH }
+            elsif candidate.is_a?(Array) && candidate.length >= 3
+              [candidate[0], candidate[1], candidate[2]]
+            else
+              return 0.0
+            end
+
+          vector = [coords_mm[0] - point[0], coords_mm[1] - point[1], coords_mm[2] - point[2]]
           dot = (normal[0] * vector[0]) + (normal[1] * vector[1]) + (normal[2] * vector[2])
           normal_length = vector_length(normal)
           return dot if normal_length <= EPSILON_MM
