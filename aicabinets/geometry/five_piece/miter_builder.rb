@@ -297,23 +297,24 @@ module AICabinets
         end
 
         def add_plane_intersection_edges!(group, normal, point)
-          return unless group&.valid?
+          return [] unless group&.valid?
 
           helper = group.entities.add_group
           build_cutter!(helper.entities, group.bounds, normal, point)
 
-          identity = Geom::Transformation.new
-          target_entities = group.entities
           source_entities = helper.entities
+          target_entities = group.entities
 
-          target_entities.intersect_with(
+          new_edges = source_entities.intersect_with(
             false,
-            identity,
-            source_entities,
             helper.transformation,
+            target_entities,
+            group.transformation,
             false,
-            target_entities
+            group
           )
+
+          Array(new_edges)
         ensure
           helper.erase! if helper&.valid?
         end
