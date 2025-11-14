@@ -231,12 +231,12 @@ module AICabinets
 
           if boolean_mode?
             @miter_mode ||= :boolean
+            cut_with_boolean!(group, normal: normal, point: point, keep: keep)
           else
             @miter_mode ||= :intersect
             warn_once('SketchUp solid boolean operations unavailable; used geometric intersection for miters.')
+            cut_with_intersection!(group, normal: normal, point: point, keep: keep)
           end
-
-          cut_with_intersection!(group, normal: normal, point: point, keep: keep)
         end
 
         def determine_keep_side(normal, point, keep, keep_point)
@@ -285,14 +285,14 @@ module AICabinets
         end
 
         def cut_with_intersection!(group, normal:, point:, keep:)
-          add_plane_intersection_edges!(group, normal, point)
-          heal_plane_edges!(group, normal, point)
+          new_edges = add_plane_intersection_edges!(group, normal, point)
+          heal_plane_edges!(group, normal, point, new_edges)
           remove_faces_by_plane!(group, normal, point, keep)
           remove_plane_faces!(group, normal, point)
-          heal_plane_edges!(group, normal, point)
+          heal_plane_edges!(group, normal, point, new_edges)
           add_cap_faces!(group, normal, point)
           purge_edges!(group)
-          heal_plane_edges!(group, normal, point)
+          heal_plane_edges!(group, normal, point, new_edges)
           group
         end
 
@@ -305,22 +305,25 @@ module AICabinets
           source_entities = helper.entities
           target_entities = group.entities
 
-          new_edges = source_entities.intersect_with(
-            false,
-            helper.transformation,
-            target_entities,
-            group.transformation,
-            false,
-            group
+          Array(
+            source_entities.intersect_with(
+              false,
+              helper.transformation,
+              target_entities,
+              group.transformation,
+              false,
+              group
+            )
           )
-
-          Array(new_edges)
         ensure
           helper.erase! if helper&.valid?
         end
 
-        def heal_plane_edges!(group, normal, point)
-          group.entities.grep(Sketchup::Edge).each do |edge|
+        def heal_plane_edges!(group, normal, point, candidate_edges = nil)
+          edges = Array(candidate_edges)
+          edges = group.entities.grep(Sketchup::Edge) if edges.empty?
+
+          edges.each do |edge|
             next unless edge.valid?
             next unless edge.faces.empty?
 
@@ -332,6 +335,48 @@ module AICabinets
           rescue StandardError
             # Ignore failures; subsequent cleanup will cull stray geometry.
             next
+          end
+        end
+
+        def cut_with_boolean!(group, normal:, point:, keep:)
+          unless group.respond_to?(:subtract)
+            @miter_mode = :intersect
+            return cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+          end
+
+          parent = group.parent
+          unless parent.respond_to?(:add_group)
+            @miter_mode = :intersect
+            return cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+          end
+
+          cutter = parent.add_group
+
+          begin
+            face = build_cutter!(cutter.entities, group.bounds, normal, point)
+            raise 'Failed to create cutter face for boolean trim' unless face&.valid?
+
+            distance_mm = plane_extent(group.bounds)
+            distance_mm = 1.0 if distance_mm <= EPSILON_MM
+
+            direction = keep == :positive ? -1.0 : 1.0
+            pushpull_length = Units.to_length_mm(distance_mm * direction)
+            face.pushpull(pushpull_length)
+
+            cutter.transform!(group.transformation) if group.respond_to?(:transformation)
+
+            boolean_result = group.subtract(cutter)
+            if boolean_result.nil? || !group.valid?
+              raise 'Boolean subtraction failed'
+            end
+
+            group
+          rescue StandardError
+            @miter_mode = :intersect
+            warn_once('SketchUp solid booleans failed; reverted to geometric intersection for miters.')
+            cut_with_intersection!(group, normal: normal, point: point, keep: keep)
+          ensure
+            cutter.erase! if cutter&.valid?
           end
         end
 
