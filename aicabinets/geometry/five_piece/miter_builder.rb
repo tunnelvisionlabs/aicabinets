@@ -484,16 +484,38 @@ module AICabinets
 
         def boolean_preconditions(group, cutter, container)
           volume_before = safe_volume(group)
+          cutter_valid = cutter&.valid?
+          group_parent = safe_parent(group)
+          cutter_parent = safe_parent(cutter)
+
           {
             requested: boolean_mode?,
             target_volume_before_mm3: volume_before,
             target_solid_before: volume_before&.positive?,
-            cutter_exists: cutter&.valid?,
+            cutter_exists: cutter_valid,
             container_class: container&.class&.name,
-            container_can_add_group: container.respond_to?(:add_group),
+            container_can_add_group: safe_can_add_group?(container),
             container_path: container_path(container),
-            same_context: cutter ? cutter.parent == group.parent : nil
+            same_context: cutter_valid && group_parent ? cutter_parent == group_parent : nil
           }
+        end
+
+        def safe_can_add_group?(container)
+          container.respond_to?(:add_group)
+        rescue StandardError
+          false
+        end
+
+        def safe_parent(entity)
+          return unless entity
+          return unless entity.respond_to?(:parent)
+
+          valid = !entity.respond_to?(:valid?) || entity.valid?
+          return entity.parent if valid
+
+          nil
+        rescue StandardError
+          nil
         end
 
         def container_path(container)
