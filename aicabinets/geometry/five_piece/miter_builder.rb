@@ -447,12 +447,10 @@ module AICabinets
 
             heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
             remove_faces_by_plane!(group, plane[:normal_mm], plane[:point_mm], keep)
-            remove_plane_faces!(group, plane[:normal_mm], plane[:point_mm])
             heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
             add_cap_faces!(group, plane[:normal_mm], plane[:point_mm])
             purge_edges!(group)
             heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
-            heal_group!(group)
 
             {
               group: group,
@@ -565,61 +563,46 @@ module AICabinets
           end
         end
 
-        def remove_plane_faces!(group, normal, point)
-          return unless group_valid?(group)
-
-          entities = safe_entities(group)
-          return unless entities
-
-          entities.grep(Sketchup::Face).each do |face|
-            vertices = face.vertices
-            next unless vertices.all? do |vertex|
-              signed_distance_mm(normal, point, vertex.position).abs <= CUT_TOLERANCE_MM
-            end
-
-            begin
-              face.erase!
-            rescue StandardError
-              # Ignore erase failures; stray fragments are removed by subsequent
-              # cleanup passes.
-            end
-          end
-        end
-
         def resolve_cutter_host_entities(group)
           return [nil, :invalid_group] unless group_valid?(group)
 
           parent = safe_parent(group)
+
           if defined?(Sketchup::Entities) && parent.is_a?(Sketchup::Entities)
             return [parent, :parent_entities]
           end
 
-          if parent.respond_to?(:entities)
-            entities = parent.entities
-            return [entities, :parent_entities_method] if entities
+          if (entities = entities_from_container(parent))
+            return [entities, :parent_entities_method]
           end
 
-          if parent.respond_to?(:definition) && parent.definition.respond_to?(:entities)
-            entities = parent.definition.entities
-            return [entities, :definition_entities] if entities
-          end
-
-          if group.respond_to?(:model)
-            model = group.model
-            if model && model.respond_to?(:entities)
-              entities = model.entities
-              return [entities, :model_entities] if entities
+          if parent.respond_to?(:definition)
+            definition = parent.definition
+            if (definition_entities = entities_from_container(definition))
+              return [definition_entities, :definition_entities]
             end
+          end
+
+          if (model_entities = entities_from_container(group.respond_to?(:model) ? group.model : nil))
+            return [model_entities, :model_entities]
           end
 
           [nil, :unresolved]
         rescue StandardError
-          model = group.respond_to?(:model) ? group.model : nil
-          if model && model.respond_to?(:entities)
-            [model.entities, :model_entities]
-          else
-            [nil, :error]
+          model_entities = entities_from_container(group.respond_to?(:model) ? group.model : nil)
+          model_entities ? [model_entities, :model_entities] : [nil, :error]
+        end
+
+        def entities_from_container(container)
+          return unless container
+
+          if container.respond_to?(:entities)
+            return container.entities
           end
+
+          nil
+        rescue StandardError
+          nil
         end
 
         def boolean_preconditions(group, cutter, container, container_via)
