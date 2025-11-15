@@ -362,39 +362,41 @@ module AICabinets
 
         def build_solid_cutter(host_entities, group, plane, keep)
           cutter = host_entities.add_group
+
           extent_mm = plane_extent(group.bounds)
           extent_mm = 1.0 if extent_mm <= EPSILON_MM
-          extent_length = Units.to_length_mm(extent_mm * 2.0)
-          face = build_plane_face!(cutter.entities, plane, extent_length)
+
+          face = add_plane_face!(cutter.entities, plane, extent_mm)
           raise 'Failed to construct cutter plane' unless face&.valid?
 
-          waste_direction = plane[:normal].clone
-          waste_direction.reverse! if keep == :positive
-          waste_direction.normalize!
-          face.reverse! if face.normal.dot(waste_direction) < 0.0
+          plane_normal = Units.vector_mm(*plane[:normal_mm])
+          face.reverse! if face.normal.dot(plane_normal) < 0.0
 
-          thickness = Units.to_length_mm(extent_mm * 4.0)
-          face.pushpull(thickness)
+          thickness_mm = extent_mm * 4.0
+          thickness = Units.to_length_mm(thickness_mm)
+          distance = keep == :positive ? thickness * -1 : thickness
+          face.pushpull(distance)
 
           heal_group!(cutter)
           cutter
         end
 
-        def build_plane_face!(entities, plane, extent_length)
-          u_vector, v_vector = plane_basis_vectors(plane[:normal])
-          return nil unless u_vector && v_vector
+        def add_plane_face!(entities, plane, extent_mm)
+          basis = plane_basis(plane[:normal_mm])
+          u = basis[:u]
+          v = basis[:v]
 
-          u_scaled = scaled_vector(u_vector, extent_length)
-          v_scaled = scaled_vector(v_vector, extent_length)
-          u_negative = u_scaled.clone.reverse!
-          v_negative = v_scaled.clone.reverse!
+          u_scaled = scale_vector(u, extent_mm)
+          v_scaled = scale_vector(v, extent_mm)
+          u_negative = scale_vector(u, -extent_mm)
+          v_negative = scale_vector(v, -extent_mm)
 
           points = [
-            plane[:point].offset(u_scaled + v_scaled),
-            plane[:point].offset(u_negative + v_scaled),
-            plane[:point].offset(u_negative + v_negative),
-            plane[:point].offset(u_scaled + v_negative)
-          ]
+            add_vectors(plane[:point_mm], add_vectors(u_scaled, v_scaled)),
+            add_vectors(plane[:point_mm], add_vectors(u_negative, v_scaled)),
+            add_vectors(plane[:point_mm], add_vectors(u_negative, v_negative)),
+            add_vectors(plane[:point_mm], add_vectors(u_scaled, v_negative))
+          ].map { |coords| Units.point_mm(*coords) }
 
           entities.add_face(points)
         end
@@ -429,19 +431,22 @@ module AICabinets
           helper = nil
           new_edges = []
 
+          extent_mm = plane_extent(group.bounds)
+          extent_mm = 1.0 if extent_mm <= EPSILON_MM
+
           begin
             helper = host_entities.add_group
-            face = build_plane_face!(helper.entities, plane, Units.to_length_mm(plane_extent(group.bounds)))
+            face = add_plane_face!(helper.entities, plane, extent_mm)
             raise 'Failed to construct cutter plane' unless face&.valid?
 
             new_edges = Array(
-              helper.entities.intersect_with(
+              target_entities.intersect_with(
                 true,
-                helper.transformation,
-                target_entities,
                 group.transformation,
+                helper.entities,
+                helper.transformation,
                 true,
-                [group]
+                target_entities
               )
             )
 
@@ -449,8 +454,12 @@ module AICabinets
             remove_faces_by_plane!(group, plane[:normal_mm], plane[:point_mm], keep)
             heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
             add_cap_faces!(group, plane[:normal_mm], plane[:point_mm])
+            heal_group!(group)
             purge_edges!(group)
             heal_plane_edges!(group, plane[:normal_mm], plane[:point_mm], new_edges)
+
+            volume_after = safe_volume(group)
+            raise 'Fallback produced non-solid group' unless volume_after&.positive?
 
             {
               group: group,
@@ -572,20 +581,18 @@ module AICabinets
             return [parent, :parent_entities]
           end
 
-          if (entities = entities_from_container(parent))
-            return [entities, :parent_entities_method]
-          end
+          host_entities = entities_from_container(parent)
+          return [host_entities, :parent_entities_method] if host_entities
 
           if parent.respond_to?(:definition)
             definition = parent.definition
-            if (definition_entities = entities_from_container(definition))
-              return [definition_entities, :definition_entities]
-            end
+            definition_entities = entities_from_container(definition)
+            return [definition_entities, :definition_entities] if definition_entities
           end
 
-          if (model_entities = entities_from_container(group.respond_to?(:model) ? group.model : nil))
-            return [model_entities, :model_entities]
-          end
+          model = group.respond_to?(:model) ? group.model : nil
+          model_entities = entities_from_container(model)
+          return [model_entities, :model_entities] if model_entities
 
           [nil, :unresolved]
         rescue StandardError
@@ -596,9 +603,7 @@ module AICabinets
         def entities_from_container(container)
           return unless container
 
-          if container.respond_to?(:entities)
-            return container.entities
-          end
+          return container.entities if container.respond_to?(:entities)
 
           nil
         rescue StandardError
@@ -976,37 +981,6 @@ module AICabinets
           u = normalize_vector([1.0, 0.0, 0.0]) if vector_length(u).zero?
           v = cross_product(n, u)
           { u: u, v: normalize_vector(v) }
-        end
-
-        def plane_basis_vectors(normal)
-          return [Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 0, 1)] unless normal && normal.respond_to?(:clone)
-
-          basis_normal = normal.clone
-          length_mm = basis_normal.length.to_f * MM_PER_INCH
-          return [Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 0, 1)] if length_mm <= EPSILON_MM
-
-          basis_normal.normalize!
-          up = Geom::Vector3d.new(0, 0, 1)
-          up = Geom::Vector3d.new(1, 0, 0) if basis_normal.parallel?(up)
-          u = basis_normal.cross(up)
-          if u.length.to_f * MM_PER_INCH <= EPSILON_MM
-            up = Geom::Vector3d.new(0, 1, 0)
-            u = basis_normal.cross(up)
-          end
-          return [Geom::Vector3d.new(1, 0, 0), Geom::Vector3d.new(0, 0, 1)] if u.length.to_f * MM_PER_INCH <= EPSILON_MM
-
-          u.normalize!
-          v = basis_normal.cross(u)
-          v.normalize!
-
-          [u, v]
-        end
-
-        def scaled_vector(vector, length)
-          copy = vector.clone
-          scale = length.respond_to?(:to_f) ? length.to_f : length
-          copy.length = scale if scale
-          copy
         end
 
         def normalize_vector(vector)
