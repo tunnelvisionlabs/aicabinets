@@ -408,37 +408,67 @@ module AICabinets
       private_class_method :apply_miters!
 
       def apply_miters_by_intersection!(stiles:, rails:, height_mm:, width_mm:)
-        stiles.each do |stile|
-          cut_group_with_plane!(
-            stile,
-            point: Units.point_mm(0.0, 0.0, 0.0),
-            normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
-            keep_positive: false
-          )
+        sorted_stiles = stiles.sort_by { |group| group.bounds.min.x }
+        left_stile, right_stile = sorted_stiles
 
-          cut_group_with_plane!(
-            stile,
-            point: Units.point_mm(0.0, 0.0, height_mm),
-            normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
-            keep_positive: true
-          )
-        end
+        cut_group_with_plane!(
+          left_stile,
+          point: Units.point_mm(0.0, 0.0, 0.0),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: false
+        )
 
-        rails.each do |rail|
-          cut_group_with_plane!(
-            rail,
-            point: Units.point_mm(0.0, 0.0, 0.0),
-            normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
-            keep_positive: true
-          )
+        cut_group_with_plane!(
+          left_stile,
+          point: Units.point_mm(0.0, 0.0, height_mm),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: true
+        )
 
-          cut_group_with_plane!(
-            rail,
-            point: Units.point_mm(width_mm, 0.0, 0.0),
-            normal: Geom::Vector3d.new(1.0, 0.0, 1.0),
-            keep_positive: false
-          )
-        end
+        cut_group_with_plane!(
+          right_stile,
+          point: Units.point_mm(width_mm, 0.0, 0.0),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: false
+        )
+
+        cut_group_with_plane!(
+          right_stile,
+          point: Units.point_mm(width_mm, 0.0, height_mm),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: true
+        )
+
+        sorted_rails = rails.sort_by { |group| group.bounds.min.z }
+        bottom_rail, top_rail = sorted_rails
+
+        cut_group_with_plane!(
+          bottom_rail,
+          point: Units.point_mm(0.0, 0.0, 0.0),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: true
+        )
+
+        cut_group_with_plane!(
+          bottom_rail,
+          point: Units.point_mm(width_mm, 0.0, 0.0),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: true
+        )
+
+        cut_group_with_plane!(
+          top_rail,
+          point: Units.point_mm(0.0, 0.0, height_mm),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: false
+        )
+
+        cut_group_with_plane!(
+          top_rail,
+          point: Units.point_mm(width_mm, 0.0, height_mm),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: false
+        )
 
         true
       rescue StandardError
