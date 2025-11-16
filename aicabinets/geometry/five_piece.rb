@@ -377,19 +377,37 @@ module AICabinets
         translate_group!(stiles[1], x_mm: outside_w_mm - stile_width_mm)
         apply_group_metadata(stiles[1], role: GROUP_ROLE_STILE, name: 'Stile-R', tag: front_tag, material: material)
 
-        miter_mode = :intersect
-        unless apply_miters!(stiles: stiles, rails: rails, stile_width_mm: stile_width_mm, rail_width_mm: rail_width_mm, thickness_mm: thickness_mm, height_mm: outside_h_mm, width_mm: outside_w_mm, booleans_available: booleans_available)
-          warnings << 'SketchUp solid boolean operations unavailable; generated miters via entity intersections.' if booleans_available == false
-        else
-          miter_mode = booleans_available ? :intersect : :intersect
-          warnings << 'SketchUp solid boolean operations unavailable; generated miters via entity intersections.' unless booleans_available
-        end
+        miter_result = apply_miters!(
+          stiles: stiles,
+          rails: rails,
+          height_mm: outside_h_mm,
+          width_mm: outside_w_mm,
+          booleans_available: booleans_available
+        )
+        warnings.concat(miter_result[:warnings])
 
-        { stiles: stiles, rails: rails, miter_mode: miter_mode, warnings: warnings }
+        { stiles: stiles, rails: rails, miter_mode: miter_result[:miter_mode], warnings: warnings }
       end
       private_class_method :build_miter_frame
 
-      def apply_miters!(stiles:, rails:, stile_width_mm:, rail_width_mm:, thickness_mm:, height_mm:, width_mm:, booleans_available:)
+      def apply_miters!(stiles:, rails:, height_mm:, width_mm:, booleans_available:)
+        miter_mode = :intersect
+        warnings = []
+
+        warnings << 'SketchUp solid boolean operations unavailable; generated miters via entity intersections.' unless booleans_available
+
+        success = apply_miters_by_intersection!(
+          stiles: stiles,
+          rails: rails,
+          height_mm: height_mm,
+          width_mm: width_mm
+        )
+
+        { success: success, miter_mode: miter_mode, warnings: warnings }
+      end
+      private_class_method :apply_miters!
+
+      def apply_miters_by_intersection!(stiles:, rails:, height_mm:, width_mm:)
         stiles.each do |stile|
           cut_group_with_plane!(
             stile,
@@ -426,7 +444,7 @@ module AICabinets
       rescue StandardError
         false
       end
-      private_class_method :apply_miters!
+      private_class_method :apply_miters_by_intersection!
 
       def cut_group_with_plane!(group, point:, normal:, keep_positive: true)
         return false unless group&.valid?
