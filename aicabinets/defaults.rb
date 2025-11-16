@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 
 require 'aicabinets/params_sanitizer'
+require 'aicabinets/face_frame'
 
 module AICabinets
   module Defaults
@@ -54,6 +55,8 @@ module AICabinets
       bays: [BAY_FALLBACK].freeze
     }.freeze
 
+    FALLBACK_FACE_FRAME = AICabinets::FaceFrame.defaults_mm.freeze
+
     FALLBACK_MM = {
       width_mm: 600.0,
       depth_mm: 600.0,
@@ -65,14 +68,15 @@ module AICabinets
       front: 'doors_double',
       partition_mode: 'none',
       shelves: 2,
-      partitions: PARTITIONS_FALLBACK
+      partitions: PARTITIONS_FALLBACK,
+      face_frame: FALLBACK_FACE_FRAME
     }.freeze
 
     FALLBACK_CONSTRAINTS = {
       min_door_leaf_width_mm: 140.0
     }.freeze
 
-    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base constraints].freeze
+    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base constraints face_frame].freeze
     RECOGNIZED_KEYS = FALLBACK_MM.keys.map(&:to_s).freeze
     RECOGNIZED_PARTITION_KEYS = PARTITIONS_FALLBACK.keys.map(&:to_s).freeze
     CONSTRAINT_KEYS = FALLBACK_CONSTRAINTS.keys.map(&:to_s).freeze
@@ -212,6 +216,9 @@ module AICabinets
         when 'partitions'
           partitions = sanitize_overrides_partitions(value)
           sanitized[:partitions] = partitions if partitions && !partitions.empty?
+        when 'face_frame'
+          face_frame = sanitize_overrides_face_frame(value)
+          sanitized[:face_frame] = face_frame if face_frame
         when 'front'
           front = sanitize_override_front(value)
           sanitized[:front] = front if front
@@ -290,6 +297,21 @@ module AICabinets
       sanitized
     end
     private_class_method :sanitize_overrides_partitions
+
+    def sanitize_overrides_face_frame(raw)
+      unless raw.is_a?(Hash)
+        warn('AI Cabinets: overrides.face_frame must be an object; ignoring override.')
+        return nil
+      end
+
+      normalized, errors = AICabinets::FaceFrame.normalize(raw, defaults: FALLBACK_FACE_FRAME)
+      errors.each { |message| warn("AI Cabinets: #{message}; ignoring face_frame override.") }
+
+      return nil if errors.any?
+
+      normalized
+    end
+    private_class_method :sanitize_overrides_face_frame
 
     def sanitize_override_bays(raw)
       unless raw.is_a?(Array)
@@ -532,6 +554,18 @@ module AICabinets
 
       result = sanitize_cabinet_base(base_raw)
 
+      face_frame_raw = raw['face_frame'] || raw[:face_frame]
+      face_frame, face_errors = AICabinets::FaceFrame.normalize(face_frame_raw, defaults: FALLBACK_FACE_FRAME)
+      face_errors.each do |message|
+        warn("AI Cabinets: defaults #{message}; using built-in face_frame fallback value.")
+      end
+      validation_errors = AICabinets::FaceFrame.validate(face_frame)
+      validation_errors.each do |message|
+        warn("AI Cabinets: defaults #{message}; using built-in face_frame fallback value.")
+      end
+      face_frame = FALLBACK_FACE_FRAME if validation_errors.any?
+      result[:face_frame] = face_frame
+
       constraints_source = raw['constraints'] || raw[:constraints]
       result[:constraints] = sanitize_constraints(constraints_source)
 
@@ -555,6 +589,10 @@ module AICabinets
             sanitize_integer_field(label, raw[key.to_s], fallback, min: 0, max: 20)
           when :partitions
             sanitize_partitions(raw[key.to_s])
+          when :face_frame
+            face_frame_raw = raw[key.to_s] || raw[key]
+            face_frame, = AICabinets::FaceFrame.normalize(face_frame_raw, defaults: FALLBACK_FACE_FRAME)
+            face_frame
           else
             sanitize_numeric_field(label, raw[key.to_s], fallback)
           end
@@ -892,6 +930,8 @@ module AICabinets
         result[key] =
           if key == :partitions
             merge_partitions(result[key], value)
+          elsif key == :face_frame
+            AICabinets::FaceFrame.merge(result[key], value)
           else
             value
           end
@@ -950,6 +990,8 @@ module AICabinets
           case key
           when :partitions
             build_overrides_partitions(value)
+          when :face_frame
+            AICabinets::FaceFrame.build_overrides_payload(value)
           when :front, :partition_mode
             value.to_s
           when :shelves
