@@ -4,8 +4,10 @@ require 'json'
 require 'digest'
 require 'sketchup.rb'
 
+require 'aicabinets/version'
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
+require 'aicabinets/face_frame'
 
 Sketchup.require('aicabinets/generator/carcass')
 Sketchup.require('aicabinets/ops/tags')
@@ -18,7 +20,7 @@ module AICabinets
 
       OPERATION_NAME = 'AI Cabinets — Insert Base Cabinet'
       DICTIONARY_NAME = 'AICabinets'
-      SCHEMA_VERSION = 1
+      SCHEMA_VERSION = AICabinets::PARAMS_SCHEMA_VERSION
       SCHEMA_VERSION_KEY = 'schema_version'
       TYPE_KEY = 'type'
       TYPE_VALUE = 'base'
@@ -169,6 +171,17 @@ module AICabinets
 
         defaults = AICabinets::Defaults.load_effective_mm
         AICabinets::ParamsSanitizer.sanitize!(copy, global_defaults: defaults)
+
+        face_frame_defaults = defaults[:face_frame] || defaults['face_frame'] || AICabinets::FaceFrame.defaults_mm
+        face_frame_raw = copy[:face_frame] || copy['face_frame']
+        face_frame, face_frame_errors = AICabinets::FaceFrame.normalize(face_frame_raw, defaults: face_frame_defaults)
+        face_frame_errors.concat(AICabinets::FaceFrame.validate(face_frame))
+
+        raise ArgumentError, face_frame_errors.join('; ') if face_frame_errors.any?
+
+        copy[:face_frame] = face_frame
+        copy.delete('face_frame')
+        copy[:schema_version] = SCHEMA_VERSION
 
         thickness_value =
           if params_mm.key?(:toe_kick_thickness_mm)

@@ -4,7 +4,9 @@ require 'json'
 require 'digest'
 
 require 'aicabinets/defaults'
+require 'aicabinets/face_frame'
 require 'aicabinets/params_sanitizer'
+require 'aicabinets/version'
 require 'aicabinets/ui/localization'
 require 'aicabinets/ui/dialog_console_bridge'
 require 'aicabinets/ui_visibility'
@@ -1862,6 +1864,13 @@ module AICabinets
           params = JSON.parse(params_json, symbolize_names: true)
           defaults = AICabinets::Defaults.load_effective_mm
           AICabinets::ParamsSanitizer.sanitize!(params, global_defaults: defaults)
+          AICabinets::FaceFrame.migrate_params!(
+            params,
+            defaults: defaults,
+            schema_version: AICabinets::PARAMS_SCHEMA_VERSION
+          )
+          face_frame_errors = AICabinets::FaceFrame.validate(params[:face_frame])
+          warn("AI Cabinets: stored cabinet face_frame invalid: #{face_frame_errors.join('; ')}") if face_frame_errors.any?
           params
         rescue JSON::ParserError => e
           warn("AI Cabinets: Unable to parse stored cabinet parameters: #{e.message}")

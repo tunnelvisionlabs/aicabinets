@@ -29,16 +29,27 @@ class DefaultsLoaderTest < Minitest::Test
       toe_kick_depth_mm
       toe_kick_thickness_mm
       front
+      partition_mode
       shelves
       partitions
+      face_frame
+      constraints
     ]
 
     assert_equal(expected_order, result.keys)
 
     partitions = result[:partitions]
     assert_instance_of(Hash, partitions)
-    assert_equal(%i[mode count positions_mm panel_thickness_mm], partitions.keys)
+    assert_equal(%i[mode count orientation positions_mm panel_thickness_mm bays], partitions.keys)
     assert_equal([], partitions[:positions_mm])
+
+    face_frame = result[:face_frame]
+    assert_equal(true, face_frame[:enabled])
+    assert_equal(19.0, face_frame[:thickness_mm])
+    assert_equal([{ kind: 'double_doors' }], face_frame[:layout])
+
+    constraints = result[:constraints]
+    assert_equal(140.0, constraints[:min_door_leaf_width_mm])
   end
 
   def test_load_mm_missing_file_uses_fallback_and_warns
@@ -78,6 +89,12 @@ class DefaultsLoaderTest < Minitest::Test
               'extra' => 123
             }
           },
+          'face_frame' => {
+            'enabled' => 'yes',
+            'thickness_mm' => 'abc',
+            'overlay_mm' => 40,
+            'layout' => 'invalid'
+          },
           'unexpected_root' => true
         )
       )
@@ -102,6 +119,10 @@ class DefaultsLoaderTest < Minitest::Test
         assert_equal(0, partitions[:count])
         assert_equal([], partitions[:positions_mm])
         assert_nil(partitions[:panel_thickness_mm])
+
+        face_frame = result[:face_frame]
+        assert_equal(19.0, face_frame[:thickness_mm])
+        assert_equal(12.7, face_frame[:overlay_mm])
       end
 
       assert_includes(err, 'defaults version must be a non-negative integer')
@@ -112,6 +133,9 @@ class DefaultsLoaderTest < Minitest::Test
       assert_includes(err, 'ignoring unknown defaults.cabinet_base key')
       assert_includes(err, 'ignoring unknown defaults.cabinet_base.partitions key')
       assert_includes(err, 'defaults cabinet_base.partitions.mode must be one of')
+      assert_includes(err, 'defaults face_frame.thickness_mm must be a number')
+      assert_includes(err, 'defaults face_frame.overlay_mm must be between')
+      assert_includes(err, 'defaults face_frame.layout must be an array')
     end
   end
 

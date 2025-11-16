@@ -19,6 +19,21 @@
       "bays": []
     }
   },
+  "face_frame": {
+    "enabled": true,
+    "thickness_mm": 19.0,
+    "stile_left_mm": 38.0,
+    "stile_right_mm": 38.0,
+    "rail_top_mm": 38.0,
+    "rail_bottom_mm": 38.0,
+    "mid_stile_mm": 0.0,
+    "mid_rail_mm": 0.0,
+    "reveal_mm": 2.0,
+    "overlay_mm": 12.7,
+    "layout": [
+      { "kind": "double_doors" }
+    ]
+  },
   "constraints": {
     "min_door_leaf_width_mm": 140
   }

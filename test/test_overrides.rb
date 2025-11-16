@@ -79,15 +79,17 @@ class OverridesTest < Minitest::Test
       toe_kick_depth_mm
       toe_kick_thickness_mm
       front
+      partition_mode
       shelves
       partitions
+      face_frame
     ]
 
     assert_equal(expected_keys, cabinet_base.keys)
     assert_in_delta(543.211, cabinet_base['width_mm'], 0.001)
 
     partitions = cabinet_base.fetch('partitions')
-    assert_equal(%w[mode count positions_mm panel_thickness_mm bays], partitions.keys)
+    assert_equal(%w[mode count orientation positions_mm panel_thickness_mm bays], partitions.keys)
     assert_equal('positions', partitions['mode'])
     assert_equal(2, partitions['count'])
     assert_equal([100.0, 250.123], partitions['positions_mm'])
@@ -98,6 +100,9 @@ class OverridesTest < Minitest::Test
       cabinet_base['toe_kick_thickness_mm'],
       0.001
     )
+
+    face_frame = cabinet_base.fetch('face_frame')
+    assert_equal(true, face_frame['enabled'])
   end
 
   def test_load_effective_mm_merges_overrides
@@ -108,6 +113,7 @@ class OverridesTest < Minitest::Test
       JSON.pretty_generate(
         'cabinet_base' => {
           'width_mm' => 750,
+          'partition_mode' => 'vertical',
           'shelves' => 4,
           'partitions' => {
             'mode' => 'positions',
@@ -136,6 +142,30 @@ class OverridesTest < Minitest::Test
       assert_equal('doors_double', bay[:door_mode])
     end
     assert_equal(600.0, effective[:depth_mm])
+  end
+
+  def test_load_effective_mm_merges_face_frame_overrides
+    overrides_path = AICabinets::Defaults.const_get(:OVERRIDES_PATH)
+
+    File.write(
+      overrides_path,
+      JSON.pretty_generate(
+        'cabinet_base' => {
+          'face_frame' => {
+            'enabled' => false,
+            'thickness_mm' => 22,
+            'layout' => [{ 'kind' => 'drawer_stack', 'drawers' => 3 }]
+          }
+        }
+      )
+    )
+
+    effective = AICabinets::Defaults.load_effective_mm
+
+    face_frame = effective[:face_frame]
+    assert_equal(false, face_frame[:enabled])
+    assert_in_delta(22.0, face_frame[:thickness_mm])
+    assert_equal([{ kind: 'drawer_stack', drawers: 3 }], face_frame[:layout])
   end
 
   def test_unknown_keys_warn_once_and_are_ignored
