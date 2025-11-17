@@ -7,6 +7,7 @@ module AICabinets
     Sketchup.require('aicabinets/capabilities')
     Sketchup.require('aicabinets/params/five_piece')
     Sketchup.require('aicabinets/geometry/five_piece')
+    Sketchup.require('aicabinets/geometry/five_piece_panel')
     Sketchup.require('aicabinets/version')
     Sketchup.require('aicabinets/ops/units')
     Sketchup.require('aicabinets/selection')
