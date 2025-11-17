@@ -167,7 +167,7 @@ module AICabinets
       end
       private_class_method :resolve_style
 
-      def resolve_opening(open_w_mm, open_h_mm, definition, validated)
+      def resolve_opening(open_w_mm, open_h_mm, definition, _validated)
         open_w_mm ||= nil
         open_h_mm ||= nil
 
