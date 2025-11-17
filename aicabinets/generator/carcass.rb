@@ -2,6 +2,8 @@
 
 require 'sketchup.rb'
 
+require 'aicabinets/face_frame'
+
 Sketchup.require('aicabinets/generator/parts/side_panel')
 Sketchup.require('aicabinets/generator/parts/bottom_panel')
 Sketchup.require('aicabinets/generator/parts/top_panel')
@@ -9,6 +11,7 @@ Sketchup.require('aicabinets/generator/parts/back_panel')
 Sketchup.require('aicabinets/generator/parts/toe_kick_front')
 Sketchup.require('aicabinets/generator/shelves')
 Sketchup.require('aicabinets/generator/fronts')
+Sketchup.require('aicabinets/generator/face_frame')
 Sketchup.require('aicabinets/generator/partitions')
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/ops/tags')
@@ -248,6 +251,17 @@ module AICabinets
             instances[:fronts] = fronts
             register_created(created, fronts)
             apply_category(fronts, 'AICabinets/Fronts', front_material)
+          end
+
+          face_frame = FaceFrame.build(
+            parent_entities: entities,
+            params: params,
+            face_frame_mm: @raw_params[:face_frame]
+          )
+          if face_frame
+            instances[:face_frame] = face_frame
+            register_created(created, face_frame)
+            apply_category(face_frame, 'AICabinets/Fronts', front_material)
           end
 
           bounds = Geom::BoundingBox.new
