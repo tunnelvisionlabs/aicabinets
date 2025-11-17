@@ -2,6 +2,8 @@
 
 # TestUp helpers shared across the AI Cabinets suite.
 require 'json'
+require 'delegate'
+require 'fileutils'
 module AICabinetsTestHelper
   TOL = 1e-3.inch
 
@@ -9,6 +11,84 @@ module AICabinetsTestHelper
   DEF_KEY_NAME = 'def_key'
   LEGACY_DEF_KEY_NAME = 'fingerprint'
   PARAMS_JSON_KEY = 'params_json_mm'
+  CONSOLE_STDOUT_ENV = 'AI_CABINETS_RUBY_CONSOLE_LOG'
+  CONSOLE_STDERR_ENV = 'AI_CABINETS_RUBY_CONSOLE_ERR_LOG'
+
+  def self.capture_ruby_console_output
+    return unless defined?(TestUp::TESTUP_CONSOLE)
+
+    stdout_target = ENV[CONSOLE_STDOUT_ENV]
+    stderr_target = ENV[CONSOLE_STDERR_ENV]
+    return unless stdout_target || stderr_target
+
+    loggers = {
+      stdout: prepare_console_log(stdout_target),
+      stderr: prepare_console_log(stderr_target)
+    }
+
+    $stdout = ConsoleTee.new(TestUp::TESTUP_CONSOLE, loggers[:stdout]) if loggers[:stdout]
+    $stderr = ConsoleTee.new(TestUp::TESTUP_CONSOLE, loggers[:stderr]) if loggers[:stderr]
+  rescue StandardError => error
+    warn("[AICabinets] Failed to configure Ruby console capture: #{error.message}")
+  end
+
+  def self.prepare_console_log(target_path)
+    return unless target_path && !target_path.strip.empty?
+
+    FileUtils.mkdir_p(File.dirname(target_path))
+    io = File.open(target_path, 'w', encoding: Encoding::UTF_8)
+    io.sync = true if io.respond_to?(:sync=)
+    at_exit do
+      begin
+        io.flush
+        io.close unless io.closed?
+      rescue StandardError
+        # ignore cleanup failures
+      end
+    end
+    io
+  end
+
+  class ConsoleTee < SimpleDelegator
+    def initialize(primary, secondary)
+      super(primary)
+      @secondary = secondary
+    end
+
+    def write(*args)
+      result = __getobj__.write(*args)
+      @secondary.write(*args)
+      result
+    end
+
+    def puts(*args)
+      result = __getobj__.puts(*args)
+      @secondary.puts(*args)
+      result
+    end
+
+    def print(*args)
+      result = __getobj__.print(*args)
+      @secondary.print(*args)
+      result
+    end
+
+    def flush
+      __getobj__.flush if __getobj__.respond_to?(:flush)
+      @secondary.flush if @secondary.respond_to?(:flush)
+      nil
+    end
+
+    def sync=(value)
+      __getobj__.sync = value if __getobj__.respond_to?(:sync=)
+      @secondary.sync = value if @secondary.respond_to?(:sync=)
+      value
+    end
+
+    def sync
+      __getobj__.respond_to?(:sync) ? __getobj__.sync : nil
+    end
+  end
 
   # Wraps the given block in a single undoable SketchUp operation.
   #
@@ -326,3 +406,5 @@ module AICabinetsTestHelper
                   :transforms_approx_equal?, :mm, :mm_from_length,
                   :collect_raw_geometry, :default_tag?
 end
+
+AICabinetsTestHelper.capture_ruby_console_output

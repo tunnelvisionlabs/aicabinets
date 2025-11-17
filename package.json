@@ -4,7 +4,12 @@
   "version": "0.0.0",
   "description": "Development-only test harness for the AI Cabinets layout preview renderer.",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "deploy:sketchup": "node script/sketchup.js deploy",
+    "testup:all": "node script/sketchup.js testup:all",
+    "testup:config": "node script/sketchup.js testup:config",
+    "testup:class": "node script/sketchup.js testup:class",
+    "sketchup:run": "node script/sketchup.js sketchup:run"
   },
   "devDependencies": {
     "jest": "29.7.0",
