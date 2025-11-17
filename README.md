@@ -95,6 +95,8 @@ Use the npm helpers to deploy the extension to SketchUp 2026 and run TestUp CI l
   npm run testup:class
   ```
 
+  Each class run also writes the SketchUp Ruby Console stream to `dist/testup-<ClassName>-ruby-console.log` (and a matching `-ruby-errors.log`). When running `TC_Smoke`, verify the log contains the `[AICabinets TestUp] Ruby console capture marker` line emitted by the smoke test to confirm output from `puts` statements is captured.
+
 - Execute a custom Ruby script within SketchUp, close the active model without saving, and exit (auto-deploys first):
 
   ```cmd
@@ -107,6 +109,8 @@ Use the npm helpers to deploy the extension to SketchUp 2026 and run TestUp CI l
   set STARTUP_RUBY=C:\\dev\\aicabinets\\script\\test_script.rb
   npm run sketchup:run
   ```
+
+  Each invocation saves the Ruby console output and errors to `dist/sketchup-run-<ScriptName>-<timestamp>-ruby-console.log` and `dist/sketchup-run-<ScriptName>-<timestamp>-ruby-errors.log`, making it easy to review `puts` output without reopening SketchUp.
 
 Defaults assume SketchUp 2026 on Windows with `SketchUp.exe` in `%ProgramFiles%\SketchUp\SketchUp 2026\SketchUp\SketchUp.exe` and Plugins at `%APPDATA%\SketchUp\SketchUp 2026\SketchUp\Plugins`. Override paths with environment variables or per-command flags:
 

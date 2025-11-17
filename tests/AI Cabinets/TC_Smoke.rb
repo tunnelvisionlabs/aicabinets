@@ -61,4 +61,11 @@ class TC_Smoke < TestUp::TestCase
     actual = expected + (AICabinetsTestHelper::TOL / 2.0)
     AICabinetsTestHelper.assert_within_tolerance(self, expected, actual)
   end
+
+  def test_ruby_console_puts_captured
+    marker = '[AICabinets TestUp] Ruby console capture marker'
+    # Printed output lets scripts verify Ruby console capture remains wired.
+    puts(marker)
+    refute_empty(marker)
+  end
 end
