@@ -5,9 +5,17 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
-const defaultExe = 'C\\\\Program Files\\\\SketchUp\\\\SketchUp 2026\\\\SketchUp\\\\SketchUp.exe';
+const sketchupVersion = process.env.SKETCHUP_VERSION || '2026';
+const defaultExeBase = process.env.ProgramFiles || 'C\\\\Program Files';
+const defaultExe = path.win32.join(
+  defaultExeBase,
+  'SketchUp',
+  `SketchUp ${sketchupVersion}`,
+  'SketchUp',
+  'SketchUp.exe',
+);
 const defaultPlugins = process.env.APPDATA
-  ? path.join(process.env.APPDATA, 'SketchUp', 'SketchUp 2026', 'SketchUp', 'Plugins')
+  ? path.win32.join(process.env.APPDATA, 'SketchUp', `SketchUp ${sketchupVersion}`, 'SketchUp', 'Plugins')
   : null;
 
 function parseArgs(argv) {
@@ -31,7 +39,10 @@ function parseArgs(argv) {
 }
 
 function ensureAbsolute(inputPath) {
-  return path.isAbsolute(inputPath) ? inputPath : path.resolve(repoRoot, inputPath);
+  if (path.isAbsolute(inputPath) || path.win32.isAbsolute(inputPath)) {
+    return inputPath;
+  }
+  return path.resolve(repoRoot, inputPath);
 }
 
 function ensureExists(targetPath, label) {
