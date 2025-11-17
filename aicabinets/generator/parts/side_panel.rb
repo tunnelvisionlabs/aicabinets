@@ -32,7 +32,12 @@ module AICabinets
 
           translation = Geom::Transformation.translation([x_offset, 0, 0])
           group.transform!(translation)
-          group
+
+          component = group.to_component
+          definition = component.definition
+          definition.name = name if definition.respond_to?(:name=)
+          component.name = name if component.respond_to?(:name=)
+          component
         end
 
         def cut_toe_kick_notch(entities, panel_thickness, toe_kick_height, toe_kick_depth, toe_kick_thickness)
