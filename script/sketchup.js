@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
 const sketchupVersion = process.env.SKETCHUP_VERSION || '2026';
-const defaultExeBase = process.env.ProgramFiles || 'C\\\\Program Files';
+const defaultExeBase = process.env.ProgramFiles || 'C:\\Program Files';
 const defaultExe = path.win32.join(
   defaultExeBase,
   'SketchUp',
