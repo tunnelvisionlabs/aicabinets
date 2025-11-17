@@ -111,7 +111,7 @@ module AICabinets
 
         bbox = definition.bounds
         outside_w_mm = length_to_mm(bbox.width)
-        outside_h_mm = length_to_mm(bbox.height)
+        outside_h_mm = length_to_mm(bbox.depth)
 
         open_w_mm = outside_w_mm - (2.0 * params[:stile_width_mm].to_f)
         open_h_mm = outside_h_mm - (2.0 * params[:rail_width_mm].to_f)

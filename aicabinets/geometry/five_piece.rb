@@ -23,6 +23,9 @@ module AICabinets
       GROUP_ROLE_KEY = 'role'.freeze
       GROUP_ROLE_STILE = 'stile'.freeze
       GROUP_ROLE_RAIL = 'rail'.freeze
+      PANEL_DICTIONARY = 'AICabinets::FivePiecePanel'.freeze
+      PANEL_ROLE_KEY = 'role'.freeze
+      PANEL_ROLE_VALUE = 'panel'.freeze
       SHAKER_PROFILE_DEPTH_MM = 6.0
       SHAKER_PROFILE_ANGLE_DEGREES = 18.0
       SHAKER_PROFILE_RUN_MM = begin

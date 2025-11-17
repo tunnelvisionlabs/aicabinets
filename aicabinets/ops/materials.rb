@@ -70,6 +70,25 @@ module AICabinets
         ensure_material(model, name, DEFAULT_DOOR_FRAME_MATERIAL_COLOR)
       end
 
+      # Finds a material by identifier or falls back to the default door
+      # material when no identifier is provided or the material cannot be
+      # located.
+      #
+      # @param model [Sketchup::Model]
+      # @param material_id [String, nil]
+      # @return [Sketchup::Material, nil]
+      def find_or_default(model:, material_id: nil)
+        raise ArgumentError, 'model must be a Sketchup::Model' unless model.is_a?(Sketchup::Model)
+
+        materials = model.materials
+        if material_id && !material_id.to_s.empty?
+          material = materials[material_id.to_s]
+          return material if material
+        end
+
+        default_door(model)
+      end
+
       def ensure_material(model, name, rgb)
         materials = model.materials
         existing = materials[name]
