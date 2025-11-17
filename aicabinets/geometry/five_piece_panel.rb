@@ -13,8 +13,12 @@ Sketchup.require('aicabinets/validation_error')
 
 module AICabinets
   module Geometry
-    module FivePiece
+    module FivePiecePanel
       module_function
+
+      Units = AICabinets::Ops::Units
+      IDENTITY = Geom::Transformation.new
+      MIN_DIMENSION_MM = AICabinets::Geometry::FivePiece::MIN_DIMENSION_MM
 
       PANEL_DICTIONARY = 'AICabinets::FivePiecePanel'.freeze
       PANEL_ROLE_KEY = 'role'.freeze

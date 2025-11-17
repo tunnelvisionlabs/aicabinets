@@ -4,7 +4,7 @@ require 'testup/testcase'
 require_relative 'suite_helper'
 
 Sketchup.require('aicabinets/geom/five_piece')
-Sketchup.require('aicabinets/geometry/five_piece')
+Sketchup.require('aicabinets/geometry/five_piece_panel')
 Sketchup.require('aicabinets/params/five_piece')
 Sketchup.require('aicabinets/capabilities')
 
@@ -27,7 +27,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     params = build_params
     definition = build_frame_definition('Five Piece Panel AC1', params:, open_w_mm: 600.0, open_h_mm: 720.0)
 
-    result = AICabinets::Geometry::FivePiece.build_panel!(
+    result = AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 600.0,
@@ -57,7 +57,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     params = build_params(panel_cove_radius_mm: 14.0)
     definition = build_frame_definition('Five Piece Panel AC2', params:, open_w_mm: 620.0, open_h_mm: 740.0)
 
-    raised = AICabinets::Geometry::FivePiece.build_panel!(
+    raised = AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 620.0,
@@ -71,7 +71,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     assert_operator(edges_front.length, :>, edges_back.length)
     refute_nil(raised[:panel].volume)
 
-    reverse = AICabinets::Geometry::FivePiece.build_panel!(
+    reverse = AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 620.0,
@@ -90,7 +90,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     params = build_params
     definition = build_frame_definition('Five Piece Panel AC3', params:, open_w_mm: 640.0, open_h_mm: 760.0)
 
-    result = AICabinets::Geometry::FivePiece.build_panel!(
+    result = AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params
     )
@@ -111,7 +111,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     definition = build_frame_definition('Five Piece Panel AC4', params:, open_w_mm: 600.0, open_h_mm: 720.0)
 
     assert_raises(AICabinets::ValidationError) do
-      AICabinets::Geometry::FivePiece.build_panel!(
+      AICabinets::Geometry::FivePiecePanel.build_panel!(
         target: definition,
         params: params,
         open_w_mm: 600.0,
@@ -125,7 +125,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     params = build_params(panel_material_id: material_name)
     definition = build_frame_definition('Five Piece Panel AC5', params:, open_w_mm: 600.0, open_h_mm: 720.0)
 
-    result = AICabinets::Geometry::FivePiece.build_panel!(
+    result = AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 600.0,
@@ -143,7 +143,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     params = build_params
     definition = build_frame_definition('Five Piece Panel AC6', params:, open_w_mm: 600.0, open_h_mm: 720.0)
 
-    AICabinets::Geometry::FivePiece.build_panel!(
+    AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 600.0,
@@ -161,14 +161,14 @@ class TC_FivePiecePanel < TestUp::TestCase
     params = build_params
     definition = build_frame_definition('Five Piece Panel AC7', params:, open_w_mm: 580.0, open_h_mm: 700.0)
 
-    AICabinets::Geometry::FivePiece.build_panel!(
+    AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 580.0,
       open_h_mm: 700.0
     )
 
-    AICabinets::Geometry::FivePiece.build_panel!(
+    AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 580.0,
@@ -182,7 +182,7 @@ class TC_FivePiecePanel < TestUp::TestCase
     params = build_params(panel_clearance_per_side_mm: 4.0)
     definition = build_frame_definition('Five Piece Panel AC8', params:, open_w_mm: 620.0, open_h_mm: 720.0)
 
-    result = AICabinets::Geometry::FivePiece.build_panel!(
+    result = AICabinets::Geometry::FivePiecePanel.build_panel!(
       target: definition,
       params: params,
       open_w_mm: 620.0,
