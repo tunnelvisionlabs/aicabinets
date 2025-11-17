@@ -428,10 +428,6 @@ module AICabinets
           end
         end
 
-        def has_back
-          @has_back
-        end
-
         def toe_kick_height_mm
           0.0
         end
@@ -489,6 +485,14 @@ module AICabinets
 
         def respond_to_missing?(name, include_private = false)
           @params.respond_to?(name, include_private) || super
+        end
+
+        # Front layout helpers expect callers to optionally provide partition
+        # bay metadata. Upper cabinets do not partition bays, so expose an
+        # empty collection to keep front planning code paths consistent with
+        # base cabinets without triggering method_missing.
+        def partition_bays
+          []
         end
       end
     end
