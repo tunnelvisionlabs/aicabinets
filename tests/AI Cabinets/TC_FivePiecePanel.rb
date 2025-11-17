@@ -40,8 +40,8 @@ class TC_FivePiecePanel < TestUp::TestCase
 
     bbox = panel.bounds
     width_mm = AICabinetsTestHelper.mm_from_length(bbox.width)
-    height_mm = AICabinetsTestHelper.mm_from_length(bbox.height)
-    depth_mm = AICabinetsTestHelper.mm_from_length(bbox.depth)
+    height_mm = AICabinetsTestHelper.mm_from_length(bbox.depth)
+    depth_mm = AICabinetsTestHelper.mm_from_length(bbox.height)
 
     expected_w = 600.0 - (2.0 * params[:panel_clearance_per_side_mm])
     expected_h = 720.0 - (2.0 * params[:panel_clearance_per_side_mm])
@@ -97,7 +97,7 @@ class TC_FivePiecePanel < TestUp::TestCase
 
     bbox = result[:panel].bounds
     width_mm = AICabinetsTestHelper.mm_from_length(bbox.width)
-    height_mm = AICabinetsTestHelper.mm_from_length(bbox.height)
+    height_mm = AICabinetsTestHelper.mm_from_length(bbox.depth)
 
     expected_w = 640.0 - (2.0 * params[:panel_clearance_per_side_mm])
     expected_h = 760.0 - (2.0 * params[:panel_clearance_per_side_mm])
@@ -246,9 +246,10 @@ class TC_FivePiecePanel < TestUp::TestCase
     bbox = panel.bounds
     target_y = front ? bbox.min.y : bbox.max.y
     tolerance = AICabinetsTestHelper::TOL
+    transform = panel.transformation
 
     panel.entities.grep(Sketchup::Edge).select do |edge|
-      positions = edge.vertices.map(&:position)
+      positions = edge.vertices.map { |vertex| vertex.position.transform(transform) }
       positions.all? { |point| (point.y - target_y).abs <= tolerance }
     end
   end

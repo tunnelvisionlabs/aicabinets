@@ -17,8 +17,8 @@ module AICabinets
       module_function
 
       Units = AICabinets::Ops::Units
-      IDENTITY = Geom::Transformation.new
       MIN_DIMENSION_MM = AICabinets::Geometry::FivePiece::MIN_DIMENSION_MM
+      IDENTITY = Geom::Transformation.new
 
       PANEL_DICTIONARY = 'AICabinets::FivePiecePanel'.freeze
       PANEL_ROLE_KEY = 'role'.freeze
@@ -203,15 +203,15 @@ module AICabinets
         group.name = 'Panel'
 
         points = [
-          Geom::Point3d.new(0, 0, 0),
-          Geom::Point3d.new(width_mm, 0, 0),
-          Geom::Point3d.new(width_mm, 0, height_mm),
-          Geom::Point3d.new(0, 0, height_mm)
+          Units.point_mm(0, 0, 0),
+          Units.point_mm(width_mm, 0, 0),
+          Units.point_mm(width_mm, 0, height_mm),
+          Units.point_mm(0, 0, height_mm)
         ]
 
         face = group.entities.add_face(points)
         face.reverse! unless face.normal.y.positive?
-        face.pushpull(thickness_mm)
+        face.pushpull(Units.to_length_mm(thickness_mm))
 
         group
       end
@@ -236,65 +236,33 @@ module AICabinets
 
       def apply_cove!(group, width_mm:, height_mm:, thickness_mm:, cove_radius_mm:)
         entities = group.entities
-        profile = build_cove_profile(width_mm: width_mm, height_mm: height_mm, radius_mm: cove_radius_mm)
-        cutter = entities.add_group(profile)
-        cutter.name = 'Panel::CoveProfile'
+        inset_w_mm = [cove_radius_mm, width_mm / 2.0].min
+        inset_h_mm = [cove_radius_mm, height_mm / 2.0].min
 
-        cutter_origin = Geom::Transformation.new([0, thickness_mm, 0])
-        cutter.move!(cutter_origin)
+        front_loop = inset_loop_points(
+          width_mm: width_mm,
+          height_mm: height_mm,
+          inset_w_mm: inset_w_mm,
+          inset_h_mm: inset_h_mm,
+          y_mm: 0.0
+        )
+        add_loop_edges(entities, front_loop)
 
-        entities.intersect_with(true, IDENTITY, entities, IDENTITY, true, cutter.entities.to_a)
-        cutter.erase!
-
-        group
-      end
-      private_class_method :apply_cove!
-
-      def build_cove_profile(width_mm:, height_mm:, radius_mm:)
-        group = Sketchup.active_model.entities.add_group
-        profile_entities = group.entities
-
-        outer_points = [
-          Geom::Point3d.new(0, 0, 0),
-          Geom::Point3d.new(width_mm, 0, 0),
-          Geom::Point3d.new(width_mm, 0, height_mm),
-          Geom::Point3d.new(0, 0, height_mm)
-        ]
-        profile_entities.add_face(outer_points)
-
-        inset_w_mm = [radius_mm, width_mm / 2.0].min
-        inset_h_mm = [radius_mm, height_mm / 2.0].min
-
-        inner_points = [
-          Geom::Point3d.new(inset_w_mm, 0, inset_h_mm),
-          Geom::Point3d.new(width_mm - inset_w_mm, 0, inset_h_mm),
-          Geom::Point3d.new(width_mm - inset_w_mm, 0, height_mm - inset_h_mm),
-          Geom::Point3d.new(inset_w_mm, 0, height_mm - inset_h_mm)
-        ]
-
-        inner_face = profile_entities.add_face(inner_points)
-        inner_face.erase!
-
-        profile_entities.grep(Sketchup::Face).each do |face|
-          next unless face.normal.y.positive?
-
-          edges = face.edges
-          next unless edges.size == 4
-
-          edges.each do |edge|
-            vector = edge.line[1]
-            next unless vector.parallel?(Geom::Vector3d.new(1, 0, 0)) || vector.parallel?(Geom::Vector3d.new(0, 0, 1))
-
-            midpoint = edge.start.position.offset(edge.line[1], edge.length / 2.0)
-            face.pushpull(-radius_mm, true)
-            arc_edges = profile_entities.add_arc(midpoint, edge.line[1], edge.line[1].axes[2], radius_mm, 0, Math::PI / 2.0)
-            profile_entities.add_face(arc_edges)
-          end
+        offset_y_mm = [[cove_radius_mm, thickness_mm - SEATING_CLEARANCE_MM].min, 0.0].max
+        if offset_y_mm.positive?
+          back_loop = inset_loop_points(
+            width_mm: width_mm,
+            height_mm: height_mm,
+            inset_w_mm: inset_w_mm,
+            inset_h_mm: inset_h_mm,
+            y_mm: offset_y_mm
+          )
+          bridge_loops(entities, front_loop, back_loop)
         end
 
         group
       end
-      private_class_method :build_cove_profile
+      private_class_method :apply_cove!
 
       def flip_y!(group)
         bounds = group.bounds
@@ -305,7 +273,7 @@ module AICabinets
       private_class_method :flip_y!
 
       def translate_group!(group, x_mm:, y_mm:, z_mm:)
-        transform = Geom::Transformation.new([x_mm, y_mm, z_mm])
+        transform = Geom::Transformation.translation(Units.vector_mm(x_mm, y_mm, z_mm))
         group.transform!(transform)
       end
       private_class_method :translate_group!
@@ -339,6 +307,37 @@ module AICabinets
         Units.length_to_mm(length)
       end
       private_class_method :length_to_mm
+
+      def inset_loop_points(width_mm:, height_mm:, inset_w_mm:, inset_h_mm:, y_mm:)
+        [
+          Units.point_mm(inset_w_mm, y_mm, inset_h_mm),
+          Units.point_mm(width_mm - inset_w_mm, y_mm, inset_h_mm),
+          Units.point_mm(width_mm - inset_w_mm, y_mm, height_mm - inset_h_mm),
+          Units.point_mm(inset_w_mm, y_mm, height_mm - inset_h_mm)
+        ]
+      end
+      private_class_method :inset_loop_points
+
+      def add_loop_edges(entities, points)
+        points.each_with_index do |point, index|
+          next_point = points[(index + 1) % points.length]
+          entities.add_line(point, next_point)
+        end
+      end
+      private_class_method :add_loop_edges
+
+      def bridge_loops(entities, front_points, back_points)
+        front_points.each_index do |index|
+          front_a = front_points[index]
+          front_b = front_points[(index + 1) % front_points.length]
+          back_b = back_points[(index + 1) % back_points.length]
+          back_a = back_points[index]
+          face = entities.add_face(front_a, front_b, back_b, back_a)
+          face.reverse! if face&.valid? && !face.normal.y.negative?
+        end
+      end
+      private_class_method :bridge_loops
+
     end
   end
 end

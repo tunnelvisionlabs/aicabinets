@@ -81,9 +81,12 @@ module AICabinets
         raise ArgumentError, 'model must be a Sketchup::Model' unless model.is_a?(Sketchup::Model)
 
         materials = model.materials
-        if material_id && !material_id.to_s.empty?
-          material = materials[material_id.to_s]
+        material_key = material_id.to_s
+        unless material_key.empty?
+          material = materials[material_key]
           return material if material
+
+          return ensure_material(model, material_key, nil)
         end
 
         default_door(model)
