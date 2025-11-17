@@ -95,6 +95,8 @@ Use the npm helpers to deploy the extension to SketchUp 2026 and run TestUp CI l
   npm run testup:class
   ```
 
+  Each class run also writes the SketchUp Ruby Console stream to `dist/testup-<ClassName>-ruby-console.log` (and a matching `-ruby-errors.log`). When running `TC_Smoke`, verify the log contains the `[AICabinets TestUp] Ruby console capture marker` line emitted by the smoke test to confirm output from `puts` statements is captured.
+
 - Execute a custom Ruby script within SketchUp, close the active model without saving, and exit (auto-deploys first):
 
   ```cmd

@@ -156,17 +156,22 @@ function renderWrapper(startupScript) {
 `end\n`;
 }
 
-function parseOutputHint(configPath) {
+function parseConfigHints(configPath) {
   try {
     const content = fs.readFileSync(configPath, 'utf8');
-    const match = content.match(/^Output:\s*(.+)$/mi);
-    if (match) {
-      return match[1].trim();
-    }
+    const scalar = (label) => {
+      const match = content.match(new RegExp(`^${label}:\\s*(.+)$`, 'mi'));
+      return match ? match[1].trim() : null;
+    };
+    return {
+      output: scalar('Output'),
+      log: scalar('LogPath'),
+      errorLog: scalar('ErrorLogPath'),
+    };
   } catch (error) {
     // Best-effort logging only.
   }
-  return null;
+  return {};
 }
 
 async function deploy(paths) {
@@ -190,24 +195,46 @@ async function runTestUpAll(paths) {
   console.log('TestUp suite completed.');
 }
 
-async function runTestUpConfig(paths, configPath) {
+async function runTestUpConfig(paths, configPath, captureTargets = {}) {
   await deploy(paths);
   const resolvedConfig = ensureAbsolute(configPath || process.env.TESTUP_CONFIG || '');
   ensureExists(resolvedConfig, 'TestUp config file');
-  const outputHint = parseOutputHint(resolvedConfig);
-  if (outputHint) {
-    console.log(`Config output path: ${outputHint}`);
+  const { output, log: logPath, errorLog } = parseConfigHints(resolvedConfig);
+  if (output) {
+    console.log(`Config output path: ${output}`);
+  }
+  if (logPath) {
+    console.log(`Config Ruby console log path: ${logPath}`);
+  }
+  if (errorLog && errorLog !== logPath) {
+    console.log(`Config Ruby console error log path: ${errorLog}`);
   }
   const arg = `TestUp:CI:Config: ${resolvedConfig}`;
   console.log(`Running TestUp config from ${resolvedConfig}`);
-  await runSketchUp(
+  const result = await runSketchUp(
     paths.sketchupExe,
     ['-RubyStartupArg', arg],
     paths.debug,
     { capture: true },
   );
-  if (outputHint) {
-    console.log(`Results should be written to: ${outputHint}`);
+  if (captureTargets.consoleLog) {
+    fs.mkdirSync(path.dirname(captureTargets.consoleLog), { recursive: true });
+    fs.writeFileSync(captureTargets.consoleLog, result.stdout || '', 'utf8');
+    console.log(`Ruby console log saved to: ${captureTargets.consoleLog}`);
+  }
+  if (captureTargets.consoleErr) {
+    fs.mkdirSync(path.dirname(captureTargets.consoleErr), { recursive: true });
+    fs.writeFileSync(captureTargets.consoleErr, result.stderr || '', 'utf8');
+    console.log(`Ruby console stderr saved to: ${captureTargets.consoleErr}`);
+  }
+  if (output) {
+    console.log(`Results should be written to: ${output}`);
+  }
+  if (logPath) {
+    console.log(`Ruby console log should be written to: ${logPath}`);
+  }
+  if (errorLog && errorLog !== logPath) {
+    console.log(`Ruby console error log should be written to: ${errorLog}`);
   }
 }
 
@@ -222,12 +249,19 @@ function generateClassConfig(testsRoot, testClass, outputPath, debug) {
   const resolvedOutput = ensureAbsolute(
     outputPath || path.join(repoRoot, 'dist', `testup-${safeName}-results.json`),
   );
+  const consoleLogPath = ensureAbsolute(path.join(repoRoot, 'dist', `testup-${safeName}-ruby-console.log`));
+  const consoleErrPath = ensureAbsolute(path.join(repoRoot, 'dist', `testup-${safeName}-ruby-errors.log`));
 
   fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
+  fs.mkdirSync(path.dirname(consoleLogPath), { recursive: true });
+  fs.mkdirSync(path.dirname(consoleErrPath), { recursive: true });
+  fs.rmSync(consoleLogPath, { recursive: true, force: true });
+  fs.rmSync(consoleErrPath, { recursive: true, force: true });
 
+  const normalizeForYaml = (value) => value.replace(/\\/g, '/');
   const content = [
-    `Path: ${testsRoot}`,
-    `Output: ${resolvedOutput}`,
+    `Path: "${normalizeForYaml(testsRoot)}"`,
+    `Output: "${normalizeForYaml(resolvedOutput)}"`,
     'Tests:',
     `  - ${testClass}#`,
     '',
@@ -236,20 +270,57 @@ function generateClassConfig(testsRoot, testClass, outputPath, debug) {
   fs.writeFileSync(configPath, content, 'utf8');
   logDebug(debug, `Generated class config at ${configPath}`);
   logDebug(debug, `Results will be written to ${resolvedOutput}`);
-  return { configPath, resolvedOutput };
+  return {
+    configPath,
+    resolvedOutput,
+    consoleLogPath,
+    consoleErrPath,
+  };
 }
 
 async function runTestUpClass(paths, testClass, outputPath) {
   const resolvedClass = testClass || process.env.TESTUP_CLASS;
-  const { configPath, resolvedOutput } = generateClassConfig(
+  const {
+    configPath,
+    resolvedOutput,
+    consoleLogPath,
+    consoleErrPath,
+  } = generateClassConfig(
     paths.testsRoot,
     resolvedClass,
     outputPath,
     paths.debug,
   );
   console.log(`Generated TestUp config for ${resolvedClass} at ${configPath}`);
-  await runTestUpConfig(paths, configPath);
+  const previousStdoutCapture = process.env.AI_CABINETS_RUBY_CONSOLE_LOG;
+  const previousStderrCapture = process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG;
+  process.env.AI_CABINETS_RUBY_CONSOLE_LOG = consoleLogPath;
+  process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG = consoleErrPath;
+  try {
+    await runTestUpConfig(paths, configPath);
+  } finally {
+    if (previousStdoutCapture === undefined) {
+      delete process.env.AI_CABINETS_RUBY_CONSOLE_LOG;
+    } else {
+      process.env.AI_CABINETS_RUBY_CONSOLE_LOG = previousStdoutCapture;
+    }
+    if (previousStderrCapture === undefined) {
+      delete process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG;
+    } else {
+      process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG = previousStderrCapture;
+    }
+  }
   console.log(`Class results should be written to: ${resolvedOutput}`);
+  if (fs.existsSync(consoleLogPath)) {
+    console.log(`Ruby console log saved to: ${consoleLogPath}`);
+  } else {
+    console.warn(`Ruby console log missing: ${consoleLogPath}`);
+  }
+  if (fs.existsSync(consoleErrPath)) {
+    console.log(`Ruby console stderr saved to: ${consoleErrPath}`);
+  } else {
+    console.warn(`Ruby console stderr missing: ${consoleErrPath}`);
+  }
 }
 
 async function runStartupScript(paths, userScript) {
