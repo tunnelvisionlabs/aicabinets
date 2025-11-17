@@ -110,6 +110,8 @@ Use the npm helpers to deploy the extension to SketchUp 2026 and run TestUp CI l
   npm run sketchup:run
   ```
 
+  Each invocation saves the Ruby console output and errors to `dist/sketchup-run-<ScriptName>-<timestamp>-ruby-console.log` and `dist/sketchup-run-<ScriptName>-<timestamp>-ruby-errors.log`, making it easy to review `puts` output without reopening SketchUp.
+
 Defaults assume SketchUp 2026 on Windows with `SketchUp.exe` in `%ProgramFiles%\SketchUp\SketchUp 2026\SketchUp\SketchUp.exe` and Plugins at `%APPDATA%\SketchUp\SketchUp 2026\SketchUp\Plugins`. Override paths with environment variables or per-command flags:
 
 - `SKETCHUP_EXE` or `--exe <path>`
