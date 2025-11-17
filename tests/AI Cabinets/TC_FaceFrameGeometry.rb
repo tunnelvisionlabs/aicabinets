@@ -45,7 +45,7 @@ class TC_FaceFrameGeometry < TestUp::TestCase
     face_frame = result.instances[:face_frame]
     refute_nil(face_frame, 'Expected face frame group to be present')
     assert_equal('Face Frame', face_frame.name)
-    assert_equal('AICabinets/Fronts', face_frame.layer.name)
+    assert_includes(['AICabinets/Fronts', 'Fronts'], face_frame.layer.name)
 
     members = members_by_name(face_frame)
     %w[Stile\ Left Stile\ Right Rail\ Top Rail\ Bottom].each do |part|

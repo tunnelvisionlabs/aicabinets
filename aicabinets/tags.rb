@@ -45,7 +45,7 @@ module AICabinets
       operation_open = false
       begin
         if changes_required
-          operation_open = model.start_operation(OPERATION_NAME, true)
+          operation_open = model.start_operation(OPERATION_NAME, true, true)
           folder ||= layers.add_folder(CABINET_FOLDER_NAME)
 
           base_names.each do |base_name|
