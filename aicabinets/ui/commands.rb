@@ -17,6 +17,7 @@ module AICabinets
         commands[:insert_base_cabinet] ||= build_insert_base_cabinet_command
         commands[:edit_base_cabinet] ||= build_edit_base_cabinet_command
         commands[:create_row_from_selection] ||= build_create_row_command
+        commands[:fronts_dialog] ||= build_fronts_dialog_command
         commands[:rows_manage] ||= build_rows_manage_command
         commands[:rows_add_selection] ||= build_rows_add_selection_command
         commands[:rows_remove_selection] ||= build_rows_remove_selection_command
@@ -43,6 +44,16 @@ module AICabinets
         command.tooltip = 'Edit Selected Cabinet…'
         command.status_bar_text = 'Edit the selected AI Cabinets base cabinet.'
         assign_command_icons(command, 'edit_base_cabinet')
+        command
+      end
+
+      def build_fronts_dialog_command
+        command = ::UI::Command.new('Fronts…') do
+          handle_fronts_dialog
+        end
+        command.tooltip = 'Fronts…'
+        command.status_bar_text = 'Edit five-piece fronts for the selected component.'
+        assign_command_icons(command, 'fronts')
         command
       end
 
@@ -161,6 +172,21 @@ module AICabinets
           notify_selection_issue('Unable to open the edit dialog for the selected cabinet.', status: :dialog_failed)
         end
         nil
+      end
+
+      def handle_fronts_dialog
+        dialog_module =
+          if defined?(AICabinets::UI::Dialogs::FrontsDialog) &&
+             AICabinets::UI::Dialogs::FrontsDialog.respond_to?(:show)
+            AICabinets::UI::Dialogs::FrontsDialog
+          end
+
+        unless dialog_module
+          warn('AI Cabinets: Fronts dialog is unavailable.')
+          return nil
+        end
+
+        dialog_module.show
       end
 
       def handle_create_row_from_selection

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" data-dialog-id="fronts-dialog">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>AI Cabinets — Fronts</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="console_bridge.js"></script>
+    <link rel="stylesheet" href="fronts_dialog.css" />
+  </head>
+  <body>
+    <div class="dialog">
+      <header class="dialog__header">
+        <h1>Fronts</h1>
+        <p class="dialog__hint">Configure five-piece door options for the selected front.</p>
+      </header>
+
+      <section class="section">
+        <label class="field">
+          <span class="field__label">Door style</span>
+          <select id="door-style">
+            <option value="slab">Slab</option>
+            <option value="five_piece_cope_stick">Five-piece — cope &amp; stick</option>
+            <option value="five_piece_miter">Five-piece — miter</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="section" id="five-piece-fields">
+        <label class="field">
+          <span class="field__label">Inside profile</span>
+          <select id="inside-profile" disabled>
+            <option value="shaker_inside">Shaker</option>
+          </select>
+        </label>
+
+        <div class="field-grid">
+          <label class="field">
+            <span class="field__label">Stile width</span>
+            <input id="stile-width" type="text" placeholder="57 mm" />
+            <small class="field__hint">Accepts mm, in, or ft/in.</small>
+            <div class="field__error" data-error-for="stile-width"></div>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Rail width</span>
+            <input id="rail-width" type="text" placeholder="Same as stile" />
+            <small class="field__hint">Leave blank to match stile width.</small>
+            <div class="field__error" data-error-for="rail-width"></div>
+          </label>
+        </div>
+
+        <div class="field-grid">
+          <label class="field">
+            <span class="field__label">Panel style</span>
+            <select id="panel-style">
+              <option value="flat">Flat</option>
+              <option value="raised">Raised</option>
+              <option value="reverse_raised">Reverse raised</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Panel thickness</span>
+            <input id="panel-thickness" type="text" placeholder="9.5 mm" />
+            <div class="field__error" data-error-for="panel-thickness"></div>
+          </label>
+        </div>
+
+        <div class="field-grid">
+          <label class="field">
+            <span class="field__label">Cove radius</span>
+            <input id="panel-cove-radius" type="text" placeholder="12 mm" />
+            <div class="field__error" data-error-for="panel-cove-radius"></div>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Float clearance per side</span>
+            <input id="panel-clearance" type="text" placeholder="3 mm" />
+            <div class="field__error" data-error-for="panel-clearance"></div>
+          </label>
+        </div>
+
+        <div class="field-grid">
+          <label class="field">
+            <span class="field__label">Groove depth</span>
+            <input id="groove-depth" type="text" placeholder="11 mm" />
+            <div class="field__error" data-error-for="groove-depth"></div>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Groove width</span>
+            <input id="groove-width" type="text" placeholder="Auto" />
+            <small class="field__hint">Optional</small>
+            <div class="field__error" data-error-for="groove-width"></div>
+          </label>
+        </div>
+      </section>
+
+      <section class="section">
+        <label class="checkbox">
+          <input type="checkbox" id="scope-instance" />
+          <span>This instance only</span>
+        </label>
+      </section>
+
+      <footer class="dialog__footer">
+        <div class="actions">
+          <button id="apply">Apply</button>
+          <button id="reset">Reset to defaults</button>
+          <button id="close">Close</button>
+        </div>
+        <div id="banner" class="banner" role="status"></div>
+      </footer>
+    </div>
+
+    <script src="fronts_dialog.js"></script>
+  </body>
+</html>
