@@ -28,61 +28,78 @@ module AICabinets
         height_mm = params.height_mm
         return nil unless width_mm.positive? && height_mm.positive?
 
-        thickness = Ops::Units.to_length_mm(thickness_mm)
+        model = parent_entities.respond_to?(:model) ? parent_entities.model : nil
+        active_operation_name =
+          model.respond_to?(:active_operation_name) ? model.active_operation_name.to_s : ''
+        operation_started = false
+        begin
+          if model && active_operation_name.empty? && model.respond_to?(:start_operation)
+            operation_started = model.start_operation('AI Cabinets: Face Frame', true)
+          end
 
-        group = parent_entities.add_group
-        group.name = FACE_FRAME_NAME if group.respond_to?(:name=)
+          thickness = Ops::Units.to_length_mm(thickness_mm)
 
-        members = []
-        members << build_member(
-          parent: group,
-          name: 'Stile Left',
-          x_start_mm: 0.0,
-          width_mm: frame[:stile_left_mm],
-          z_start_mm: 0.0,
-          height_mm: height_mm,
-          thickness: thickness
-        )
+          group = parent_entities.add_group
+          group.name = FACE_FRAME_NAME if group.respond_to?(:name=)
 
-        right_x_mm = width_mm - frame[:stile_right_mm]
-        members << build_member(
-          parent: group,
-          name: 'Stile Right',
-          x_start_mm: right_x_mm,
-          width_mm: frame[:stile_right_mm],
-          z_start_mm: 0.0,
-          height_mm: height_mm,
-          thickness: thickness
-        )
+          members = []
+          members << build_member(
+            parent: group,
+            name: 'Stile Left',
+            x_start_mm: 0.0,
+            width_mm: frame[:stile_left_mm],
+            z_start_mm: 0.0,
+            height_mm: height_mm,
+            thickness: thickness
+          )
 
-        top_z_mm = height_mm - frame[:rail_top_mm]
-        members << build_member(
-          parent: group,
-          name: 'Rail Top',
-          x_start_mm: 0.0,
-          width_mm: width_mm,
-          z_start_mm: top_z_mm,
-          height_mm: frame[:rail_top_mm],
-          thickness: thickness
-        )
+          right_x_mm = width_mm - frame[:stile_right_mm]
+          members << build_member(
+            parent: group,
+            name: 'Stile Right',
+            x_start_mm: right_x_mm,
+            width_mm: frame[:stile_right_mm],
+            z_start_mm: 0.0,
+            height_mm: height_mm,
+            thickness: thickness
+          )
 
-        members << build_member(
-          parent: group,
-          name: 'Rail Bottom',
-          x_start_mm: 0.0,
-          width_mm: width_mm,
-          z_start_mm: 0.0,
-          height_mm: frame[:rail_bottom_mm],
-          thickness: thickness
-        )
+          top_z_mm = height_mm - frame[:rail_top_mm]
+          members << build_member(
+            parent: group,
+            name: 'Rail Top',
+            x_start_mm: 0.0,
+            width_mm: width_mm,
+            z_start_mm: top_z_mm,
+            height_mm: frame[:rail_top_mm],
+            thickness: thickness
+          )
 
-        mid_members = build_mid_members(group: group, frame: frame, thickness: thickness, params: params)
-        members.concat(mid_members) if mid_members.any?
+          members << build_member(
+            parent: group,
+            name: 'Rail Bottom',
+            x_start_mm: 0.0,
+            width_mm: width_mm,
+            z_start_mm: 0.0,
+            height_mm: frame[:rail_bottom_mm],
+            thickness: thickness
+          )
 
-        Ops::Tags.assign!(group, FRONT_TAG_NAME)
-        members.compact.each { |member| Ops::Tags.assign!(member, FRONT_TAG_NAME) }
+          mid_members = build_mid_members(group: group, frame: frame, thickness: thickness, params: params)
+          members.concat(mid_members) if mid_members.any?
 
-        group
+          Ops::Tags.assign!(group, FRONT_TAG_NAME)
+          members.compact.each { |member| Ops::Tags.assign!(member, FRONT_TAG_NAME) }
+
+          group
+        rescue StandardError
+          model.abort_operation if operation_started && model.respond_to?(:abort_operation)
+          raise
+        ensure
+          if operation_started && model.respond_to?(:commit_operation)
+            model.commit_operation
+          end
+        end
       end
 
       def validate_parent!(entities)
