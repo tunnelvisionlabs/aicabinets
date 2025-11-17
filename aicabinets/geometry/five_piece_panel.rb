@@ -339,8 +339,3 @@ module AICabinets
   end
 end
 
-module AICabinets
-  module Geom
-    FivePiece = AICabinets::Geometry::FivePiece
-  end
-end
