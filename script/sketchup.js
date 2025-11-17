@@ -179,6 +179,47 @@ async function runTestUpConfig(paths, configPath) {
   }
 }
 
+function generateClassConfig(testsRoot, testClass, outputPath, debug) {
+  if (!testClass) {
+    throw new Error('Missing required --class <TestUpClassName> argument.');
+  }
+  ensureExists(testsRoot, 'AI Cabinets TestUp suite');
+
+  const safeName = testClass.replace(/[^A-Za-z0-9_-]/g, '_');
+  const configPath = path.join(os.tmpdir(), `aicabinets-class-${safeName}-${Date.now()}.yml`);
+  const resolvedOutput = ensureAbsolute(
+    outputPath || path.join(repoRoot, 'dist', `testup-${safeName}-results.json`),
+  );
+
+  fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
+
+  const content = [
+    `Path: ${testsRoot}`,
+    `Output: ${resolvedOutput}`,
+    'Tests:',
+    `  - ${testClass}#`,
+    '',
+  ].join('\n');
+
+  fs.writeFileSync(configPath, content, 'utf8');
+  logDebug(debug, `Generated class config at ${configPath}`);
+  logDebug(debug, `Results will be written to ${resolvedOutput}`);
+  return { configPath, resolvedOutput };
+}
+
+async function runTestUpClass(paths, testClass, outputPath) {
+  const resolvedClass = testClass || process.env.TESTUP_CLASS;
+  const { configPath, resolvedOutput } = generateClassConfig(
+    paths.testsRoot,
+    resolvedClass,
+    outputPath,
+    paths.debug,
+  );
+  console.log(`Generated TestUp config for ${resolvedClass} at ${configPath}`);
+  await runTestUpConfig(paths, configPath);
+  console.log(`Class results should be written to: ${resolvedOutput}`);
+}
+
 async function runStartupScript(paths, userScript) {
   await deploy(paths);
   const resolvedScript = ensureAbsolute(userScript || process.env.STARTUP_RUBY || '');
@@ -205,11 +246,14 @@ async function main() {
       case 'testup:config':
         await runTestUpConfig(paths, flags.config);
         break;
+      case 'testup:class':
+        await runTestUpClass(paths, flags.class, flags.output);
+        break;
       case 'sketchup:run':
         await runStartupScript(paths, flags.script);
         break;
       default:
-        console.error('Usage: node script/sketchup.js [deploy|testup:all|testup:config|sketchup:run] [--debug] [--exe <path>] [--plugins <path>] [--tests <path>] [--config <path>] [--script <path>]');
+        console.error('Usage: node script/sketchup.js [deploy|testup:all|testup:config|testup:class|sketchup:run] [--debug] [--exe <path>] [--plugins <path>] [--tests <path>] [--config <path>] [--class <TestUpClass>] [--output <results.json>] [--script <path>]');
         process.exitCode = 1;
     }
   } catch (error) {

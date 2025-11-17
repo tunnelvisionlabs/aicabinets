@@ -8,6 +8,7 @@
     "deploy:sketchup": "node script/sketchup.js deploy",
     "testup:all": "node script/sketchup.js testup:all",
     "testup:config": "node script/sketchup.js testup:config",
+    "testup:class": "node script/sketchup.js testup:class",
     "sketchup:run": "node script/sketchup.js sketchup:run"
   },
   "devDependencies": {

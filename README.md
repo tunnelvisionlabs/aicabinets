@@ -82,6 +82,19 @@ Use the npm helpers to deploy the extension to SketchUp 2026 and run TestUp CI l
   npm run testup:config
   ```
 
+- Generate a single-class TestUp YAML on the fly and run it (auto-deploys first):
+
+  ```cmd
+  npm run testup:class -- --class TC_Smoke --output "C:\\dev\\aicabinets\\dist\\class_results.json"
+  ```
+
+  Or set `TESTUP_CLASS`/`TESTUP_CONFIG` alternatives:
+
+  ```cmd
+  set TESTUP_CLASS=TC_Smoke
+  npm run testup:class
+  ```
+
 - Execute a custom Ruby script within SketchUp, close the active model without saving, and exit (auto-deploys first):
 
   ```cmd
@@ -102,6 +115,7 @@ Defaults assume SketchUp 2026 on Windows with `SketchUp.exe` in `%ProgramFiles%\
 - `SKETCHUP_VERSION` to adjust the default SketchUp version used for the paths above (defaults to `2026`)
 - `AI_CABINETS_TESTS` or `--tests <path>`
 - `TESTUP_CONFIG` or `--config <path>` (for `testup:config`)
+- `TESTUP_CLASS` or `--class <TestUpClass>` with optional `--output <results.json>` (for `testup:class`)
 - `STARTUP_RUBY` or `--script <path>` (for `sketchup:run`)
 
 Pass `--debug` after the command to echo resolved paths and the full SketchUp invocation.
