@@ -36,6 +36,7 @@ module AICabinets
       end
       MIN_DIMENSION_MM = 1.0e-3
       SUPPORTED_PROFILE_IDS = %w[square_inside shaker_inside shaker_bevel shaker].freeze
+      MITER_CUTTER_DEPTH_FUDGE_MM = 0.0
 
       def build_frame!(target:, params:, open_w_mm:, open_h_mm:)
         definition = ensure_mutable_definition(target)
@@ -373,39 +374,184 @@ module AICabinets
           rails << rail
         end
 
-        apply_group_metadata(stiles[0], role: GROUP_ROLE_STILE, name: 'Stile-L', tag: front_tag, material: material)
-        translate_group!(stiles[1], x_mm: outside_w_mm - stile_width_mm)
-        apply_group_metadata(stiles[1], role: GROUP_ROLE_STILE, name: 'Stile-R', tag: front_tag, material: material)
+          apply_group_metadata(stiles[0], role: GROUP_ROLE_STILE, name: 'Stile-L', tag: front_tag, material: material)
+          apply_group_metadata(stiles[1], role: GROUP_ROLE_STILE, name: 'Stile-R', tag: front_tag, material: material)
 
-        miter_result = apply_miters!(
-          stiles: stiles,
-          rails: rails,
-          height_mm: outside_h_mm,
-          width_mm: outside_w_mm,
-          booleans_available: booleans_available
-        )
+          miter_result = apply_miters!(
+            stiles: stiles,
+            rails: rails,
+            height_mm: outside_h_mm,
+            width_mm: outside_w_mm,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            booleans_available: booleans_available
+          )
         warnings.concat(miter_result[:warnings])
 
         { stiles: stiles, rails: rails, miter_mode: miter_result[:miter_mode], warnings: warnings }
       end
       private_class_method :build_miter_frame
 
-      def apply_miters!(stiles:, rails:, height_mm:, width_mm:, booleans_available:)
-        miter_mode = :intersect
+      def apply_miters!(stiles:, rails:, height_mm:, width_mm:, stile_width_mm:, rail_width_mm:, thickness_mm:, booleans_available:)
         warnings = []
+        success = false
+        miter_mode = :intersect
 
-        warnings << 'SketchUp solid boolean operations unavailable; generated miters via entity intersections.' unless booleans_available
+        if booleans_available
+          boolean_success = apply_miters_with_booleans!(
+            stiles: stiles,
+            rails: rails,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            height_mm: height_mm,
+            width_mm: width_mm
+          )
+          if boolean_success
+            success = true
+            miter_mode = :boolean_subtract
+          else
+            warnings << 'SketchUp solid boolean operations failed; generated miters via entity intersections.'
+          end
+        else
+          warnings << 'SketchUp solid boolean operations unavailable; generated miters via entity intersections.'
+        end
 
-        success = apply_miters_by_intersection!(
-          stiles: stiles,
-          rails: rails,
-          height_mm: height_mm,
-          width_mm: width_mm
-        )
+        unless success
+          success = apply_miters_by_intersection!(
+            stiles: stiles,
+            rails: rails,
+            height_mm: height_mm,
+            width_mm: width_mm
+          )
+          miter_mode = :intersect
+        end
 
         { success: success, miter_mode: miter_mode, warnings: warnings }
       end
       private_class_method :apply_miters!
+
+      def apply_miters_with_booleans!(stiles:, rails:, stile_width_mm:, rail_width_mm:, thickness_mm:, height_mm:, width_mm:)
+        stiles.each_with_index do |stile, index|
+          next unless stile&.valid?
+
+          stiles[index] = subtract_stile_miter!(
+            stile,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            height_mm: height_mm
+          )
+        end
+
+        rails.each_with_index do |rail, index|
+          next unless rail&.valid?
+
+          rails[index] = subtract_rail_miter!(
+            rail,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            width_mm: width_mm
+          )
+        end
+        true
+      rescue StandardError
+        false
+      end
+      private_class_method :apply_miters_with_booleans!
+
+      def subtract_stile_miter!(stile, stile_width_mm:, rail_width_mm:, thickness_mm:, height_mm:)
+        current = subtract_with_cutter!(
+          stile,
+          triangle_mm: [
+            [0.0, 0.0, 0.0],
+            [stile_width_mm, 0.0, 0.0],
+            [0.0, 0.0, rail_width_mm]
+          ],
+          thickness_mm: thickness_mm
+        )
+
+        subtract_with_cutter!(
+          current,
+          triangle_mm: [
+            [0.0, 0.0, height_mm],
+            [stile_width_mm, 0.0, height_mm],
+            [0.0, 0.0, height_mm - rail_width_mm]
+          ],
+          thickness_mm: thickness_mm
+        )
+      end
+      private_class_method :subtract_stile_miter!
+
+      def subtract_rail_miter!(rail, stile_width_mm:, rail_width_mm:, thickness_mm:, width_mm:)
+        current = subtract_with_cutter!(
+          rail,
+          triangle_mm: [
+            [0.0, 0.0, 0.0],
+            [stile_width_mm, 0.0, 0.0],
+            [0.0, 0.0, rail_width_mm]
+          ],
+          thickness_mm: thickness_mm
+        )
+
+        subtract_with_cutter!(
+          current,
+          triangle_mm: [
+            [width_mm, 0.0, rail_width_mm],
+            [width_mm, 0.0, 0.0],
+            [width_mm - stile_width_mm, 0.0, 0.0]
+          ],
+          thickness_mm: thickness_mm
+        )
+      end
+      private_class_method :subtract_rail_miter!
+
+      def subtract_with_cutter!(target_group, triangle_mm:, thickness_mm:)
+        parent_entities = parent_entities_for(target_group)
+        raise 'Unable to locate parent entities for miter cutter' unless parent_entities
+
+        cutter = parent_entities.add_group
+        points = triangle_mm.map { |coords| Units.point_mm(*coords) }
+        face = cutter.entities.add_face(points)
+        raise 'Failed to create miter cutter face' unless face
+
+        ensure_face_normal!(face, axis: :y)
+        push_distance = Units.to_length_mm(thickness_mm + MITER_CUTTER_DEPTH_FUDGE_MM)
+        face.pushpull(push_distance)
+        cutter.transform!(target_group.transformation)
+
+        original_layer = target_group.respond_to?(:layer) ? target_group.layer : nil
+        original_material = target_group.respond_to?(:material) ? target_group.material : nil
+        original_name = target_group.respond_to?(:name) ? target_group.name : nil
+        original_role = target_group.get_attribute(GROUP_DICTIONARY, GROUP_ROLE_KEY) if target_group.respond_to?(:get_attribute)
+
+        result_group = target_group.subtract(cutter)
+        raise 'Solid subtract failed' unless result_group&.valid?
+
+        assign_tag(result_group, original_layer)
+        assign_material(result_group, original_material)
+        if original_role
+          dictionary = result_group.attribute_dictionary(GROUP_DICTIONARY, true)
+          dictionary[GROUP_ROLE_KEY] = original_role
+        end
+        result_group.name = original_name if result_group.respond_to?(:name=) && original_name
+
+        result_group
+      ensure
+        cutter.erase! if cutter&.valid?
+      end
+      private_class_method :subtract_with_cutter!
+
+      def parent_entities_for(entity)
+        parent = entity.respond_to?(:parent) ? entity.parent : nil
+        return parent if parent.is_a?(Sketchup::Entities)
+        return parent.entities if parent.respond_to?(:entities)
+
+        nil
+      end
+      private_class_method :parent_entities_for
 
       def apply_miters_by_intersection!(stiles:, rails:, height_mm:, width_mm:)
         sorted_stiles = stiles.sort_by { |group| group.bounds.min.x }
@@ -480,15 +626,22 @@ module AICabinets
         return false unless group&.valid?
 
         entities = group.entities
-        plane_point = point
-        plane_normal = normal
+        inverse_transform = group.transformation.inverse
+
+        plane_point = point.clone
+        plane_point.transform!(inverse_transform)
+
+        plane_normal = normal.clone
+        plane_normal.transform!(inverse_transform)
+        plane_normal.normalize!
+
         size = (entities.bounds.diagonal.length.to_f * 1.5).clamp(Units.to_length_mm(10.0), Units.to_length_mm(5000.0))
 
         cutter = entities.add_group
         cutter_face = cutter.entities.add_face(plane_face_points(plane_point, plane_normal, size))
         raise 'Failed to create cutting face' unless cutter_face
 
-        entities.intersect_with(true, IDENTITY, entities, IDENTITY, true, cutter.entities.to_a)
+        entities.intersect_with(true, IDENTITY, cutter, cutter.transformation, true, cutter.entities.to_a)
         cutter.erase!
 
         plane_origin = plane_point
@@ -499,6 +652,8 @@ module AICabinets
           next unless face.valid?
 
           center = face.bounds.center
+          center.transform!(inverse_transform)
+
           offset = normal_vector.dot(center - plane_origin)
           erase = keep_positive ? offset < -tolerance : offset > tolerance
           entities.erase_entities(face) if erase

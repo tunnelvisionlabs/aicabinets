@@ -87,7 +87,7 @@ class TC_FivePieceFrameMiter < TestUp::TestCase
     )
 
     refute_empty(definition.entities.grep(Sketchup::Group))
-    model.undo
+    Sketchup.undo
     assert_empty(definition.entities.grep(Sketchup::Group))
   end
 
