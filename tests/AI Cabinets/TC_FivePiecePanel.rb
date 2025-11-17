@@ -3,7 +3,7 @@
 require 'testup/testcase'
 require_relative 'suite_helper'
 
-Sketchup.require('aicabinets/geom/five_piece')
+Sketchup.require('aicabinets/geometry/five_piece')
 Sketchup.require('aicabinets/geometry/five_piece_panel')
 Sketchup.require('aicabinets/params/five_piece')
 Sketchup.require('aicabinets/capabilities')

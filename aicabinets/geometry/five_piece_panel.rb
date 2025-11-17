@@ -312,8 +312,8 @@ module AICabinets
 
       def apply_panel_metadata(group, model:, material_id:)
         group.name = 'Panel'
-        tag = AICabinets::Tags.ensure_tag!(model: model, path: 'AICabinets/Fronts')
-        group.layer = tag
+        tag = AICabinets::Ops::Tags.ensure_tag(model, 'AICabinets/Fronts')
+        group.layer = tag if tag
 
         material = AICabinets::Ops::Materials.find_or_default(model: model, material_id: material_id)
         group.material = material if material

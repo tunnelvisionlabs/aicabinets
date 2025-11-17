@@ -54,6 +54,28 @@ module AICabinets
           to_length_mm(z_mm)
         )
       end
+
+      # Converts a Length or numeric value expressed in millimeters to a
+      # floating-point millimeter value.
+      #
+      # @param value [Numeric, Sketchup::Length]
+      # @return [Float, nil]
+      def length_to_mm(value)
+        return unless value
+
+        if LENGTH_CLASS && value.is_a?(LENGTH_CLASS)
+          return value.to_mm.to_f if value.respond_to?(:to_mm)
+          return value.to_f if value.respond_to?(:to_f)
+        end
+
+        if value.respond_to?(:to_mm)
+          return value.to_mm.to_f
+        end
+
+        return value.to_f if value.is_a?(Numeric)
+
+        nil
+      end
     end
   end
 end
