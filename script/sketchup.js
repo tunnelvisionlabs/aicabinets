@@ -80,18 +80,40 @@ function copyExtension(pluginsDir, debug) {
   fs.cpSync(supportSrc, supportDst, { recursive: true });
 }
 
-function runSketchUp(exePath, args, debug) {
+function runSketchUp(exePath, args, debug, { capture = false } = {}) {
   return new Promise((resolve, reject) => {
     logDebug(debug, `Launching SketchUp: ${exePath} ${args.map((arg) => JSON.stringify(arg)).join(' ')}`);
-    const child = spawn(exePath, args, { stdio: 'inherit' });
+
+    const child = spawn(exePath, args, {
+      stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+    });
+
+    const stdoutChunks = [];
+    const stderrChunks = [];
+
+    if (capture && child.stdout && child.stderr) {
+      child.stdout.on('data', (data) => {
+        stdoutChunks.push(data);
+        process.stdout.write(data);
+      });
+      child.stderr.on('data', (data) => {
+        stderrChunks.push(data);
+        process.stderr.write(data);
+      });
+    }
+
     child.on('error', (error) => {
       reject(new Error(`Failed to launch SketchUp: ${error.message}`));
     });
+
     child.on('exit', (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString();
+      const stderr = Buffer.concat(stderrChunks).toString();
+
       if (code !== 0) {
-        reject(new Error(`SketchUp exited with status ${code}`));
+        reject(new Error(`SketchUp exited with status ${code}\n${stdout}${stderr ? `\n${stderr}` : ''}`));
       } else {
-        resolve();
+        resolve({ stdout, stderr });
       }
     });
   });
@@ -159,7 +181,12 @@ async function runTestUpAll(paths) {
   ensureExists(paths.testsRoot, 'AI Cabinets TestUp suite');
   console.log(`Running TestUp suite from ${paths.testsRoot}`);
   const arg = `TestUp:CI:Path: ${paths.testsRoot}`;
-  await runSketchUp(paths.sketchupExe, ['-RubyStartupArg', arg], paths.debug);
+  await runSketchUp(
+    paths.sketchupExe,
+    ['-RubyStartupArg', arg],
+    paths.debug,
+    { capture: true },
+  );
   console.log('TestUp suite completed.');
 }
 
@@ -173,7 +200,12 @@ async function runTestUpConfig(paths, configPath) {
   }
   const arg = `TestUp:CI:Config: ${resolvedConfig}`;
   console.log(`Running TestUp config from ${resolvedConfig}`);
-  await runSketchUp(paths.sketchupExe, ['-RubyStartupArg', arg], paths.debug);
+  await runSketchUp(
+    paths.sketchupExe,
+    ['-RubyStartupArg', arg],
+    paths.debug,
+    { capture: true },
+  );
   if (outputHint) {
     console.log(`Results should be written to: ${outputHint}`);
   }
