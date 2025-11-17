@@ -1,9 +1,10 @@
 {
-  "version": 1,
+  "version": 2,
   "cabinet_base": {
     "width_mm": 600,
     "depth_mm": 600,
     "height_mm": 720,
+    "overlay_mm": 0,
     "panel_thickness_mm": 18,
     "toe_kick_height_mm": 100,
     "toe_kick_depth_mm": 50,

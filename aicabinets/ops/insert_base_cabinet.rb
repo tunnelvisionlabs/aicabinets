@@ -6,6 +6,7 @@ require 'sketchup.rb'
 
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
+require 'aicabinets/ops/params_schema'
 
 Sketchup.require('aicabinets/generator/carcass')
 Sketchup.require('aicabinets/ops/tags')
@@ -18,7 +19,7 @@ module AICabinets
 
       OPERATION_NAME = 'AI Cabinets — Insert Base Cabinet'
       DICTIONARY_NAME = 'AICabinets'
-      SCHEMA_VERSION = 1
+      SCHEMA_VERSION = AICabinets::Ops::ParamsSchema::CURRENT_VERSION
       SCHEMA_VERSION_KEY = 'schema_version'
       TYPE_KEY = 'type'
       TYPE_VALUE = 'base'
@@ -206,8 +207,7 @@ module AICabinets
       private_class_method :validate_params!
 
       def build_definition_key(params)
-        canonical = canonicalize(params)
-        json = JSON.generate(canonical)
+        json = AICabinets::Ops::ParamsSchema.canonical_json(params, cabinet_type: TYPE_VALUE)
         digest = Digest::SHA256.hexdigest(json)
         [digest, json]
       end
@@ -237,9 +237,13 @@ module AICabinets
 
           stored_def_key = dict[DEF_KEY]
           legacy_fingerprint = dict[LEGACY_FINGERPRINT_KEY]
-          next unless stored_def_key == def_key || legacy_fingerprint == def_key
+          return definition if stored_def_key == def_key || legacy_fingerprint == def_key
 
-          return definition
+          params_json = dict[PARAMS_JSON_KEY]
+          next unless params_json.is_a?(String) && !params_json.empty?
+
+          stored_digest = AICabinets::Ops::ParamsSchema.digest_from_json(params_json, cabinet_type: TYPE_VALUE)
+          return definition if stored_digest == def_key
         end
 
         nil
@@ -302,20 +306,6 @@ module AICabinets
         selection.add(instance) if instance&.valid?
       end
       private_class_method :select_instance
-
-      def canonicalize(value)
-        case value
-        when Hash
-          value.keys.sort_by(&:to_s).each_with_object({}) do |key, memo|
-            memo[key.to_s] = canonicalize(value[key])
-          end
-        when Array
-          value.map { |item| canonicalize(item) }
-        else
-          value
-        end
-      end
-      private_class_method :canonicalize
 
       def deep_copy(value)
         case value

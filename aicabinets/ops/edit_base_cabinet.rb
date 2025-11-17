@@ -7,6 +7,7 @@ require 'sketchup.rb'
 Sketchup.require('aicabinets/generator/carcass')
 Sketchup.require('aicabinets/ops/insert_base_cabinet')
 Sketchup.require('aicabinets/tags')
+Sketchup.require('aicabinets/ops/params_schema')
 
 module AICabinets
   module Ops
@@ -18,7 +19,7 @@ module AICabinets
 
       DICTIONARY_NAME = InsertBaseCabinet::DICTIONARY_NAME
       SCHEMA_VERSION_KEY = InsertBaseCabinet::SCHEMA_VERSION_KEY
-      SCHEMA_VERSION = InsertBaseCabinet::SCHEMA_VERSION
+      SCHEMA_VERSION = AICabinets::Ops::ParamsSchema::CURRENT_VERSION
       TYPE_KEY = InsertBaseCabinet::TYPE_KEY
       TYPE_VALUE = InsertBaseCabinet::TYPE_VALUE
       LEGACY_TYPE_VALUES = InsertBaseCabinet::LEGACY_TYPE_VALUES
@@ -51,8 +52,11 @@ module AICabinets
         end
 
         def_key, params_json = build_definition_key(params)
-        if definition.get_attribute(DICTIONARY_NAME, DEF_KEY) == def_key &&
-           definition.get_attribute(DICTIONARY_NAME, PARAMS_JSON_KEY) == params_json
+        stored_params_json = definition.get_attribute(DICTIONARY_NAME, PARAMS_JSON_KEY)
+        stored_def_key = definition.get_attribute(DICTIONARY_NAME, DEF_KEY)
+        stored_digest = AICabinets::Ops::ParamsSchema.digest_from_json(stored_params_json, cabinet_type: TYPE_VALUE)
+
+        if stored_def_key == def_key && stored_params_json == params_json && stored_digest == def_key
           return { ok: true }
         end
 
@@ -153,26 +157,11 @@ module AICabinets
       private_class_method :cabinet_definition?
 
       def build_definition_key(params)
-        canonical = canonicalize(params)
-        json = JSON.generate(canonical)
+        json = AICabinets::Ops::ParamsSchema.canonical_json(params, cabinet_type: TYPE_VALUE)
         digest = Digest::SHA256.hexdigest(json)
         [digest, json]
       end
       private_class_method :build_definition_key
-
-      def canonicalize(value)
-        case value
-        when Hash
-          value.keys.sort_by(&:to_s).each_with_object({}) do |key, memo|
-            memo[key.to_s] = canonicalize(value[key])
-          end
-        when Array
-          value.map { |item| canonicalize(item) }
-        else
-          value
-        end
-      end
-      private_class_method :canonicalize
 
       def ensure_definition_for_scope(instance, scope)
         case scope

@@ -14,7 +14,7 @@ module AICabinets
     DEFAULTS_PATH = File.join(DATA_DIR, 'defaults.json')
     OVERRIDES_PATH = File.join(USER_DIR, 'overrides.json')
     OVERRIDES_TEMP_PATH = "#{OVERRIDES_PATH}.tmp"
-    DEFAULT_VERSION = 1
+    DEFAULT_VERSION = 2
     NORMALIZATION_PRECISION = 3 # store mm values with 0.001 mm precision
 
     FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
@@ -58,6 +58,7 @@ module AICabinets
       width_mm: 600.0,
       depth_mm: 600.0,
       height_mm: 720.0,
+      overlay_mm: 0.0,
       panel_thickness_mm: 18.0,
       toe_kick_height_mm: 100.0,
       toe_kick_depth_mm: 50.0,
