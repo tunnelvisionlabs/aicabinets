@@ -32,9 +32,18 @@ module AICabinets
         active_operation_name =
           model.respond_to?(:active_operation_name) ? model.active_operation_name.to_s : ''
         operation_started = false
+        operation_transparent = false
         begin
-          if model && active_operation_name.empty? && model.respond_to?(:start_operation)
-            operation_started = model.start_operation('AI Cabinets: Face Frame', true)
+          if model && model.respond_to?(:start_operation)
+            start_transparent = !active_operation_name.empty?
+            started = model.start_operation(
+              'AI Cabinets: Face Frame',
+              true,
+              false,
+              start_transparent
+            )
+            operation_started = started
+            operation_transparent = start_transparent if started
           end
 
           thickness = Ops::Units.to_length_mm(thickness_mm)
@@ -93,7 +102,9 @@ module AICabinets
 
           group
         rescue StandardError
-          model.abort_operation if operation_started && model.respond_to?(:abort_operation)
+          if operation_started && !operation_transparent && model.respond_to?(:abort_operation)
+            model.abort_operation
+          end
           raise
         ensure
           if operation_started && model.respond_to?(:commit_operation)

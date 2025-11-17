@@ -43,12 +43,18 @@ module AICabinets
 
       tag = nil
       operation_open = false
+      operation_transparent = false
       active_operation_name =
         model.respond_to?(:active_operation_name) ? model.active_operation_name.to_s : ''
       begin
         if changes_required
-          operation_open = active_operation_name.empty? &&
-                           model.start_operation(OPERATION_NAME, true, true)
+          if active_operation_name.empty?
+            operation_open = model.start_operation(OPERATION_NAME, true)
+          else
+            started = model.start_operation(OPERATION_NAME, true, false, true)
+            operation_open = started
+            operation_transparent = started
+          end
           folder ||= layers.add_folder(CABINET_FOLDER_NAME)
 
           base_names.each do |base_name|
@@ -58,16 +64,13 @@ module AICabinets
 
           tag = normalize_owned_tag(layers, folder, CABINET_TAG_NAME, create_if_missing: true)
 
-          if operation_open
-            model.commit_operation
-            operation_open = false
-          end
+          model.commit_operation if operation_open
         else
           folder ||= infer_folder(layers)
           tag = normalize_owned_tag(layers, folder, CABINET_TAG_NAME, create_if_missing: true)
         end
       ensure
-        model.abort_operation if operation_open
+        model.abort_operation if operation_open && !operation_transparent
       end
 
       tag
