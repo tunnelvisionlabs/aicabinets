@@ -143,15 +143,43 @@ function renderWrapper(startupScript) {
 `  STDERR.puts("Close failure: #{error.message}")\n` +
 `  error.backtrace.each { |line| STDERR.puts(line) }\n` +
 `end\n\n` +
+`def save_dirty_model_to_temp\n` +
+`  model = Sketchup.active_model\n` +
+`  return nil unless model&.respond_to?(:modified?)\n` +
+`  return nil unless model.modified?\n` +
+`  temp_path = File.join(\n` +
+`    Sketchup.temp_dir,\n` +
+`    "aicabinets-autosave-#{Process.pid}-#{Time.now.to_i}.skp"\n` +
+`  )\n` +
+`  if model.save(temp_path)\n` +
+`    temp_path\n` +
+`  end\n` +
+`rescue => error\n` +
+`  STDERR.puts("Temp save failure: #{error.message}")\n` +
+`  error.backtrace.each { |line| STDERR.puts(line) }\n` +
+`  nil\n` +
+`end\n\n` +
+`def cleanup_temp_file(path)\n` +
+`  return unless path\n` +
+`  File.delete(path) if File.exist?(path)\n` +
+`rescue => error\n` +
+`  STDERR.puts("Temp delete failure: #{error.message}")\n` +
+`  error.backtrace.each { |line| STDERR.puts(line) }\n` +
+`end\n\n` +
+`temp_save_path = nil\n\n` +
 `begin\n` +
 `  load '${startupScript.replace(/\\/g, '\\\\')}'\n` +
 `rescue => error\n` +
 `  STDERR.puts("Script error: #{error.message}")\n` +
 `  error.backtrace.each { |line| STDERR.puts(line) }\n` +
+`ensure\n` +
+`  temp_save_path ||= save_dirty_model_to_temp\n` +
 `end\n\n` +
 `begin\n` +
+`  temp_save_path ||= save_dirty_model_to_temp\n` +
 `  close_without_save\n` +
 `ensure\n` +
+`  cleanup_temp_file(temp_save_path)\n` +
 `  Sketchup.quit\n` +
 `end\n`;
 }
