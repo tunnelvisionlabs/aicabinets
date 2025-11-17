@@ -16,6 +16,7 @@ module AICabinets
       module_function
 
       Units = AICabinets::Ops::Units
+      IDENTITY = Geom::Transformation.new
 
       OPERATION_NAME = 'AI Cabinets: Build Five-Piece Frame'.freeze
       GROUP_DICTIONARY = 'AICabinets::FivePieceFrame'.freeze
@@ -35,6 +36,7 @@ module AICabinets
       end
       MIN_DIMENSION_MM = 1.0e-3
       SUPPORTED_PROFILE_IDS = %w[square_inside shaker_inside shaker_bevel shaker].freeze
+      MITER_CUTTER_DEPTH_FUDGE_MM = 0.0
 
       def build_frame!(target:, params:, open_w_mm:, open_h_mm:)
         definition = ensure_mutable_definition(target)
@@ -42,8 +44,8 @@ module AICabinets
         raise ArgumentError, 'Definition has no owning model' unless model
 
         validated = AICabinets::Params::FivePiece.validate!(params: params)
+        joint_type = ensure_joint_type!(validated[:joint_type])
         ensure_supported_profile!(validated[:inside_profile_id])
-        ensure_joint_type!(validated[:joint_type])
 
         stile_width_mm = positive_length!(validated[:stile_width_mm], 'stile_width_mm')
         rail_width_mm = validated[:rail_width_mm]
@@ -52,8 +54,11 @@ module AICabinets
         open_width_mm = positive_length!(open_w_mm, 'open_w_mm')
         open_height_mm = positive_length!(open_h_mm, 'open_h_mm')
 
-        raise ArgumentError, 'Opening width must exceed twice the stile width' if open_width_mm <= (2.0 * stile_width_mm) + MIN_DIMENSION_MM
-        raise ArgumentError, 'Opening height must exceed twice the rail width' if open_height_mm <= (2.0 * rail_width_mm) + MIN_DIMENSION_MM
+        outside_w_mm = open_width_mm + (2.0 * stile_width_mm)
+        outside_h_mm = open_height_mm + (2.0 * rail_width_mm)
+
+        raise ArgumentError, 'Opening width must be positive' unless open_width_mm > MIN_DIMENSION_MM
+        raise ArgumentError, 'Opening height must be positive' unless open_height_mm > MIN_DIMENSION_MM
 
         front_tag = ensure_fronts_tag(model)
         material = resolve_frame_material(model, validated[:frame_material_id])
@@ -62,6 +67,7 @@ module AICabinets
         stiles = []
         rails = []
         coping_mode = nil
+        miter_mode = nil
 
         operation_open = false
         begin
@@ -73,52 +79,77 @@ module AICabinets
           stile_profile_run_mm = [[SHAKER_PROFILE_RUN_MM, stile_width_mm].min, MIN_DIMENSION_MM].max
           rail_profile_run_mm = [[SHAKER_PROFILE_RUN_MM, rail_width_mm].min, MIN_DIMENSION_MM].max
 
-          stiles = build_stiles(
-            definition.entities,
-            open_width_mm: open_width_mm,
-            stile_width_mm: stile_width_mm,
-            height_mm: open_height_mm,
-            thickness_mm: thickness_mm,
-            profile_depth_mm: profile_depth_mm,
-            profile_run_mm: stile_profile_run_mm,
-            material: material,
-            front_tag: front_tag
-          )
-
-          inner_length_mm = open_width_mm - (2.0 * stile_width_mm)
-          raise ArgumentError, 'Opening width too small for rails' unless inner_length_mm > MIN_DIMENSION_MM
-
-          if AICabinets::Capabilities.solid_booleans?
-            rails = build_rails(
+          case joint_type
+          when 'cope_stick'
+            stiles = build_stiles(
               definition.entities,
+              open_width_mm: outside_w_mm,
               stile_width_mm: stile_width_mm,
-              inner_length_mm: inner_length_mm,
-              rail_width_mm: rail_width_mm,
+              height_mm: outside_h_mm,
               thickness_mm: thickness_mm,
               profile_depth_mm: profile_depth_mm,
-              profile_run_mm: rail_profile_run_mm,
-              open_height_mm: open_height_mm,
+              profile_run_mm: stile_profile_run_mm,
               material: material,
-              front_tag: front_tag,
-              _coping: true
+              front_tag: front_tag
             )
-            coping_mode = :boolean_subtract
-          else
-            rails = build_rails(
+
+            inner_length_mm = outside_w_mm - (2.0 * stile_width_mm)
+            raise ArgumentError, 'Opening width too small for rails' unless inner_length_mm > MIN_DIMENSION_MM
+
+            if AICabinets::Capabilities.solid_booleans?
+              rails = build_rails(
+                definition.entities,
+                stile_width_mm: stile_width_mm,
+                inner_length_mm: inner_length_mm,
+                rail_width_mm: rail_width_mm,
+                thickness_mm: thickness_mm,
+                profile_depth_mm: profile_depth_mm,
+                profile_run_mm: rail_profile_run_mm,
+                open_height_mm: outside_h_mm,
+                material: material,
+                front_tag: front_tag,
+                _coping: true
+              )
+              coping_mode = :boolean_subtract
+            else
+              rails = build_rails(
+                definition.entities,
+                stile_width_mm: stile_width_mm,
+                inner_length_mm: inner_length_mm,
+                rail_width_mm: rail_width_mm,
+                thickness_mm: thickness_mm,
+                profile_depth_mm: profile_depth_mm,
+                profile_run_mm: rail_profile_run_mm,
+                open_height_mm: outside_h_mm,
+                material: material,
+                front_tag: front_tag,
+                _coping: false
+              )
+              coping_mode = :square_fallback
+              warnings << 'SketchUp solid boolean operations unavailable; generated square rail ends.'
+            end
+          when 'miter'
+            result = build_miter_frame(
               definition.entities,
               stile_width_mm: stile_width_mm,
-              inner_length_mm: inner_length_mm,
               rail_width_mm: rail_width_mm,
+              outside_w_mm: outside_w_mm,
+              outside_h_mm: outside_h_mm,
               thickness_mm: thickness_mm,
               profile_depth_mm: profile_depth_mm,
-              profile_run_mm: rail_profile_run_mm,
-              open_height_mm: open_height_mm,
+              profile_run_mm: {
+                stile: stile_profile_run_mm,
+                rail: rail_profile_run_mm
+              },
               material: material,
               front_tag: front_tag,
-              _coping: false
+              booleans_available: AICabinets::Capabilities.solid_booleans?
             )
-            coping_mode = :square_fallback
-            warnings << 'SketchUp solid boolean operations unavailable; generated square rail ends.'
+
+            stiles = result[:stiles]
+            rails = result[:rails]
+            miter_mode = result[:miter_mode]
+            warnings.concat(result[:warnings])
           end
 
           model.commit_operation if operation_open
@@ -131,6 +162,8 @@ module AICabinets
           stiles: stiles,
           rails: rails,
           coping_mode: coping_mode,
+          joint_type: joint_type.to_sym,
+          miter_mode: miter_mode,
           warnings: warnings
         }
       end
@@ -176,9 +209,10 @@ module AICabinets
       private_class_method :ensure_supported_profile!
 
       def ensure_joint_type!(joint_type)
-        return if joint_type.to_s == 'cope_stick'
+        normalized = joint_type.to_s
+        return normalized if %w[cope_stick miter].include?(normalized)
 
-        raise ArgumentError, 'Five-piece frame generator only supports joint_type "cope_stick"'
+        raise ArgumentError, 'Five-piece frame generator only supports joint_type "cope_stick" or "miter"'
       end
       private_class_method :ensure_joint_type!
 
@@ -307,6 +341,347 @@ module AICabinets
         points.map { |coords| Units.point_mm(*coords) }
       end
       private_class_method :rail_profile_points
+
+      def build_miter_frame(entities, stile_width_mm:, rail_width_mm:, outside_w_mm:, outside_h_mm:, thickness_mm:, profile_depth_mm:, profile_run_mm:, material:, front_tag:, booleans_available:)
+        warnings = []
+
+        stiles = build_stiles(
+          entities,
+          open_width_mm: outside_w_mm,
+          stile_width_mm: stile_width_mm,
+          height_mm: outside_h_mm,
+          thickness_mm: thickness_mm,
+          profile_depth_mm: profile_depth_mm,
+          profile_run_mm: profile_run_mm.fetch(:stile, stile_width_mm),
+          material: material,
+          front_tag: front_tag
+        )
+
+        rails = []
+        %i[bottom top].each do |role|
+          rail = create_rail_group(
+            entities,
+            length_mm: outside_w_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            profile_depth_mm: profile_depth_mm,
+            profile_run_mm: profile_run_mm.fetch(:rail, rail_width_mm),
+            inside_edge: role == :bottom ? :top : :bottom
+          )
+
+          translate_group!(rail, z_mm: role == :bottom ? 0.0 : outside_h_mm - rail_width_mm)
+          apply_group_metadata(rail, role: GROUP_ROLE_RAIL, name: role == :bottom ? 'Rail-Bottom' : 'Rail-Top', tag: front_tag, material: material)
+          rails << rail
+        end
+
+          apply_group_metadata(stiles[0], role: GROUP_ROLE_STILE, name: 'Stile-L', tag: front_tag, material: material)
+          apply_group_metadata(stiles[1], role: GROUP_ROLE_STILE, name: 'Stile-R', tag: front_tag, material: material)
+
+          miter_result = apply_miters!(
+            stiles: stiles,
+            rails: rails,
+            height_mm: outside_h_mm,
+            width_mm: outside_w_mm,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            booleans_available: booleans_available
+          )
+        warnings.concat(miter_result[:warnings])
+
+        { stiles: stiles, rails: rails, miter_mode: miter_result[:miter_mode], warnings: warnings }
+      end
+      private_class_method :build_miter_frame
+
+      def apply_miters!(stiles:, rails:, height_mm:, width_mm:, stile_width_mm:, rail_width_mm:, thickness_mm:, booleans_available:)
+        warnings = []
+        success = false
+        miter_mode = :intersect
+
+        if booleans_available
+          boolean_success = apply_miters_with_booleans!(
+            stiles: stiles,
+            rails: rails,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            height_mm: height_mm,
+            width_mm: width_mm
+          )
+          if boolean_success
+            success = true
+            miter_mode = :boolean_subtract
+          else
+            warnings << 'SketchUp solid boolean operations failed; generated miters via entity intersections.'
+          end
+        else
+          warnings << 'SketchUp solid boolean operations unavailable; generated miters via entity intersections.'
+        end
+
+        unless success
+          success = apply_miters_by_intersection!(
+            stiles: stiles,
+            rails: rails,
+            height_mm: height_mm,
+            width_mm: width_mm
+          )
+          miter_mode = :intersect
+        end
+
+        { success: success, miter_mode: miter_mode, warnings: warnings }
+      end
+      private_class_method :apply_miters!
+
+      def apply_miters_with_booleans!(stiles:, rails:, stile_width_mm:, rail_width_mm:, thickness_mm:, height_mm:, width_mm:)
+        stiles.each_with_index do |stile, index|
+          next unless stile&.valid?
+
+          stiles[index] = subtract_stile_miter!(
+            stile,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            height_mm: height_mm
+          )
+        end
+
+        rails.each_with_index do |rail, index|
+          next unless rail&.valid?
+
+          rails[index] = subtract_rail_miter!(
+            rail,
+            stile_width_mm: stile_width_mm,
+            rail_width_mm: rail_width_mm,
+            thickness_mm: thickness_mm,
+            width_mm: width_mm
+          )
+        end
+        true
+      rescue StandardError
+        false
+      end
+      private_class_method :apply_miters_with_booleans!
+
+      def subtract_stile_miter!(stile, stile_width_mm:, rail_width_mm:, thickness_mm:, height_mm:)
+        current = subtract_with_cutter!(
+          stile,
+          triangle_mm: [
+            [0.0, 0.0, 0.0],
+            [stile_width_mm, 0.0, 0.0],
+            [0.0, 0.0, rail_width_mm]
+          ],
+          thickness_mm: thickness_mm
+        )
+
+        subtract_with_cutter!(
+          current,
+          triangle_mm: [
+            [0.0, 0.0, height_mm],
+            [stile_width_mm, 0.0, height_mm],
+            [0.0, 0.0, height_mm - rail_width_mm]
+          ],
+          thickness_mm: thickness_mm
+        )
+      end
+      private_class_method :subtract_stile_miter!
+
+      def subtract_rail_miter!(rail, stile_width_mm:, rail_width_mm:, thickness_mm:, width_mm:)
+        current = subtract_with_cutter!(
+          rail,
+          triangle_mm: [
+            [0.0, 0.0, 0.0],
+            [stile_width_mm, 0.0, 0.0],
+            [0.0, 0.0, rail_width_mm]
+          ],
+          thickness_mm: thickness_mm
+        )
+
+        subtract_with_cutter!(
+          current,
+          triangle_mm: [
+            [width_mm, 0.0, rail_width_mm],
+            [width_mm, 0.0, 0.0],
+            [width_mm - stile_width_mm, 0.0, 0.0]
+          ],
+          thickness_mm: thickness_mm
+        )
+      end
+      private_class_method :subtract_rail_miter!
+
+      def subtract_with_cutter!(target_group, triangle_mm:, thickness_mm:)
+        parent_entities = parent_entities_for(target_group)
+        raise 'Unable to locate parent entities for miter cutter' unless parent_entities
+
+        cutter = parent_entities.add_group
+        points = triangle_mm.map { |coords| Units.point_mm(*coords) }
+        face = cutter.entities.add_face(points)
+        raise 'Failed to create miter cutter face' unless face
+
+        ensure_face_normal!(face, axis: :y)
+        push_distance = Units.to_length_mm(thickness_mm + MITER_CUTTER_DEPTH_FUDGE_MM)
+        face.pushpull(push_distance)
+        cutter.transform!(target_group.transformation)
+
+        original_layer = target_group.respond_to?(:layer) ? target_group.layer : nil
+        original_material = target_group.respond_to?(:material) ? target_group.material : nil
+        original_name = target_group.respond_to?(:name) ? target_group.name : nil
+        original_role = target_group.get_attribute(GROUP_DICTIONARY, GROUP_ROLE_KEY) if target_group.respond_to?(:get_attribute)
+
+        result_group = target_group.subtract(cutter)
+        raise 'Solid subtract failed' unless result_group&.valid?
+
+        assign_tag(result_group, original_layer)
+        assign_material(result_group, original_material)
+        if original_role
+          dictionary = result_group.attribute_dictionary(GROUP_DICTIONARY, true)
+          dictionary[GROUP_ROLE_KEY] = original_role
+        end
+        result_group.name = original_name if result_group.respond_to?(:name=) && original_name
+
+        result_group
+      ensure
+        cutter.erase! if cutter&.valid?
+      end
+      private_class_method :subtract_with_cutter!
+
+      def parent_entities_for(entity)
+        parent = entity.respond_to?(:parent) ? entity.parent : nil
+        return parent if parent.is_a?(Sketchup::Entities)
+        return parent.entities if parent.respond_to?(:entities)
+
+        nil
+      end
+      private_class_method :parent_entities_for
+
+      def apply_miters_by_intersection!(stiles:, rails:, height_mm:, width_mm:)
+        sorted_stiles = stiles.sort_by { |group| group.bounds.min.x }
+        left_stile, right_stile = sorted_stiles
+
+        cut_group_with_plane!(
+          left_stile,
+          point: Units.point_mm(0.0, 0.0, 0.0),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: false
+        )
+
+        cut_group_with_plane!(
+          left_stile,
+          point: Units.point_mm(0.0, 0.0, height_mm),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: true
+        )
+
+        cut_group_with_plane!(
+          right_stile,
+          point: Units.point_mm(width_mm, 0.0, 0.0),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: false
+        )
+
+        cut_group_with_plane!(
+          right_stile,
+          point: Units.point_mm(width_mm, 0.0, height_mm),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: true
+        )
+
+        sorted_rails = rails.sort_by { |group| group.bounds.min.z }
+        bottom_rail, top_rail = sorted_rails
+
+        cut_group_with_plane!(
+          bottom_rail,
+          point: Units.point_mm(0.0, 0.0, 0.0),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: true
+        )
+
+        cut_group_with_plane!(
+          bottom_rail,
+          point: Units.point_mm(width_mm, 0.0, 0.0),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: true
+        )
+
+        cut_group_with_plane!(
+          top_rail,
+          point: Units.point_mm(0.0, 0.0, height_mm),
+          normal: Geom::Vector3d.new(-1.0, 0.0, -1.0),
+          keep_positive: false
+        )
+
+        cut_group_with_plane!(
+          top_rail,
+          point: Units.point_mm(width_mm, 0.0, height_mm),
+          normal: Geom::Vector3d.new(1.0, 0.0, -1.0),
+          keep_positive: false
+        )
+
+        true
+      rescue StandardError
+        false
+      end
+      private_class_method :apply_miters_by_intersection!
+
+      def cut_group_with_plane!(group, point:, normal:, keep_positive: true)
+        return false unless group&.valid?
+
+        entities = group.entities
+        inverse_transform = group.transformation.inverse
+
+        plane_point = point.clone
+        plane_point.transform!(inverse_transform)
+
+        plane_normal = normal.clone
+        plane_normal.transform!(inverse_transform)
+        plane_normal.normalize!
+
+        size = (entities.bounds.diagonal.length.to_f * 1.5).clamp(Units.to_length_mm(10.0), Units.to_length_mm(5000.0))
+
+        cutter = entities.add_group
+        cutter_face = cutter.entities.add_face(plane_face_points(plane_point, plane_normal, size))
+        raise 'Failed to create cutting face' unless cutter_face
+
+        entities.intersect_with(true, IDENTITY, cutter, cutter.transformation, true, cutter.entities.to_a)
+        cutter.erase!
+
+        plane_origin = plane_point
+        normal_vector = plane_normal
+        tolerance = Units.to_length_mm(0.1)
+
+        entities.grep(Sketchup::Face).each do |face|
+          next unless face.valid?
+
+          center = face.bounds.center
+          center.transform!(inverse_transform)
+
+          offset = normal_vector.dot(center - plane_origin)
+          erase = keep_positive ? offset < -tolerance : offset > tolerance
+          entities.erase_entities(face) if erase
+        end
+
+        loose_edges = entities.grep(Sketchup::Edge).select { |edge| edge.valid? && edge.faces.empty? }
+        entities.erase_entities(loose_edges) if loose_edges.any?
+
+        true
+      end
+      private_class_method :cut_group_with_plane!
+
+      def plane_face_points(origin, normal, size)
+        unit_normal = normal.normalize
+        axis = unit_normal.parallel?(Geom::Vector3d.new(0, 0, 1)) ? Geom::Vector3d.new(0, 1, 0) : Geom::Vector3d.new(0, 0, 1)
+        u = unit_normal.cross(axis)
+        u.length = size
+        v = unit_normal.cross(u)
+        v.length = size
+
+        [
+          origin.offset(u + v),
+          origin.offset(u - v),
+          origin.offset(-u - v),
+          origin.offset(-u + v)
+        ]
+      end
+      private_class_method :plane_face_points
 
 
       def apply_group_metadata(group, role:, name:, tag:, material:)

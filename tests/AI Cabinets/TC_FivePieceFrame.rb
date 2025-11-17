@@ -102,6 +102,7 @@ class TC_FivePieceFrame < TestUp::TestCase
     assert_equal(:boolean_subtract, result[:coping_mode])
 
     expected_length = open_w_mm - (2.0 * stile_width_mm)
+    expected_length = open_w_mm
     result[:rails].each do |rail|
       length_mm = rail_length_mm(rail)
       AICabinetsTestHelper.assert_within_tolerance(self, expected_length, length_mm)
@@ -128,6 +129,7 @@ class TC_FivePieceFrame < TestUp::TestCase
     assert(result[:warnings].any? { |message| message.include?('solid boolean') })
 
     expected_length = open_w_mm - (2.0 * stile_width_mm)
+    expected_length = open_w_mm
     result[:rails].each do |rail|
       length_mm = rail_length_mm(rail)
       AICabinetsTestHelper.assert_within_tolerance(self, expected_length, length_mm)
