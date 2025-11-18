@@ -40,7 +40,7 @@ class TC_DrawerShortRules < TestUp::TestCase
     params[:min_panel_opening_mm] = 60.0
 
     decision = AICabinets::Rules::FivePiece.evaluate_drawer_front(
-      open_outside_w_mm: 400.0,
+      _open_outside_w_mm: 400.0,
       open_outside_h_mm: 180.0,
       params: params
     )
@@ -58,7 +58,7 @@ class TC_DrawerShortRules < TestUp::TestCase
     params[:min_panel_opening_mm] = 100.0
 
     decision = AICabinets::Rules::FivePiece.evaluate_drawer_front(
-      open_outside_w_mm: 320.0,
+      _open_outside_w_mm: 320.0,
       open_outside_h_mm: 140.0,
       params: params
     )

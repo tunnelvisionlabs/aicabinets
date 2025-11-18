@@ -395,7 +395,7 @@ module AICabinets
 
           if drawer
             decision = AICabinets::Rules::FivePiece.evaluate_drawer_front(
-              open_outside_w_mm: width_mm,
+              _open_outside_w_mm: width_mm,
               open_outside_h_mm: height_mm,
               params: params
             )
