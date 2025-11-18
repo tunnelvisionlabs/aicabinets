@@ -455,6 +455,11 @@
 
   var UI_PAYLOAD_VERSION = '1.0.0';
 
+  var STYLE_ENABLED = ['base', 'upper'];
+  var STYLE_DISABLED = ['tall', 'corner'];
+  var STYLE_TOOLTIP = 'Coming soon';
+  var DEFAULT_STYLE = 'base';
+
   var stringsNamespace = uiRoot.Strings || {};
 
   function formatTemplate(template, params) {
@@ -2977,6 +2982,10 @@
     this.scopeNote = this.scopeSection
       ? this.scopeSection.querySelector('[data-role="scope-note"]')
       : null;
+    this.styleSelect = form.querySelector('[data-role="style-select"]');
+    this.cabinetType = DEFAULT_STYLE;
+    this.disabledStyles = STYLE_DISABLED.slice();
+    this.styleTooltip = STYLE_TOOLTIP;
     this.globalFrontGroup = form.querySelector('[data-role="global-front-group"]');
     this.globalShelvesGroup = form.querySelector('[data-role="global-shelves-group"]');
     this.partitionModeFieldset = form.querySelector('[data-role="partition-mode-group"]');
@@ -3122,6 +3131,15 @@
     this.captureFieldMetadata('partitions_mode');
     this.captureFieldMetadata('partitions_positions');
 
+    this.inputs.cabinet_type = this.styleSelect;
+    this.cabinetType = this.normalizeStyle(this.cabinetType);
+    if (this.styleSelect) {
+      var initialStyle = this.normalizeStyle(this.styleSelect.value);
+      if (initialStyle && !this.isStyleDisabled(initialStyle)) {
+        this.cabinetType = initialStyle;
+      }
+    }
+
     if (this.inputs.shelves) {
       this.inputs.shelves.value = '0';
       this.values.shelves = 0;
@@ -3132,6 +3150,57 @@
     }
 
     this.captureFieldMetadata('shelves');
+  };
+
+  FormController.prototype.normalizeStyle = function normalizeStyle(style) {
+    if (typeof style !== 'string') {
+      return DEFAULT_STYLE;
+    }
+
+    var normalized = style.trim().toLowerCase();
+    if (STYLE_ENABLED.indexOf(normalized) !== -1) {
+      return normalized;
+    }
+    if (STYLE_DISABLED.indexOf(normalized) !== -1) {
+      return normalized;
+    }
+
+    return DEFAULT_STYLE;
+  };
+
+  FormController.prototype.isStyleDisabled = function isStyleDisabled(style) {
+    if (typeof style !== 'string') {
+      return false;
+    }
+
+    return STYLE_DISABLED.indexOf(style) !== -1;
+  };
+
+  FormController.prototype.setStyle = function setStyle(style, options) {
+    var opts = options || {};
+    var normalized = this.normalizeStyle(style);
+
+    if (this.isStyleDisabled(normalized)) {
+      normalized = DEFAULT_STYLE;
+    }
+
+    this.cabinetType = normalized;
+    if (this.styleSelect) {
+      this.styleSelect.value = normalized;
+    }
+
+    if (opts.notify !== false) {
+      this.notifyStyleChange(normalized);
+    }
+  };
+
+  FormController.prototype.notifyStyleChange = function notifyStyleChange(style) {
+    var normalized = this.normalizeStyle(style);
+    if (this.isStyleDisabled(normalized)) {
+      normalized = DEFAULT_STYLE;
+    }
+    this.cabinetType = normalized;
+    invokeSketchUp('ui_style_changed', { value: normalized });
   };
 
   FormController.prototype.toggleElementVisibility = function toggleElementVisibility(
@@ -3863,6 +3932,12 @@
       });
     }
 
+    if (this.styleSelect) {
+      this.styleSelect.addEventListener('change', function (event) {
+        self.setStyle(event.target.value);
+      });
+    }
+
     if (this.scopeInputs.length) {
       this.scopeInputs.forEach(function (input) {
         input.addEventListener('change', function (event) {
@@ -3891,6 +3966,12 @@
     }
 
     var formatLength = this.lengthService.format.bind(this.lengthService);
+
+    if (defaults.cabinet_type) {
+      this.setStyle(defaults.cabinet_type, { notify: false });
+    } else {
+      this.setStyle(DEFAULT_STYLE, { notify: false });
+    }
 
     LENGTH_FIELDS.forEach(
       function (name) {
@@ -4868,6 +4949,7 @@
 
     var payload = {
       ui_version: UI_PAYLOAD_VERSION,
+      cabinet_type: this.cabinetType,
       width_mm: lengths.width,
       depth_mm: lengths.depth,
       height_mm: lengths.height,
@@ -5062,6 +5144,15 @@
     } else {
       pendingDefaults = defaults;
     }
+  };
+
+  namespace.emitProbeState = function emitProbeState() {
+    var style = controller && controller.cabinetType ? controller.cabinetType : DEFAULT_STYLE;
+    return {
+      style: style,
+      disabled: STYLE_DISABLED.slice(),
+      tooltip: STYLE_TOOLTIP
+    };
   };
 
   namespace.state_init = function state_init(payload) {

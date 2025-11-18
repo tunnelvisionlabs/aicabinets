@@ -18,6 +18,10 @@ module AICabinets
     NORMALIZATION_PRECISION = 3 # store mm values with 0.001 mm precision
 
     FRONT_OPTIONS = %w[empty doors_left doors_right doors_double].freeze
+    ENABLED_STYLES = %w[base upper].freeze
+    DISABLED_STYLES = %w[tall corner].freeze
+    STYLE_OPTIONS = (ENABLED_STYLES + DISABLED_STYLES).freeze
+    DEFAULT_STYLE = 'base'
     PARTITION_LAYOUT_MODES = %w[none even positions].freeze
     PARTITION_MODE_OPTIONS = %w[none vertical horizontal].freeze
     ORIENTATION_OPTIONS = %w[vertical horizontal].freeze
@@ -89,7 +93,7 @@ module AICabinets
       min_door_leaf_width_mm: 140.0
     }.freeze
 
-    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base cabinet_upper constraints].freeze
+    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base cabinet_upper constraints last_used_style].freeze
     RECOGNIZED_KEYS = FALLBACK_MM.keys.map(&:to_s).freeze
     UPPER_RECOGNIZED_KEYS = CABINET_UPPER_FALLBACK.keys.map(&:to_s).freeze
     RECOGNIZED_PARTITION_KEYS = PARTITIONS_FALLBACK.keys.map(&:to_s).freeze
@@ -123,24 +127,18 @@ module AICabinets
       payload = build_overrides_payload(params_mm)
       return false if payload.empty?
 
-      ensure_user_dir!
+      write_overrides_payload(payload)
+    end
 
-      json = JSON.pretty_generate(payload)
+    def save_last_used_style(style)
+      normalized = normalize_style(style)
+      return false unless normalized
 
-      File.open(OVERRIDES_TEMP_PATH, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
-        file.write(json)
-        file.flush
-        file.fsync if file.respond_to?(:fsync)
-      end
+      payload = read_overrides_raw
+      payload = {} unless payload.is_a?(Hash)
+      payload['last_used_style'] = normalized
 
-      FileUtils.rm_f(OVERRIDES_PATH)
-      File.rename(OVERRIDES_TEMP_PATH, OVERRIDES_PATH)
-
-      true
-    rescue StandardError => error
-      warn("AI Cabinets: overrides save failed (#{error.message}).")
-      FileUtils.rm_f(OVERRIDES_TEMP_PATH)
-      false
+      write_overrides_payload(payload)
     end
 
     def read_defaults_file(path)
@@ -163,11 +161,18 @@ module AICabinets
     private_class_method :read_defaults_file
 
     def read_overrides_mm
+      raw = read_overrides_raw
+      return {} if raw.nil?
+
+      sanitize_overrides(raw)
+    end
+    private_class_method :read_overrides_mm
+
+    def read_overrides_raw
       return {} unless File.file?(OVERRIDES_PATH)
 
       content = File.read(OVERRIDES_PATH, mode: 'r:BOM|UTF-8')
-      raw = JSON.parse(content)
-      sanitize_overrides(raw)
+      JSON.parse(content)
     rescue JSON::ParserError => error
       warn("AI Cabinets: overrides JSON parse error (#{error.message}); ignoring overrides.")
       {}
@@ -175,7 +180,22 @@ module AICabinets
       warn("AI Cabinets: overrides file read error (#{error.message}); ignoring overrides.")
       {}
     end
-    private_class_method :read_overrides_mm
+    private_class_method :read_overrides_raw
+
+    def last_used_style
+      normalize_style(read_overrides_mm[:last_used_style])
+    end
+
+    def normalize_style(value)
+      return nil if value.nil?
+
+      normalized = value.to_s.strip.downcase
+      STYLE_OPTIONS.include?(normalized) ? normalized : nil
+    end
+
+    def enabled_style?(value)
+      ENABLED_STYLES.include?(normalize_style(value))
+    end
 
     def sanitize_overrides(raw)
       container = overrides_container(raw)
@@ -183,12 +203,30 @@ module AICabinets
 
       sanitized = sanitize_overrides_body(container)
 
+      last_style = sanitize_last_used_style(container)
+      sanitized[:last_used_style] = last_style if last_style
+
       constraints = sanitize_overrides_constraints(raw)
       sanitized[:constraints] = constraints unless constraints.empty?
 
       sanitized
     end
     private_class_method :sanitize_overrides
+
+    def sanitize_last_used_style(raw)
+      value = raw['last_used_style'] || raw[:last_used_style]
+      return nil unless value.is_a?(String)
+
+      normalized = value.strip.downcase
+      return normalized if STYLE_OPTIONS.include?(normalized)
+
+      warn(
+        "AI Cabinets: overrides.last_used_style must be one of " \
+        "#{STYLE_OPTIONS.join(', ')}; ignoring override."
+      )
+      nil
+    end
+    private_class_method :sanitize_last_used_style
 
     def overrides_container(raw)
       unless raw.is_a?(Hash)
@@ -204,17 +242,25 @@ module AICabinets
           return nil
         end
 
-        warn_unknown_keys_once(raw, ['cabinet_base', 'cabinet_upper', 'constraints'], 'overrides root')
+      warn_unknown_keys_once(
+        raw,
+        ['cabinet_base', 'cabinet_upper', 'constraints', 'last_used_style'],
+        'overrides root'
+      )
         cabinet_base
       else
-        warn_unknown_keys_once(raw, RECOGNIZED_KEYS + ['cabinet_upper', 'constraints'], 'overrides root')
+        warn_unknown_keys_once(
+          raw,
+          RECOGNIZED_KEYS + ['cabinet_upper', 'constraints', 'last_used_style'],
+          'overrides root'
+        )
         raw
       end
     end
     private_class_method :overrides_container
 
     def sanitize_overrides_body(raw)
-      warn_unknown_keys_once(raw, RECOGNIZED_KEYS + ['cabinet_upper'], 'overrides')
+      warn_unknown_keys_once(raw, RECOGNIZED_KEYS + ['cabinet_upper', 'last_used_style'], 'overrides')
 
       sanitized = {}
 
@@ -1081,9 +1127,39 @@ module AICabinets
       constraints_payload = build_constraints_payload(params_mm[:constraints] || params_mm['constraints'])
       result['constraints'] = constraints_payload unless constraints_payload.empty?
 
+      style_override =
+        normalize_style(
+          params_mm[:last_used_style] || params_mm['last_used_style'] || last_used_style
+        )
+      result['last_used_style'] = style_override if style_override
+
       result
     end
     private_class_method :build_overrides_payload
+
+    def write_overrides_payload(payload)
+      return false unless payload.is_a?(Hash)
+
+      ensure_user_dir!
+
+      json = JSON.pretty_generate(payload)
+
+      File.open(OVERRIDES_TEMP_PATH, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
+        file.write(json)
+        file.flush
+        file.fsync if file.respond_to?(:fsync)
+      end
+
+      FileUtils.rm_f(OVERRIDES_PATH)
+      File.rename(OVERRIDES_TEMP_PATH, OVERRIDES_PATH)
+
+      true
+    rescue StandardError => error
+      warn("AI Cabinets: overrides save failed (#{error.message}).")
+      FileUtils.rm_f(OVERRIDES_TEMP_PATH)
+      false
+    end
+    private_class_method :write_overrides_payload
 
     def build_overrides_partitions(value)
       raw = value.is_a?(Hash) ? value : {}
