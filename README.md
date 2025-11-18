@@ -53,6 +53,80 @@ The suite currently verifies the extension namespace loads, the helper utilities
 
 UI dialog tests also stream DevTools console errors back to TestUp. The `TC_DialogConsoleErrors` case opens the Insert dialog, performs a basic interaction, and asserts that no `console.error`, `window.onerror`, or unhandled Promise rejection occurred; dedicated fixtures exercise failure scenarios. Warnings are recorded for review but do not fail the suite.
 
+## Developer workflow – Deploy & TestUp (Windows)
+
+Use the npm helpers to deploy the extension to SketchUp 2026 and run TestUp CI locally:
+
+- Deploy the extension to the SketchUp 2026 Plugins folder:
+
+  ```cmd
+  npm run deploy:sketchup
+  ```
+
+- Run the full TestUp suite (auto-deploys first):
+
+  ```cmd
+  npm run testup:all
+  ```
+
+  Results are written to `dist/testup-all-results.json`, and each run logs `puts` output to `dist/testup-all-ruby-console.log` (with errors in `dist/testup-all-ruby-errors.log`). Pass `--output "C:\\dev\\aicabinets\\dist\\all_results.json"` to redirect the JSON if another tool monitors a different path.
+
+- Run a subset defined by a TestUp YAML config (auto-deploys first):
+
+  ```cmd
+  npm run testup:config -- --config "C:\\dev\\aicabinets\\tests\\class_only.yml"
+  ```
+
+  Or set `TESTUP_CONFIG` and omit the flag:
+
+  ```cmd
+  set TESTUP_CONFIG=C:\\dev\\aicabinets\\tests\\class_only.yml
+  npm run testup:config
+  ```
+
+- Generate a single-class TestUp YAML on the fly and run it (auto-deploys first):
+
+  ```cmd
+  npm run testup:class -- --class TC_Smoke --output "C:\\dev\\aicabinets\\dist\\class_results.json"
+  ```
+
+  Or set `TESTUP_CLASS`/`TESTUP_CONFIG` alternatives:
+
+  ```cmd
+  set TESTUP_CLASS=TC_Smoke
+  npm run testup:class
+  ```
+
+  Each class run also writes the SketchUp Ruby Console stream to `dist/testup-<ClassName>-ruby-console.log` (and a matching `-ruby-errors.log`). When running `TC_Smoke`, verify the log contains the `[AICabinets TestUp] Ruby console capture marker` line emitted by the smoke test to confirm output from `puts` statements is captured.
+
+- Execute a custom Ruby script within SketchUp, close the active model without saving, and exit (auto-deploys first):
+
+  ```cmd
+  npm run sketchup:run -- --script "C:\\dev\\aicabinets\\script\\test_script.rb"
+  ```
+
+  Or set `STARTUP_RUBY` and omit the flag:
+
+  ```cmd
+  set STARTUP_RUBY=C:\\dev\\aicabinets\\script\\test_script.rb
+  npm run sketchup:run
+  ```
+
+  Each invocation saves the Ruby console output and errors to `dist/sketchup-run-<ScriptName>-<timestamp>-ruby-console.log` and `dist/sketchup-run-<ScriptName>-<timestamp>-ruby-errors.log`, making it easy to review `puts` output without reopening SketchUp.
+
+Defaults assume SketchUp 2026 on Windows with `SketchUp.exe` in `%ProgramFiles%\SketchUp\SketchUp 2026\SketchUp\SketchUp.exe` and Plugins at `%APPDATA%\SketchUp\SketchUp 2026\SketchUp\Plugins`. Override paths with environment variables or per-command flags:
+
+- `SKETCHUP_EXE` or `--exe <path>`
+- `SKETCHUP_PLUGINS_DIR` or `--plugins <path>`
+- `SKETCHUP_VERSION` to adjust the default SketchUp version used for the paths above (defaults to `2026`)
+- `AI_CABINETS_TESTS` or `--tests <path>`
+- `TESTUP_CONFIG` or `--config <path>` (for `testup:config`)
+- `TESTUP_CLASS` or `--class <TestUpClass>` with optional `--output <results.json>` (for `testup:class`)
+- `--output <results.json>` when running `testup:all` (defaults to `dist/testup-all-results.json`)
+- `STARTUP_RUBY` or `--script <path>` (for `sketchup:run`)
+
+Pass `--debug` after the command to echo resolved paths and the full SketchUp invocation.
+
 To print the effective defaults (shipped JSON merged with user overrides), run:
 
 ```sh
