@@ -32,7 +32,9 @@ class TC_FrontLayoutSolver < TestUp::TestCase
     clear_width_right = right[:bbox_mm][:w] - overlay_mm
     assert_in_delta(clear_width_left, clear_width_right, 1.0e-6, 'Doors should be equal width after rounding distribution')
 
-    meeting_gap = right[:bbox_mm][:x] - (left[:bbox_mm][:x] + left[:bbox_mm][:w] - overlay_mm)
+    # Overlay only extends on the outer frame edges, so the left door's right
+    # edge is simply its bbox right edge without any adjustment.
+    meeting_gap = right[:bbox_mm][:x] - (left[:bbox_mm][:x] + left[:bbox_mm][:w])
     assert_in_delta(reveal_mm, meeting_gap, 1.0e-6, 'Meeting gap should equal reveal')
 
     left_clear_left = left[:bbox_mm][:x] + overlay_mm
