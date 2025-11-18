@@ -91,6 +91,10 @@ module AICabinets
       end
     end
 
+    def ensure_fronts!(model:)
+      ensure_owned_tag(model, 'AICabinets/Fronts')
+    end
+
     def supports_tag_folders?(layers)
       defined?(Sketchup::LayerFolder) &&
         layers.respond_to?(:add_folder) &&
