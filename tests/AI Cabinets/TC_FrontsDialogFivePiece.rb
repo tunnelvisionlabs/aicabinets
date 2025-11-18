@@ -39,6 +39,8 @@ class TC_FrontsDialogFivePiece < TestUp::TestCase
     assert_equal('flat', defaults[:panel_style])
     assert_in_delta(12.0, defaults[:panel_cove_radius_mm], 1e-6)
     assert_in_delta(19.0, defaults[:door_thickness_mm], 1e-6)
+    assert_in_delta(38.0, defaults[:min_drawer_rail_width_mm], 1e-6)
+    assert_in_delta(60.0, defaults[:min_panel_opening_mm], 1e-6)
   end
 
   def test_regenerate_front_builds_groups

@@ -9,6 +9,7 @@ require 'aicabinets/metadata'
 require 'aicabinets/ops/tags'
 require 'aicabinets/ops/units'
 require 'aicabinets/params/five_piece'
+require 'aicabinets/rules/five_piece'
 require 'aicabinets/ui/dialog_console_bridge'
 require 'aicabinets/validation_error'
 
@@ -143,8 +144,15 @@ module AICabinets
             notify(dialog, 'info', 'Reverted to slab front.')
           else
             sanitized = AICabinets::Params::FivePiece.write!(target, params: params, scope: scope)
-            regenerate_front_impl(target, sanitized)
-            notify(dialog, 'info', 'Five-piece settings applied.')
+            result = regenerate_front_impl(target, sanitized)
+            Array(result[:warnings]).each do |message|
+              notify(dialog, 'warning', message)
+            end
+            if result[:decision]&.action == :slab
+              notify(dialog, 'info', 'Front regenerated as slab based on drawer rules.')
+            else
+              notify(dialog, 'info', 'Five-piece settings applied.')
+            end
           end
 
           deliver_state(dialog)
@@ -236,11 +244,12 @@ module AICabinets
           rail_width = params[:rail_width_mm]
           rail_width = params[:stile_width_mm] unless rail_width.is_a?(Numeric)
 
+          drawer_action = last_drawer_rules_action(definition)
           door_style =
-            if five_piece_present?(definition)
-              params[:joint_type] == 'miter' ? 'five_piece_miter' : 'five_piece_cope_stick'
-            else
+            if drawer_action == 'slab' || !five_piece_present?(definition)
               'slab'
+            else
+              params[:joint_type] == 'miter' ? 'five_piece_miter' : 'five_piece_cope_stick'
             end
 
           {
@@ -249,6 +258,9 @@ module AICabinets
             params: {
               stile_width_mm: params[:stile_width_mm],
               rail_width_mm: rail_width,
+              drawer_rail_width_mm: params[:drawer_rail_width_mm],
+              min_drawer_rail_width_mm: params[:min_drawer_rail_width_mm],
+              min_panel_opening_mm: params[:min_panel_opening_mm],
               panel_style: params[:panel_style] || 'flat',
               panel_thickness_mm: params[:panel_thickness_mm],
               groove_depth_mm: params[:groove_depth_mm],
@@ -260,13 +272,17 @@ module AICabinets
             formatted: {
               stile_width: format_length(params[:stile_width_mm]),
               rail_width: format_length(rail_width),
+              drawer_rail_width: format_length(params[:drawer_rail_width_mm]),
+              min_drawer_rail_width: format_length(params[:min_drawer_rail_width_mm]),
+              min_panel_opening: format_length(params[:min_panel_opening_mm]),
               panel_thickness: format_length(params[:panel_thickness_mm]),
               groove_depth: format_length(params[:groove_depth_mm]),
               groove_width: format_length(params[:groove_width_mm]),
               panel_cove_radius: format_length(params[:panel_cove_radius_mm]),
               panel_clearance_per_side: format_length(params[:panel_clearance_per_side_mm])
             },
-            bounds_mm: widths
+            bounds_mm: widths,
+            last_drawer_rules_action: last_drawer_rules_action(definition)
           }
         end
         private_class_method :serialize_state
@@ -280,6 +296,9 @@ module AICabinets
           params[:inside_profile_id] = data['inside_profile_id'] || 'square_inside'
           params[:stile_width_mm] = parse_length(data['stile_width'])
           params[:rail_width_mm] = parse_optional_length(data['rail_width'])
+          params[:drawer_rail_width_mm] = parse_optional_length(data['drawer_rail_width'])
+          params[:min_drawer_rail_width_mm] = parse_length(data['min_drawer_rail_width'])
+          params[:min_panel_opening_mm] = parse_length(data['min_panel_opening'])
           params[:panel_style] = parse_panel_style(data['panel_style'])
           params[:panel_thickness_mm] = parse_length(data['panel_thickness'])
           params[:groove_depth_mm] = parse_length(data['groove_depth'])
@@ -371,10 +390,34 @@ module AICabinets
           params[:door_thickness_mm] = thickness_mm
           params[:rail_width_mm] ||= params[:stile_width_mm]
 
+          result = { decision: nil, warnings: [] }
+          drawer = drawer_front?(target)
+
+          if drawer
+            decision = AICabinets::Rules::FivePiece.evaluate_drawer_front(
+              _open_outside_w_mm: width_mm,
+              open_outside_h_mm: height_mm,
+              params: params
+            )
+            record_drawer_decision(definition, decision)
+            result[:decision] = decision
+            result[:warnings].concat(Array(decision.messages))
+
+            case decision.action
+            when :slab
+              rebuild_slab(definition)
+              return result
+            when :five_piece
+              params[:rail_width_mm] = decision.effective_rail_mm
+            end
+          end
+
           clamp_frame_member_widths!(
             params,
             finished_w_mm: width_mm,
-            finished_h_mm: height_mm
+            finished_h_mm: height_mm,
+            min_panel_opening_mm: drawer ? params[:min_panel_opening_mm].to_f : MIN_PANEL_OPENING_MM,
+            min_rail_width_mm: drawer ? params[:min_drawer_rail_width_mm].to_f : nil
           )
 
           definition.entities.clear!
@@ -409,6 +452,9 @@ module AICabinets
               panel: panel_result[:panel]
             }
           )
+          AICabinets::Params::FivePiece.write!(definition, params: params, scope: :definition)
+
+          result
         end
         module_function :regenerate_front_impl
         private_class_method :regenerate_front_impl
@@ -418,15 +464,26 @@ module AICabinets
         end
         private_class_method :regenerate_front
 
-        def clamp_frame_member_widths!(params, finished_w_mm:, finished_h_mm:)
+        def clamp_frame_member_widths!(params, finished_w_mm:, finished_h_mm:, min_panel_opening_mm: MIN_PANEL_OPENING_MM,
+                                       min_rail_width_mm: nil)
           stile_width_mm = params[:stile_width_mm].to_f
           rail_width_mm = params[:rail_width_mm]
           rail_width_mm = stile_width_mm unless rail_width_mm.is_a?(Numeric)
 
           clearance_mm = params[:panel_clearance_per_side_mm].to_f
 
-          stile_limit = frame_member_limit(finished_w_mm, label: 'Door width', clearance_mm: clearance_mm)
-          rail_limit = frame_member_limit(finished_h_mm, label: 'Door height', clearance_mm: clearance_mm)
+          stile_limit = frame_member_limit(
+            finished_w_mm,
+            label: 'Door width',
+            clearance_mm: clearance_mm,
+            min_panel_opening_mm: min_panel_opening_mm
+          )
+          rail_limit = frame_member_limit(
+            finished_h_mm,
+            label: 'Door height',
+            clearance_mm: clearance_mm,
+            min_panel_opening_mm: min_panel_opening_mm
+          )
 
           min_stile = minimum_stile_requirement_mm(params)
           if stile_limit < min_stile
@@ -438,12 +495,12 @@ module AICabinets
           params[:stile_width_mm] = clamped_stile
 
           clamped_rail = [rail_width_mm.to_f, rail_limit].min
-          min_rail_width = clamped_stile / 2.0
+          min_rail_width = [clamped_stile / 2.0, min_rail_width_mm.to_f].compact.max
           if clamped_rail < min_rail_width
             if rail_limit < min_rail_width
               raise AICabinets::ValidationError,
-                    [format('Door height %.2f mm cannot accommodate rail width %.2f mm (half of clamped stile %.2f mm).',
-                            finished_h_mm, min_rail_width, clamped_stile)]
+                    [format('Door height %.2f mm cannot accommodate rail width %.2f mm.',
+                            finished_h_mm, min_rail_width)]
             end
             clamped_rail = min_rail_width
           end
@@ -451,9 +508,9 @@ module AICabinets
         end
         private_class_method :clamp_frame_member_widths!
 
-        def frame_member_limit(total_mm, label:, clearance_mm:)
+        def frame_member_limit(total_mm, label:, clearance_mm:, min_panel_opening_mm: MIN_PANEL_OPENING_MM)
           numeric = Float(total_mm)
-          required_opening = (clearance_mm * 2.0) + MIN_PANEL_OPENING_MM
+          required_opening = (clearance_mm * 2.0) + min_panel_opening_mm.to_f
           limit = (numeric - required_opening) / 2.0
           if limit <= 0.0
             raise AICabinets::ValidationError,
@@ -527,6 +584,46 @@ module AICabinets
           end
         end
         private_class_method :five_piece_present?
+
+        def drawer_front?(target)
+          definition = ensure_definition(target)
+          dictionary = definition.attribute_dictionary(AICabinets::Params::FivePiece::DICTIONARY_NAME, false)
+          role = dictionary && dictionary['front_role']
+          role ||= definition.get_attribute(AICabinets::Params::FivePiece::DICTIONARY_NAME, 'front_role') if
+                    definition.respond_to?(:get_attribute)
+
+          names = []
+          names << target.name if target.respond_to?(:name)
+          names << definition.name if definition.respond_to?(:name)
+
+          name_hint = names.any? { |value| value.to_s.downcase.include?('drawer') }
+          role_hint = role && role.to_s.downcase == 'drawer'
+
+          role_hint || name_hint
+        end
+        private_class_method :drawer_front?
+
+        def record_drawer_decision(definition, decision)
+          return unless definition.respond_to?(:set_attribute)
+
+          dictionary = AICabinets::Params::FivePiece::DICTIONARY_NAME
+          definition.set_attribute(dictionary, 'five_piece:last_drawer_rules_action', decision&.action.to_s)
+          definition.set_attribute(dictionary, 'five_piece:last_drawer_rules_reason', decision&.reason.to_s)
+          definition.set_attribute(dictionary, 'five_piece:last_drawer_panel_h_mm', decision&.panel_h_mm.to_f)
+        end
+        private_class_method :record_drawer_decision
+
+        def last_drawer_rules_action(definition)
+          return unless definition.respond_to?(:get_attribute)
+
+          action = definition.get_attribute(
+            AICabinets::Params::FivePiece::DICTIONARY_NAME,
+            'five_piece:last_drawer_rules_action'
+          )
+
+          action && !action.to_s.empty? ? action.to_s : nil
+        end
+        private_class_method :last_drawer_rules_action
 
         def ensure_definition(target)
           definition_class = sketchup_class(:ComponentDefinition)

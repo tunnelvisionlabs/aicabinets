@@ -33,6 +33,9 @@ module AICabinets
         inside_profile_id: 'square_inside',
         stile_width_mm: 57.0,
         rail_width_mm: nil,
+        drawer_rail_width_mm: nil,
+        min_drawer_rail_width_mm: 38.0,
+        min_panel_opening_mm: 60.0,
         panel_style: 'flat',
         panel_thickness_mm: 9.5,
         panel_grain: 'vertical',
@@ -48,6 +51,9 @@ module AICabinets
       NUMERIC_KEYS = %i[
         stile_width_mm
         rail_width_mm
+        drawer_rail_width_mm
+        min_drawer_rail_width_mm
+        min_panel_opening_mm
         panel_cove_radius_mm
         panel_thickness_mm
         groove_depth_mm
@@ -292,18 +298,35 @@ module AICabinets
         params[:door_type] ||= DOOR_TYPE
         params[:joint_type] ||= DEFAULTS[:joint_type]
         params[:panel_clearance_per_side_mm] ||= DEFAULTS[:panel_clearance_per_side_mm]
+        params[:min_drawer_rail_width_mm] ||= DEFAULTS[:min_drawer_rail_width_mm]
+        params[:min_panel_opening_mm] ||= DEFAULTS[:min_panel_opening_mm]
 
         if params[:rail_width_mm].nil?
           params[:rail_width_mm] = params[:stile_width_mm]
         end
+
+        params[:drawer_rail_width_mm] = nil if params[:drawer_rail_width_mm].respond_to?(:nan?) && params[:drawer_rail_width_mm].nan?
 
         params
       end
       private :finalize_fallbacks!
 
       def validate_numeric!(params, errors)
-        [:stile_width_mm, :panel_thickness_mm, :groove_depth_mm, :panel_clearance_per_side_mm, :rail_width_mm].each do |key|
+        numeric_keys = [
+          :stile_width_mm,
+          :panel_thickness_mm,
+          :groove_depth_mm,
+          :panel_clearance_per_side_mm,
+          :rail_width_mm,
+          :drawer_rail_width_mm,
+          :min_drawer_rail_width_mm,
+          :min_panel_opening_mm
+        ]
+
+        numeric_keys.each do |key|
           value = params[key]
+          next if value.nil? && key == :drawer_rail_width_mm
+
           unless value.is_a?(Numeric)
             errors << "#{key} must be a numeric value in millimeters"
             next

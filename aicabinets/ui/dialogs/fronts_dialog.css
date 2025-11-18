@@ -53,6 +53,11 @@ body {
   color: #666;
 }
 
+.field__hint--warning {
+  color: #b00020;
+  font-weight: 600;
+}
+
 input[type='text'],
 select {
   width: 100%;
