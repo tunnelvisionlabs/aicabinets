@@ -26,7 +26,8 @@ module AICabinets
 
         primary_commands = [
           commands[:insert_base_cabinet],
-          commands[:edit_base_cabinet]
+          commands[:edit_base_cabinet],
+          commands[:fronts_dialog]
         ].compact
 
         primary_commands.each do |command|
@@ -59,6 +60,7 @@ module AICabinets
 
         toolbar_commands = [
           commands[:insert_base_cabinet],
+          commands[:fronts_dialog],
           commands[:create_row_from_selection],
           commands[:rows_manage],
           commands[:rows_add_selection],

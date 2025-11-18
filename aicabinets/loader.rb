@@ -23,6 +23,7 @@ module AICabinets
     Sketchup.require('aicabinets/ui/tools/insert_base_cabinet_tool')
     Sketchup.require('aicabinets/ui/rows')
     Sketchup.require('aicabinets/ui/rows/manager_dialog')
+    Sketchup.require('aicabinets/ui/dialogs/fronts_dialog')
     Sketchup.require('aicabinets/ui/commands')
     Sketchup.require('aicabinets/ui/menu_and_toolbar')
   end

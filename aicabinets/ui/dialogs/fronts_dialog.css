@@ -1,0 +1,104 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #f5f5f5;
+  color: #222;
+}
+
+.dialog {
+  padding: 16px;
+}
+
+.dialog__header h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.dialog__hint {
+  margin: 0 0 12px;
+  color: #444;
+}
+
+.section {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 12px;
+}
+
+.field__label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.field__hint {
+  color: #666;
+}
+
+input[type='text'],
+select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.banner {
+  margin-top: 8px;
+  min-height: 20px;
+  font-weight: 600;
+}
+
+.banner--error {
+  color: #b00020;
+}
+
+.banner--info {
+  color: #0b5fad;
+}
+
+.field__error {
+  color: #b00020;
+  min-height: 18px;
+  font-size: 12px;
+}
+
+.is-hidden {
+  display: none !important;
+}

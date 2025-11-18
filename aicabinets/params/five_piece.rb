@@ -17,6 +17,7 @@ module AICabinets
       STORAGE_PREFIX = 'five_piece:'.freeze
       DOOR_TYPE = 'five_piece'.freeze
       JOINT_TYPES = %w[cope_stick miter].freeze
+      PANEL_STYLES = %w[flat raised reverse_raised].freeze
       MIN_STILE_WIDTH_BY_JOINT_MM = {
         'cope_stick' => 50.0,
         'miter' => 55.0
@@ -31,10 +32,13 @@ module AICabinets
         inside_profile_id: 'square_inside',
         stile_width_mm: 57.0,
         rail_width_mm: nil,
+        panel_style: 'flat',
         panel_thickness_mm: 9.5,
         groove_depth_mm: 11.0,
         groove_width_mm: nil,
         panel_clearance_per_side_mm: 3.0,
+        panel_cove_radius_mm: 12.0,
+        door_thickness_mm: 19.0,
         frame_material_id: nil,
         panel_material_id: nil
       }.freeze
@@ -42,16 +46,19 @@ module AICabinets
       NUMERIC_KEYS = %i[
         stile_width_mm
         rail_width_mm
+        panel_cove_radius_mm
         panel_thickness_mm
         groove_depth_mm
         groove_width_mm
         panel_clearance_per_side_mm
+        door_thickness_mm
       ].freeze
 
       STRING_KEYS = %i[
         door_type
         joint_type
         inside_profile_id
+        panel_style
         frame_material_id
         panel_material_id
       ].freeze
@@ -104,6 +111,11 @@ module AICabinets
         joint_type = coerced[:joint_type]
         unless JOINT_TYPES.include?(joint_type)
           errors << "joint_type must be one of: #{JOINT_TYPES.join(', ')}"
+        end
+
+        panel_style = coerced[:panel_style]
+        unless PANEL_STYLES.include?(panel_style.to_s)
+          errors << "panel_style must be one of: #{PANEL_STYLES.join(', ')}"
         end
 
         inside_profile_id = coerced[:inside_profile_id]
