@@ -2,6 +2,7 @@
 
 require 'json'
 require 'digest'
+require 'sketchup.rb'
 
 require 'aicabinets/defaults'
 require 'aicabinets/face_frame'
@@ -43,6 +44,17 @@ module AICabinets
           toe_kick_depth_mm: 'Toe kick depth',
           toe_kick_thickness_mm: 'Toe kick thickness'
         }.freeze
+        FACE_FRAME_FIELD_NAMES = {
+          thickness_mm: 'Face frame thickness',
+          stile_left_mm: 'Left stile',
+          stile_right_mm: 'Right stile',
+          rail_top_mm: 'Top rail',
+          rail_bottom_mm: 'Bottom rail',
+          mid_stile_mm: 'Mid stile',
+          mid_rail_mm: 'Mid rail',
+          reveal_mm: 'Reveal',
+          overlay_mm: 'Overlay'
+        }.freeze
         CONFIRM_EDIT_ALL_COPY = {
           title: 'AI Cabinets — Edit All Instances',
           message: 'This change will update %{count} instances of this cabinet.',
@@ -60,7 +72,8 @@ module AICabinets
         end
         private_constant :PayloadError
         private_constant :MAX_LENGTH_MM, :VALID_FRONT_VALUES, :VALID_PARTITION_MODES,
-                        :VALID_PARTITION_LAYOUTS, :DEFAULT_PARTITION_LAYOUT, :LENGTH_FIELD_NAMES
+                        :VALID_PARTITION_LAYOUTS, :DEFAULT_PARTITION_LAYOUT, :LENGTH_FIELD_NAMES,
+                        :FACE_FRAME_FIELD_NAMES
 
         # Shows the Insert Base Cabinet dialog, creating it if necessary.
         # Subsequent invocations focus the existing dialog to avoid duplicates.
@@ -1541,7 +1554,8 @@ module AICabinets
             toe_kick_depth_mm: coerce_length_field(raw, :toe_kick_depth_mm),
             front: validate_front_value(raw),
             shelves: validate_shelves_value(raw),
-            partitions: validate_partitions_value(raw[:partitions])
+            partitions: validate_partitions_value(raw[:partitions]),
+            face_frame: parse_face_frame(raw[:face_frame])
           }
 
           params[:partition_mode] = partition_mode
@@ -1703,6 +1717,84 @@ module AICabinets
           typed
         end
         private_class_method :validate_partitions_value
+
+        def parse_face_frame(raw)
+          defaults = AICabinets::FaceFrame.defaults_mm
+          face_frame = AICabinets::FaceFrame.deep_dup(defaults)
+
+          if raw.is_a?(Hash)
+            face_frame[:enabled] = !!raw[:enabled] if raw.key?(:enabled)
+
+            FACE_FRAME_FIELD_NAMES.each_key do |key|
+              next unless raw.key?(key) || raw.key?(key.to_s)
+
+              value = raw[key] || raw[key.to_s]
+              face_frame[key] = parse_length_to_mm(value, "face_frame.#{key}", FACE_FRAME_FIELD_NAMES[key])
+            end
+
+            layout_value = raw[:layout] || raw['layout']
+            face_frame[:layout] = parse_face_frame_layout(layout_value, face_frame[:layout])
+          end
+
+          errors = AICabinets::FaceFrame.validate(face_frame)
+          unless errors.empty?
+            first_error = errors.first
+            raise PayloadError.new('invalid_type', first_error, face_frame_error_field(first_error))
+          end
+
+          face_frame
+        end
+        private_class_method :parse_face_frame
+
+        def parse_face_frame_layout(raw, fallback)
+          return AICabinets::FaceFrame.deep_dup(fallback) unless raw.is_a?(Array) && raw.first.is_a?(Hash)
+
+          entry = raw.first
+          kind = entry[:kind] || entry['kind'] || 'double_doors'
+          preset = { kind: kind }
+          if kind == 'drawer_stack'
+            drawers = entry[:drawers] || entry['drawers']
+            preset[:drawers] = Integer(drawers) if drawers
+          end
+          [preset]
+        rescue ArgumentError, TypeError
+          [{ kind: 'drawer_stack', drawers: 1 }]
+        end
+        private_class_method :parse_face_frame_layout
+
+        def parse_length_to_mm(value, field, label)
+          text =
+            if value.is_a?(Numeric)
+              format('%gmm', value)
+            else
+              value.to_s
+            end
+
+          length = text.to_l
+          unless length.respond_to?(:to_mm)
+            raise PayloadError.new('invalid_type', "#{label} must be a valid length.", field)
+          end
+
+          mm_value = length.to_mm.to_f
+          if mm_value.nan? || mm_value.negative?
+            raise PayloadError.new('invalid_type', "#{label} must be non-negative.", field)
+          end
+
+          mm_value
+        rescue ArgumentError, TypeError
+          raise PayloadError.new('invalid_type', "#{label} must be a valid length.", field)
+        end
+        private_class_method :parse_length_to_mm
+
+        def face_frame_error_field(message)
+          return nil unless message.is_a?(String)
+
+          match = message.match(/face_frame\.(\w+)/)
+          return nil unless match
+
+          "face_frame.#{match[1]}"
+        end
+        private_class_method :face_frame_error_field
 
         def coerce_non_negative_length(value, field, label)
           unless value.is_a?(Numeric)

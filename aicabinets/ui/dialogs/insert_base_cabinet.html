@@ -212,6 +212,197 @@
           <section class="form__section">
             <h2 class="form__section-title">Configuration</h2>
 
+            <section class="form__subsection" data-role="face-frame-section">
+              <div class="form-field form-field--checkbox" data-field="face_frame_enabled">
+                <input
+                  type="checkbox"
+                  id="field-face-frame-enabled"
+                  name="face_frame_enabled"
+                  checked
+                />
+                <label for="field-face-frame-enabled">Face frame</label>
+                <p class="field-help">
+                  Enable a face frame and control stile, rail, reveal, and overlay dimensions.
+                </p>
+                <p class="field-error" data-error-for="face_frame_enabled"></p>
+              </div>
+
+              <div class="form__grid form__grid--columns">
+                <div class="form-field" data-field="face_frame_thickness">
+                  <label for="field-face-frame-thickness">Frame thickness</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-thickness"
+                    name="face_frame_thickness"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Thickness of the face frame members.</p>
+                  <p class="field-error" data-error-for="face_frame_thickness"></p>
+                </div>
+
+                <div class="form-field" data-field="face_frame_overlay">
+                  <label for="field-face-frame-overlay">Overlay</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-overlay"
+                    name="face_frame_overlay"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Overlay beyond the carcass opening.</p>
+                  <p class="field-error" data-error-for="face_frame_overlay"></p>
+                </div>
+              </div>
+
+              <div class="form__grid form__grid--columns">
+                <div class="form-field" data-field="face_frame_stile_left">
+                  <label for="field-face-frame-stile-left">Left stile</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-stile-left"
+                    name="face_frame_stile_left"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Width of the left stile.</p>
+                  <p class="field-error" data-error-for="face_frame_stile_left"></p>
+                </div>
+
+                <div class="form-field" data-field="face_frame_stile_right">
+                  <label for="field-face-frame-stile-right">Right stile</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-stile-right"
+                    name="face_frame_stile_right"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Width of the right stile.</p>
+                  <p class="field-error" data-error-for="face_frame_stile_right"></p>
+                </div>
+              </div>
+
+              <div class="form__grid form__grid--columns">
+                <div class="form-field" data-field="face_frame_rail_top">
+                  <label for="field-face-frame-rail-top">Top rail</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-rail-top"
+                    name="face_frame_rail_top"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Height of the top rail.</p>
+                  <p class="field-error" data-error-for="face_frame_rail_top"></p>
+                </div>
+
+                <div class="form-field" data-field="face_frame_rail_bottom">
+                  <label for="field-face-frame-rail-bottom">Bottom rail</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-rail-bottom"
+                    name="face_frame_rail_bottom"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Height of the bottom rail.</p>
+                  <p class="field-error" data-error-for="face_frame_rail_bottom"></p>
+                </div>
+              </div>
+
+              <div class="form__grid form__grid--columns">
+                <div class="form-field" data-field="face_frame_mid_stile">
+                  <label for="field-face-frame-mid-stile">Mid stile</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-mid-stile"
+                    name="face_frame_mid_stile"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Width of the optional mid stile (0 to disable).</p>
+                  <p class="field-error" data-error-for="face_frame_mid_stile"></p>
+                </div>
+
+                <div class="form-field" data-field="face_frame_mid_rail">
+                  <label for="field-face-frame-mid-rail">Mid rail</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-mid-rail"
+                    name="face_frame_mid_rail"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Height of the mid rail(s) (0 to disable).</p>
+                  <p class="field-error" data-error-for="face_frame_mid_rail"></p>
+                </div>
+              </div>
+
+              <div class="form__grid form__grid--columns">
+                <div class="form-field" data-field="face_frame_reveal">
+                  <label for="field-face-frame-reveal">Reveal</label>
+                  <input
+                    type="text"
+                    id="field-face-frame-reveal"
+                    name="face_frame_reveal"
+                    autocomplete="off"
+                    inputmode="decimal"
+                  />
+                  <p class="field-help">Gap between fronts and frame edges.</p>
+                  <p class="field-error" data-error-for="face_frame_reveal"></p>
+                </div>
+
+                <div class="form-field" data-field="face_frame_layout">
+                  <fieldset class="segmented-control">
+                    <legend class="segmented-control__legend">Layout preset</legend>
+                    <div class="segmented-control__options">
+                      <div class="segmented-control__option">
+                        <input
+                          type="radio"
+                          class="segmented-control__input"
+                          id="face-frame-layout-double"
+                          name="face_frame_layout"
+                          value="double_doors"
+                          checked
+                        />
+                        <label class="segmented-control__label" for="face-frame-layout-double">
+                          <span>Double doors</span>
+                        </label>
+                      </div>
+                      <div class="segmented-control__option">
+                        <input
+                          type="radio"
+                          class="segmented-control__input"
+                          id="face-frame-layout-drawers"
+                          name="face_frame_layout"
+                          value="drawer_stack"
+                        />
+                        <label class="segmented-control__label" for="face-frame-layout-drawers">
+                          <span>Drawer stack</span>
+                        </label>
+                      </div>
+                    </div>
+                  </fieldset>
+                  <div class="form-field form-field--inline" data-field="face_frame_drawers">
+                    <label for="field-face-frame-drawers">Drawers</label>
+                    <input
+                      type="number"
+                      id="field-face-frame-drawers"
+                      name="face_frame_drawers"
+                      min="1"
+                      step="1"
+                      value="3"
+                    />
+                    <p class="field-error" data-error-for="face_frame_drawers"></p>
+                  </div>
+                  <p class="field-help">
+                    Drawer stacks use the mid rail value when more than one drawer is requested.
+                  </p>
+                </div>
+              </div>
+            </section>
+
             <fieldset class="segmented-control" data-role="partition-mode-group">
               <legend class="segmented-control__legend">Partition mode</legend>
               <div class="segmented-control__options">

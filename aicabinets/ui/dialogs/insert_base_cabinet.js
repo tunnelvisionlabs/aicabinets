@@ -442,6 +442,18 @@
     'toe_kick_depth'
   ];
 
+  var FACE_FRAME_LENGTH_FIELDS = [
+    'face_frame_thickness',
+    'face_frame_stile_left',
+    'face_frame_stile_right',
+    'face_frame_rail_top',
+    'face_frame_rail_bottom',
+    'face_frame_mid_stile',
+    'face_frame_mid_rail',
+    'face_frame_reveal',
+    'face_frame_overlay'
+  ];
+
   var LENGTH_DEFAULT_KEYS = {
     width: 'width_mm',
     depth: 'depth_mm',
@@ -449,6 +461,18 @@
     panel_thickness: 'panel_thickness_mm',
     toe_kick_height: 'toe_kick_height_mm',
     toe_kick_depth: 'toe_kick_depth_mm'
+  };
+
+  var FACE_FRAME_LENGTH_DEFAULT_KEYS = {
+    face_frame_thickness: 'thickness_mm',
+    face_frame_stile_left: 'stile_left_mm',
+    face_frame_stile_right: 'stile_right_mm',
+    face_frame_rail_top: 'rail_top_mm',
+    face_frame_rail_bottom: 'rail_bottom_mm',
+    face_frame_mid_stile: 'mid_stile_mm',
+    face_frame_mid_rail: 'mid_rail_mm',
+    face_frame_reveal: 'reveal_mm',
+    face_frame_overlay: 'overlay_mm'
   };
 
   var INTEGER_FIELDS = ['shelves', 'partitions_count'];
@@ -2550,7 +2574,18 @@
     front: 'front',
     'partitions.count': 'partitions_count',
     'partitions.positions_mm': 'partitions_positions',
-    'partitions.mode': 'partitions_mode'
+    'partitions.mode': 'partitions_mode',
+    'face_frame.thickness_mm': 'face_frame_thickness',
+    'face_frame.stile_left_mm': 'face_frame_stile_left',
+    'face_frame.stile_right_mm': 'face_frame_stile_right',
+    'face_frame.rail_top_mm': 'face_frame_rail_top',
+    'face_frame.rail_bottom_mm': 'face_frame_rail_bottom',
+    'face_frame.mid_stile_mm': 'face_frame_mid_stile',
+    'face_frame.mid_rail_mm': 'face_frame_mid_rail',
+    'face_frame.reveal_mm': 'face_frame_reveal',
+    'face_frame.overlay_mm': 'face_frame_overlay',
+    'face_frame.layout': 'face_frame_layout',
+    'face_frame.drawers': 'face_frame_drawers'
   };
 
   function defaultLengthSettings() {
@@ -2939,6 +2974,12 @@
         count: 0,
         positions_mm: [],
         bays: []
+      },
+      face_frame: {
+        enabled: true,
+        lengths: {},
+        layout: 'double_doors',
+        drawers: 3
       }
     };
     this.partitionLayoutByMode = { vertical: 'even', horizontal: 'even' };
@@ -3102,6 +3143,15 @@
       self.captureFieldMetadata(name);
     });
 
+    FACE_FRAME_LENGTH_FIELDS.forEach(function (name) {
+      var input = self.form.querySelector('[name="' + name + '"]');
+      self.inputs[name] = input;
+      self.errorElements[name] = self.form.querySelector('[data-error-for="' + name + '"]');
+      self.values.face_frame.lengths[name] = null;
+      self.touched[name] = false;
+      self.captureFieldMetadata(name);
+    });
+
     INTEGER_FIELDS.forEach(function (name) {
       self.inputs[name] = self.form.querySelector('[name="' + name + '"]');
       self.errorElements[name] = self.form.querySelector('[data-error-for="' + name + '"]');
@@ -3115,12 +3165,17 @@
     this.errorElements.partitions_positions = this.form.querySelector('[data-error-for="partitions_positions"]');
     this.errorElements.front = this.form.querySelector('[data-error-for="front"]');
     this.errorElements.partitions_mode = this.form.querySelector('[data-error-for="partitions_mode"]');
+    this.inputs.face_frame_enabled = this.form.querySelector('[name="face_frame_enabled"]');
+    this.inputs.face_frame_layout = this.form.querySelectorAll('input[name="face_frame_layout"]');
+    this.inputs.face_frame_drawers = this.form.querySelector('[name="face_frame_drawers"]');
+    this.errorElements.face_frame_drawers = this.form.querySelector('[data-error-for="face_frame_drawers"]');
     this.touched.partitions_positions = false;
     this.touched.front = false;
     this.touched.partitions_mode = false;
     this.captureFieldMetadata('front');
     this.captureFieldMetadata('partitions_mode');
     this.captureFieldMetadata('partitions_positions');
+    this.captureFieldMetadata('face_frame_drawers');
 
     if (this.inputs.shelves) {
       this.inputs.shelves.value = '0';
@@ -3129,6 +3184,17 @@
 
     if (this.inputs.front) {
       this.values.front = this.inputs.front.value;
+    }
+
+    if (this.inputs.face_frame_enabled) {
+      this.inputs.face_frame_enabled.checked = true;
+      this.values.face_frame.enabled = true;
+    }
+
+    if (this.inputs.face_frame_drawers) {
+      this.values.face_frame.drawers = parseNonNegativeInteger(
+        this.inputs.face_frame_drawers.value
+      ).value;
     }
 
     this.captureFieldMetadata('shelves');
@@ -3808,6 +3874,21 @@
       });
     });
 
+    FACE_FRAME_LENGTH_FIELDS.forEach(function (name) {
+      var input = self.inputs[name];
+      if (!input) {
+        return;
+      }
+
+      input.addEventListener('input', function () {
+        self.handleFaceFrameLengthInput(name);
+      });
+
+      input.addEventListener('blur', function () {
+        self.handleFaceFrameLengthBlur(name);
+      });
+    });
+
     INTEGER_FIELDS.forEach(function (name) {
       var input = self.inputs[name];
       if (!input) {
@@ -3860,6 +3941,40 @@
 
       this.inputs.partitions_positions.addEventListener('blur', function () {
         self.handlePartitionsPositionsBlur();
+      });
+    }
+
+    if (this.inputs.face_frame_enabled) {
+      this.inputs.face_frame_enabled.addEventListener('change', function (event) {
+        self.values.face_frame.enabled = event.target.checked;
+        self.updateInsertButtonState();
+      });
+    }
+
+    if (this.inputs.face_frame_layout && this.inputs.face_frame_layout.length) {
+      this.inputs.face_frame_layout.forEach(function (input) {
+        input.addEventListener('change', function (event) {
+          if (event.target.checked) {
+            self.values.face_frame.layout = event.target.value;
+            self.updateInsertButtonState();
+          }
+        });
+      });
+    }
+
+    if (this.inputs.face_frame_drawers) {
+      this.inputs.face_frame_drawers.addEventListener('input', function (event) {
+        var value = parseNonNegativeInteger(event.target.value);
+        if (value.ok && value.value >= 1) {
+          self.values.face_frame.drawers = value.value;
+          self.setFieldError('face_frame_drawers', null, true);
+          event.target.removeAttribute('data-invalid');
+        } else {
+          self.values.face_frame.drawers = null;
+          self.setFieldError('face_frame_drawers', 'Enter at least one drawer.', true);
+          event.target.setAttribute('data-invalid', 'true');
+        }
+        self.updateInsertButtonState();
       });
     }
 
@@ -3917,6 +4032,64 @@
         this.setFieldError(name, null, true);
       }.bind(this)
     );
+
+    var faceFrameDefaults = (defaults && defaults.face_frame) || {};
+    FACE_FRAME_LENGTH_FIELDS.forEach(
+      function (name) {
+        var faceKey = FACE_FRAME_LENGTH_DEFAULT_KEYS[name];
+        var input = this.inputs[name];
+        if (!faceKey || !input) {
+          return;
+        }
+
+        var mmValue = faceFrameDefaults[faceKey];
+        if (typeof mmValue !== 'number') {
+          mmValue = Number(mmValue);
+        }
+
+        if (!isFinite(mmValue)) {
+          return;
+        }
+
+        this.values.face_frame.lengths[name] = mmValue;
+        this.touched[name] = false;
+        input.dataset.mmValue = String(mmValue);
+        input.value = formatLength(mmValue);
+        input.removeAttribute('data-invalid');
+        this.setFieldError(name, null, true);
+      }.bind(this)
+    );
+
+    if (typeof faceFrameDefaults.enabled === 'boolean' && this.inputs.face_frame_enabled) {
+      this.inputs.face_frame_enabled.checked = faceFrameDefaults.enabled;
+      this.values.face_frame.enabled = faceFrameDefaults.enabled;
+    }
+
+    if (this.inputs.face_frame_drawers) {
+      var drawers = faceFrameDefaults.layout && faceFrameDefaults.layout[0]
+        ? faceFrameDefaults.layout[0].drawers
+        : this.values.face_frame.drawers;
+      if (typeof drawers !== 'number') {
+        drawers = Number(drawers);
+      }
+      if (isFinite(drawers) && drawers >= 1) {
+        this.inputs.face_frame_drawers.value = String(drawers);
+        this.values.face_frame.drawers = Math.round(drawers);
+        this.inputs.face_frame_drawers.removeAttribute('data-invalid');
+        this.setFieldError('face_frame_drawers', null, true);
+      }
+    }
+
+    if (this.inputs.face_frame_layout && this.inputs.face_frame_layout.length) {
+      var layoutKind = 'double_doors';
+      if (Array.isArray(faceFrameDefaults.layout) && faceFrameDefaults.layout.length) {
+        layoutKind = faceFrameDefaults.layout[0].kind || layoutKind;
+      }
+      this.values.face_frame.layout = layoutKind;
+      this.inputs.face_frame_layout.forEach(function (input) {
+        input.checked = input.value === layoutKind;
+      });
+    }
 
     var toeKickThickness = defaults.toe_kick_thickness_mm;
     if (typeof toeKickThickness !== 'number') {
@@ -4300,6 +4473,13 @@
         self.inputs[name].value = self.lengthService.format(value);
       }
     });
+
+    FACE_FRAME_LENGTH_FIELDS.forEach(function (name) {
+      var value = self.values.face_frame.lengths[name];
+      if (value != null && self.inputs[name]) {
+        self.inputs[name].value = self.lengthService.format(value);
+      }
+    });
   };
 
   FormController.prototype.reformatPartitionPositions = function reformatPartitionPositions() {
@@ -4350,6 +4530,51 @@
       input.removeAttribute('data-invalid');
     } else {
       this.values.lengths[name] = null;
+      delete input.dataset.mmValue;
+      this.setFieldError(name, result.error, true);
+      input.setAttribute('data-invalid', 'true');
+    }
+
+    this.updateInsertButtonState();
+  };
+
+  FormController.prototype.handleFaceFrameLengthInput = function handleFaceFrameLengthInput(
+    name
+  ) {
+    var input = this.inputs[name];
+    var result = this.lengthService.parse(input.value);
+    if (result.ok) {
+      this.values.face_frame.lengths[name] = result.value_mm;
+      input.dataset.mmValue = String(result.value_mm);
+      this.setFieldError(name, null, false);
+      input.removeAttribute('data-invalid');
+    } else {
+      this.values.face_frame.lengths[name] = null;
+      delete input.dataset.mmValue;
+      if (this.touched[name]) {
+        this.setFieldError(name, result.error, true);
+        input.setAttribute('data-invalid', 'true');
+      } else {
+        this.setFieldError(name, null, false);
+        input.removeAttribute('data-invalid');
+      }
+    }
+
+    this.updateInsertButtonState();
+  };
+
+  FormController.prototype.handleFaceFrameLengthBlur = function handleFaceFrameLengthBlur(name) {
+    this.touched[name] = true;
+    var input = this.inputs[name];
+    var result = this.lengthService.parse(input.value);
+    if (result.ok) {
+      this.values.face_frame.lengths[name] = result.value_mm;
+      input.dataset.mmValue = String(result.value_mm);
+      input.value = this.lengthService.format(result.value_mm);
+      this.setFieldError(name, null, true);
+      input.removeAttribute('data-invalid');
+    } else {
+      this.values.face_frame.lengths[name] = null;
       delete input.dataset.mmValue;
       this.setFieldError(name, result.error, true);
       input.setAttribute('data-invalid', 'true');
@@ -4757,8 +4982,26 @@
     }
 
     if (this.values.partitions.mode === 'positions') {
-      if (!this.values.partitions.positions_mm.length) {
+    if (!this.values.partitions.positions_mm.length) {
+      return false;
+    }
+    }
+
+    if (this.values.face_frame.enabled) {
+      var faceFrameValid = FACE_FRAME_LENGTH_FIELDS.every(
+        function (name) {
+          return this.values.face_frame.lengths[name] != null;
+        }.bind(this)
+      );
+
+      if (!faceFrameValid) {
         return false;
+      }
+
+      if (this.values.face_frame.layout === 'drawer_stack') {
+        if (this.values.face_frame.drawers == null || this.values.face_frame.drawers < 1) {
+          return false;
+        }
       }
     }
 
@@ -4914,6 +5157,24 @@
         )
       }
     };
+
+    var faceFramePayload = { enabled: !!this.values.face_frame.enabled };
+    FACE_FRAME_LENGTH_FIELDS.forEach(
+      function (name) {
+        var mmKey = FACE_FRAME_LENGTH_DEFAULT_KEYS[name];
+        var value = this.values.face_frame.lengths[name];
+        if (mmKey) {
+          faceFramePayload[mmKey] = value;
+        }
+      }.bind(this)
+    );
+
+    var layoutEntry = { kind: this.values.face_frame.layout || 'double_doors' };
+    if (layoutEntry.kind === 'drawer_stack' && this.values.face_frame.drawers != null) {
+      layoutEntry.drawers = this.values.face_frame.drawers;
+    }
+    faceFramePayload.layout = [layoutEntry];
+    payload.face_frame = faceFramePayload;
 
     if (partitions.mode === 'even') {
       payload.partitions.count = partitions.count != null ? partitions.count : 0;
