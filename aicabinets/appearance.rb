@@ -56,8 +56,9 @@ module AICabinets
       materials = model.materials
       material_id = id.to_s
 
-      if !material_id.empty? && (materials[material_id])
-        return materials[material_id]
+      unless material_id.empty?
+        material = materials[material_id] || materials.add(material_id)
+        return material if material
       end
 
       fallback = fallback_name.to_s
