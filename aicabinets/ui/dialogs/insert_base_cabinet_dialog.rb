@@ -32,6 +32,10 @@ module AICabinets
         VALID_PARTITION_MODES = %w[none vertical horizontal].freeze
         VALID_PARTITION_LAYOUTS = %w[none even positions].freeze
         DEFAULT_PARTITION_LAYOUT = 'even'
+        DEFAULT_STYLE = AICabinets::Defaults::DEFAULT_STYLE
+        ENABLED_STYLES = AICabinets::Defaults::ENABLED_STYLES
+        DISABLED_STYLES = AICabinets::Defaults::DISABLED_STYLES
+        STYLE_TOOLTIP = 'Coming soon'
         LENGTH_FIELD_NAMES = {
           width_mm: 'Width',
           depth_mm: 'Depth',
@@ -735,6 +739,25 @@ module AICabinets
         end
         private_class_method :handle_ui_init_ready
 
+        def handle_ui_style_changed(payload)
+          value = parse_style_value(payload)
+          record_style_event(value)
+        end
+        private_class_method :handle_ui_style_changed
+
+        def parse_style_value(payload)
+          data = parse_payload(payload)
+          return data if data.is_a?(String)
+
+          if data.is_a?(Hash)
+            return data[:value] if data.key?(:value)
+            return data['value'] if data.key?('value')
+          end
+
+          nil
+        end
+        private_class_method :parse_style_value
+
         def handle_ui_select_bay(dialog, payload)
           data = parse_payload(payload)
           index = extract_index(data)
@@ -1212,6 +1235,55 @@ module AICabinets
         end
         private_class_method :dialog_selection
 
+        def dialog_style
+          dialog_state[:style] || DEFAULT_STYLE
+        end
+        private_class_method :dialog_style
+
+        def store_dialog_style(style)
+          dialog_state[:style] = normalize_style(style) || DEFAULT_STYLE
+        end
+        private_class_method :store_dialog_style
+
+        def normalize_style(style)
+          AICabinets::Defaults.normalize_style(style)
+        end
+        private_class_method :normalize_style
+
+        def enabled_style?(style)
+          AICabinets::Defaults.enabled_style?(style)
+        end
+        private_class_method :enabled_style?
+
+        def record_style_event(style)
+          normalized = normalize_style(style) || DEFAULT_STYLE
+          store_dialog_style(normalized)
+          style_events << normalized
+          normalized
+        end
+        private_class_method :record_style_event
+
+        def style_events
+          dialog_state[:style_events] ||= []
+        end
+        private_class_method :style_events
+
+        def determine_insert_style
+          stored = AICabinets::Defaults.last_used_style
+          return stored if enabled_style?(stored)
+
+          DEFAULT_STYLE
+        end
+        private_class_method :determine_insert_style
+
+        def store_last_used_style
+          style = dialog_style
+          return unless enabled_style?(style)
+
+          AICabinets::Defaults.save_last_used_style(style)
+        end
+        private_class_method :store_last_used_style
+
         def determine_scope_default(selection)
           default_scope = 'instance'
           return default_scope unless selection.is_a?(Hash)
@@ -1234,6 +1306,15 @@ module AICabinets
           default_scope
         end
         private_class_method :determine_scope_default
+
+        def style_probe_payload
+          {
+            style: dialog_style,
+            disabled: DISABLED_STYLES,
+            tooltip: STYLE_TOOLTIP
+          }
+        end
+        private_class_method :style_probe_payload
 
         def attach_callbacks(dialog)
           dialog.add_action_callback('dialog_ready') do |_action_context, _payload|
@@ -1312,6 +1393,12 @@ module AICabinets
           dialog.add_action_callback('ui_set_partitions_count') do |_context, payload|
             handle_ui_set_partitions_count(dialog, payload)
           end
+          dialog.add_action_callback('ui_style_changed') do |_context, payload|
+            handle_ui_style_changed(payload)
+          end
+          dialog.add_action_callback('ui_probe_state') do |_context, _payload|
+            JSON.generate(style_probe_payload)
+          end
           dialog.add_action_callback('ui_partitions_changed') do |_context, payload|
             handle_ui_partitions_changed(dialog, payload)
           end
@@ -1339,6 +1426,12 @@ module AICabinets
           state = dialog_state
           host = state[:layout_preview] && state[:layout_preview][:host]
           host if host.is_a?(AICabinets::UI::LayoutPreview::DialogHost)
+        end
+
+        def style_events_for_test
+          return [] unless test_mode?
+
+          style_events.dup
         end
 
         def deliver_units_bootstrap(dialog)
@@ -1395,6 +1488,7 @@ module AICabinets
 
         def deliver_insert_defaults(dialog)
           defaults = AICabinets::Ops::Defaults.load_insert_base_cabinet
+          defaults[:cabinet_type] = determine_insert_style
           payload = JSON.generate(defaults)
           script = <<~JS
             (function () {
@@ -1406,6 +1500,7 @@ module AICabinets
           JS
 
           dialog.execute_script(script)
+          store_dialog_style(defaults[:cabinet_type])
           store_dialog_params(defaults)
           deliver_bay_state(dialog)
           sync_layout_preview(dialog)
@@ -1419,7 +1514,11 @@ module AICabinets
             return
           end
 
-          payload = JSON.generate(prefill)
+          style = normalize_style(prefill[:cabinet_type] || prefill['cabinet_type']) || DEFAULT_STYLE
+          prefill_with_style = deep_copy_params(prefill)
+          prefill_with_style[:cabinet_type] = style
+
+          payload = JSON.generate(prefill_with_style)
           script = <<~JS
             (function () {
               var root = window.AICabinets && window.AICabinets.UI && window.AICabinets.UI.InsertBaseCabinet;
@@ -1430,7 +1529,8 @@ module AICabinets
           JS
 
           dialog.execute_script(script)
-          store_dialog_params(prefill)
+          store_dialog_style(style)
+          store_dialog_params(prefill_with_style)
           deliver_bay_state(dialog)
           sync_layout_preview(dialog)
         end
@@ -1443,13 +1543,14 @@ module AICabinets
           begin
             typed_params = parse_submit_params(json)
             store_last_valid_params(deep_copy_params(typed_params))
+            store_dialog_style(typed_params[:cabinet_type]) if typed_params.key?(:cabinet_type)
 
-          if dialog_mode == :edit
-            ack = apply_edit_operation(typed_params)
-          else
-            params_for_tool = deep_copy_params(typed_params)
-            ack = { ok: true, placement: true }
-          end
+            if dialog_mode == :edit
+              ack = apply_edit_operation(typed_params)
+            else
+              params_for_tool = deep_copy_params(typed_params)
+              ack = { ok: true, placement: true }
+            end
           rescue PayloadError => e
             ack = build_error_ack(e.code, e.message, e.field)
           rescue StandardError => e
@@ -1460,6 +1561,8 @@ module AICabinets
           end
 
           return unless ack && ack[:ok]
+
+          store_last_used_style if dialog_mode == :insert
 
           if dialog_mode == :insert && params_for_tool
             params_for_tool.delete(:scope)
@@ -1567,6 +1670,9 @@ module AICabinets
           end
 
           params[:scope] = validate_scope(raw[:scope]) if raw.key?(:scope)
+
+          style_value = normalize_style(raw[:cabinet_type] || raw['cabinet_type'])
+          params[:cabinet_type] = style_value if style_value
 
           params
         end
