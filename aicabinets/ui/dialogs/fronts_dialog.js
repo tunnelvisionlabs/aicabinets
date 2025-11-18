@@ -10,8 +10,12 @@
     panelClearance: document.getElementById('panel-clearance'),
     grooveDepth: document.getElementById('groove-depth'),
     grooveWidth: document.getElementById('groove-width'),
+    drawerRailWidth: document.getElementById('drawer-rail-width'),
+    minDrawerRailWidth: document.getElementById('min-drawer-rail-width'),
+    minPanelOpening: document.getElementById('min-panel-opening'),
     scopeInstance: document.getElementById('scope-instance'),
     fivePieceSection: document.getElementById('five-piece-fields'),
+    drawerMessages: document.getElementById('drawer-messages'),
     banner: document.getElementById('banner'),
   };
 
@@ -27,6 +31,9 @@
     });
     form.banner.textContent = '';
     form.banner.className = 'banner';
+    if (form.drawerMessages) {
+      form.drawerMessages.textContent = '';
+    }
   }
 
   function applyFormatted(field, value) {
@@ -53,8 +60,19 @@
     applyFormatted(form.panelClearance, formatted.panel_clearance_per_side || params.panel_clearance_per_side_mm);
     applyFormatted(form.grooveDepth, formatted.groove_depth || params.groove_depth_mm);
     applyFormatted(form.grooveWidth, formatted.groove_width || '');
+    applyFormatted(form.drawerRailWidth, formatted.drawer_rail_width || params.drawer_rail_width_mm || '');
+    applyFormatted(form.minDrawerRailWidth, formatted.min_drawer_rail_width || params.min_drawer_rail_width_mm);
+    applyFormatted(form.minPanelOpening, formatted.min_panel_opening || params.min_panel_opening_mm);
     form.insideProfile.value = params.inside_profile_id || 'shaker_inside';
     form.panelStyle.value = params.panel_style || 'flat';
+
+    if (form.drawerMessages) {
+      if (payload.last_drawer_rules_action === 'slab') {
+        form.drawerMessages.textContent = 'Front previously fell back to slab based on drawer rules.';
+      } else {
+        form.drawerMessages.textContent = '';
+      }
+    }
   }
 
   function showBanner(kind, message) {
@@ -71,6 +89,9 @@
 
   function notify(payload) {
     if (!payload) return;
+    if (payload.kind === 'warning' && form.drawerMessages) {
+      form.drawerMessages.textContent = payload.message || '';
+    }
     showBanner(payload.kind || 'info', payload.message || '');
   }
 
@@ -86,6 +107,9 @@
       panel_clearance_per_side: form.panelClearance.value,
       groove_depth: form.grooveDepth.value,
       groove_width: form.grooveWidth.value,
+      drawer_rail_width: form.drawerRailWidth.value,
+      min_drawer_rail_width: form.minDrawerRailWidth.value,
+      min_panel_opening: form.minPanelOpening.value,
       scope: form.scopeInstance.checked ? 'instance' : 'definition',
     };
   }

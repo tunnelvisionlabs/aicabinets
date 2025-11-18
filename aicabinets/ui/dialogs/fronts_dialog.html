@@ -95,6 +95,31 @@
             <div class="field__error" data-error-for="groove-width"></div>
           </label>
         </div>
+
+        <details class="field" open>
+          <summary class="field__label">Advanced ▸ Drawer rules</summary>
+          <div class="field-grid">
+            <label class="field">
+              <span class="field__label">Drawer rail width</span>
+              <input id="drawer-rail-width" type="text" placeholder="Same as rail" />
+              <small class="field__hint">Overrides rail width when editing drawer fronts.</small>
+            </label>
+
+            <label class="field">
+              <span class="field__label">Min drawer rail width</span>
+              <input id="min-drawer-rail-width" type="text" placeholder="38 mm" />
+              <small class="field__hint">Rails are clamped to this minimum.</small>
+            </label>
+          </div>
+
+          <label class="field">
+            <span class="field__label">Min panel opening height</span>
+            <input id="min-panel-opening" type="text" placeholder="60 mm" />
+            <small class="field__hint">Drawer panels fall back to slab when the opening is smaller.</small>
+          </label>
+
+          <div id="drawer-messages" class="field__hint field__hint--warning"></div>
+        </details>
       </section>
 
       <section class="section">
