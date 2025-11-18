@@ -311,18 +311,44 @@ async function deploy(paths) {
   console.log(`Deployed AI Cabinets to ${paths.pluginsDir}`);
 }
 
-async function runTestUpAll(paths) {
-  await deploy(paths);
-  ensureExists(paths.testsRoot, 'AI Cabinets TestUp suite');
-  console.log(`Running TestUp suite from ${paths.testsRoot}`);
-  const arg = `TestUp:CI:Path: ${paths.testsRoot}`;
-  await runSketchUp(
-    paths.sketchupExe,
-    ['-RubyStartupArg', arg],
-    paths.debug,
-    { capture: true },
-  );
-  console.log('TestUp suite completed.');
+async function runTestUpAll(paths, outputPath) {
+  const {
+    configPath,
+    resolvedOutput,
+    consoleLogPath,
+    consoleErrPath,
+  } = generateAllConfig(paths.testsRoot, outputPath, paths.debug);
+  console.log(`Generated TestUp config for the full suite at ${configPath}`);
+
+  const previousStdoutCapture = process.env.AI_CABINETS_RUBY_CONSOLE_LOG;
+  const previousStderrCapture = process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG;
+  process.env.AI_CABINETS_RUBY_CONSOLE_LOG = consoleLogPath;
+  process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG = consoleErrPath;
+  try {
+    await runTestUpConfig(paths, configPath);
+  } finally {
+    if (previousStdoutCapture === undefined) {
+      delete process.env.AI_CABINETS_RUBY_CONSOLE_LOG;
+    } else {
+      process.env.AI_CABINETS_RUBY_CONSOLE_LOG = previousStdoutCapture;
+    }
+    if (previousStderrCapture === undefined) {
+      delete process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG;
+    } else {
+      process.env.AI_CABINETS_RUBY_CONSOLE_ERR_LOG = previousStderrCapture;
+    }
+  }
+  console.log(`Full suite results should be written to: ${resolvedOutput}`);
+  if (fs.existsSync(consoleLogPath)) {
+    console.log(`Ruby console log saved to: ${consoleLogPath}`);
+  } else {
+    console.warn(`Ruby console log missing: ${consoleLogPath}`);
+  }
+  if (fs.existsSync(consoleErrPath)) {
+    console.log(`Ruby console stderr saved to: ${consoleErrPath}`);
+  } else {
+    console.warn(`Ruby console stderr missing: ${consoleErrPath}`);
+  }
 }
 
 async function runTestUpConfig(paths, configPath, captureTargets = {}) {
@@ -368,16 +394,14 @@ async function runTestUpConfig(paths, configPath, captureTargets = {}) {
   }
 }
 
-function generateClassConfig(testsRoot, testClass, outputPath, debug) {
-  if (!testClass) {
-    throw new Error('Missing required --class <TestUpClassName> argument.');
-  }
+function generateTestupConfig(testsRoot, options = {}) {
   ensureExists(testsRoot, 'AI Cabinets TestUp suite');
 
-  const safeName = testClass.replace(/[^A-Za-z0-9_-]/g, '_');
-  const configPath = path.join(os.tmpdir(), `aicabinets-class-${safeName}-${Date.now()}.yml`);
+  const safeName = options.safeName || 'suite';
+  const timestamp = Date.now();
+  const configPath = path.join(os.tmpdir(), `aicabinets-${safeName}-${timestamp}.yml`);
   const resolvedOutput = ensureAbsolute(
-    outputPath || path.join(repoRoot, 'dist', `testup-${safeName}-results.json`),
+    options.outputPath || path.join(repoRoot, 'dist', `testup-${safeName}-results.json`),
   );
   const consoleLogPath = ensureAbsolute(path.join(repoRoot, 'dist', `testup-${safeName}-ruby-console.log`));
   const consoleErrPath = ensureAbsolute(path.join(repoRoot, 'dist', `testup-${safeName}-ruby-errors.log`));
@@ -389,23 +413,51 @@ function generateClassConfig(testsRoot, testClass, outputPath, debug) {
   fs.rmSync(consoleErrPath, { recursive: true, force: true });
 
   const normalizeForYaml = (value) => value.replace(/\\/g, '/');
-  const content = [
+  const lines = [
     `Path: "${normalizeForYaml(testsRoot)}"`,
     `Output: "${normalizeForYaml(resolvedOutput)}"`,
-    'Tests:',
-    `  - ${testClass}#`,
-    '',
-  ].join('\n');
+  ];
+  if (Array.isArray(options.tests) && options.tests.length > 0) {
+    lines.push('Tests:');
+    options.tests.forEach((test) => {
+      lines.push(`  - ${test}`);
+    });
+  }
+  lines.push('');
 
-  fs.writeFileSync(configPath, content, 'utf8');
-  logDebug(debug, `Generated class config at ${configPath}`);
-  logDebug(debug, `Results will be written to ${resolvedOutput}`);
+  fs.writeFileSync(configPath, lines.join('\n'), 'utf8');
+  logDebug(options.debug, `Generated ${options.description || 'TestUp'} config at ${configPath}`);
+  logDebug(options.debug, `Results will be written to ${resolvedOutput}`);
+
   return {
     configPath,
     resolvedOutput,
     consoleLogPath,
     consoleErrPath,
   };
+}
+
+function generateClassConfig(testsRoot, testClass, outputPath, debug) {
+  if (!testClass) {
+    throw new Error('Missing required --class <TestUpClassName> argument.');
+  }
+  const safeName = testClass.replace(/[^A-Za-z0-9_-]/g, '_');
+  return generateTestupConfig(testsRoot, {
+    safeName,
+    tests: [`${testClass}#`],
+    outputPath,
+    debug,
+    description: `${testClass} class`,
+  });
+}
+
+function generateAllConfig(testsRoot, outputPath, debug) {
+  return generateTestupConfig(testsRoot, {
+    safeName: 'all',
+    outputPath,
+    debug,
+    description: 'full suite',
+  });
 }
 
 async function runTestUpClass(paths, testClass, outputPath) {
@@ -507,7 +559,7 @@ async function main() {
         await deploy(paths);
         break;
       case 'testup:all':
-        await runTestUpAll(paths);
+        await runTestUpAll(paths, flags.output);
         break;
       case 'testup:config':
         await runTestUpConfig(paths, flags.config);
