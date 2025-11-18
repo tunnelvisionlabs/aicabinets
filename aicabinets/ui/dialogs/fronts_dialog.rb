@@ -452,6 +452,7 @@ module AICabinets
               panel: panel_result[:panel]
             }
           )
+          AICabinets::Params::FivePiece.write!(definition, params: params, scope: :definition)
 
           result
         end
