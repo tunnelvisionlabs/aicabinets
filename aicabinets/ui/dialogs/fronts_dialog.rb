@@ -18,14 +18,14 @@ module AICabinets
         extend self
         module_function
 
-        ConsoleBridge = AICabinets::UI::DialogConsoleBridge
-        Units = AICabinets::Ops::Units
-        MIN_PANEL_OPENING_MM = 1.0
+        ConsoleBridge = AICabinets::UI::DialogConsoleBridge unless const_defined?(:ConsoleBridge, false)
+        Units = AICabinets::Ops::Units unless const_defined?(:Units, false)
+        MIN_PANEL_OPENING_MM = 1.0 unless const_defined?(:MIN_PANEL_OPENING_MM, false)
         private_constant :ConsoleBridge, :Units, :MIN_PANEL_OPENING_MM
 
-        DIALOG_TITLE = 'AI Cabinets — Fronts'
-        PREFERENCES_KEY = 'AICabinets.FrontsDialog'
-        HTML_FILENAME = 'fronts_dialog.html'
+        DIALOG_TITLE = 'AI Cabinets — Fronts' unless const_defined?(:DIALOG_TITLE, false)
+        PREFERENCES_KEY = 'AICabinets.FrontsDialog' unless const_defined?(:PREFERENCES_KEY, false)
+        HTML_FILENAME = 'fronts_dialog.html' unless const_defined?(:HTML_FILENAME, false)
 
         def show
           dialog = ensure_dialog
@@ -568,3 +568,5 @@ module AICabinets
     end
   end
 end
+
+
