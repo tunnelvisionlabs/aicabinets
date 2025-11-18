@@ -36,10 +36,15 @@ class TC_UpperGeometry < TestUp::TestCase
     instance = insert_upper(BASE_PARAMS)
     definition = instance.definition
     bounds = definition.bounds
+    # Compute extents directly because Geom::BoundingBox#width/#depth/#height
+    # expose dimensions in a different axis order.
+    width_mm = mm_from_length(bounds.max.x - bounds.min.x)
+    depth_mm = mm_from_length(bounds.max.y - bounds.min.y)
+    height_mm = mm_from_length(bounds.max.z - bounds.min.z)
 
-    assert_in_delta(BASE_PARAMS[:width_mm], mm_from_length(bounds.width), mm(tolerance_mm))
-    assert_in_delta(BASE_PARAMS[:depth_mm], mm_from_length(bounds.depth), mm(tolerance_mm))
-    assert_in_delta(BASE_PARAMS[:height_mm], mm_from_length(bounds.height), mm(tolerance_mm))
+    assert_in_delta(BASE_PARAMS[:width_mm], width_mm, mm(tolerance_mm))
+    assert_in_delta(BASE_PARAMS[:depth_mm], depth_mm, mm(tolerance_mm))
+    assert_in_delta(BASE_PARAMS[:height_mm], height_mm, mm(tolerance_mm))
 
     assert_in_delta(0.0, mm_from_length(bounds.min.x), mm(tolerance_mm))
     assert_in_delta(0.0, mm_from_length(bounds.min.y), mm(tolerance_mm))

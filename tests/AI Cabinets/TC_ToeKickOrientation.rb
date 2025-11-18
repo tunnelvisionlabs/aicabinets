@@ -246,7 +246,15 @@ class TC_ToeKickOrientation < TestUp::TestCase
 
   def yz_vertices(group)
     tolerance_mm = AICabinetsTestHelper.mm(AICabinetsTestHelper::TOL)
-    faces = group.respond_to?(:entities) ? group.entities.grep(Sketchup::Face) : []
+    entities =
+      if group.respond_to?(:entities)
+        group.entities
+      elsif group.respond_to?(:definition) && group.definition.respond_to?(:entities)
+        group.definition.entities
+      else
+        []
+      end
+    faces = entities.grep(Sketchup::Face)
     points = faces.flat_map { |face| face.vertices.map { |vertex| vertex.position } }
 
     points.each_with_object([]) do |point, unique|
