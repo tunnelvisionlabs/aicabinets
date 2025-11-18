@@ -8,6 +8,7 @@ Sketchup.require('aicabinets/ops/materials')
 Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/params/five_piece')
+Sketchup.require('aicabinets/validation_error')
 Sketchup.require('aicabinets/tags')
 
 module AICabinets
@@ -41,7 +42,10 @@ module AICabinets
       SUPPORTED_PROFILE_IDS = %w[square_inside shaker_inside shaker_bevel shaker].freeze
       MITER_CUTTER_DEPTH_FUDGE_MM = 0.0
 
-      def build_frame!(target:, params:, open_w_mm:, open_h_mm:)
+      def build_frame!(target:, params:, open_w_mm: nil, open_h_mm: nil,
+                       finished_w_mm: nil, finished_h_mm: nil,
+                       horizontal_joinery_allowance_mm: 0.0,
+                       vertical_joinery_allowance_mm: 0.0)
         definition = ensure_mutable_definition(target)
         model = definition.model
         raise ArgumentError, 'Definition has no owning model' unless model
@@ -54,14 +58,33 @@ module AICabinets
         rail_width_mm = validated[:rail_width_mm]
         rail_width_mm = stile_width_mm unless rail_width_mm.is_a?(Numeric) && rail_width_mm > MIN_DIMENSION_MM
         thickness_mm = positive_length!(validated[:door_thickness_mm], 'door_thickness_mm')
-        open_width_mm = positive_length!(open_w_mm, 'open_w_mm')
-        open_height_mm = positive_length!(open_h_mm, 'open_h_mm')
 
-        outside_w_mm = open_width_mm + (2.0 * stile_width_mm)
-        outside_h_mm = open_height_mm + (2.0 * rail_width_mm)
+        dimension_state = resolve_open_dimensions(
+          open_w_mm: open_w_mm,
+          open_h_mm: open_h_mm,
+          finished_w_mm: finished_w_mm,
+          finished_h_mm: finished_h_mm,
+          stile_width_mm: stile_width_mm,
+          rail_width_mm: rail_width_mm,
+          horizontal_joinery_allowance_mm: horizontal_joinery_allowance_mm,
+          vertical_joinery_allowance_mm: vertical_joinery_allowance_mm
+        )
 
-        raise ArgumentError, 'Opening width must be positive' unless open_width_mm > MIN_DIMENSION_MM
-        raise ArgumentError, 'Opening height must be positive' unless open_height_mm > MIN_DIMENSION_MM
+        open_width_mm = dimension_state[:open_w_mm]
+        open_height_mm = dimension_state[:open_h_mm]
+        outside_w_mm = dimension_state[:finished_w_mm]
+        outside_h_mm = dimension_state[:finished_h_mm]
+
+        ensure_positive_opening!(
+          open_width_mm,
+          open_height_mm,
+          finished_w_mm: outside_w_mm,
+          finished_h_mm: outside_h_mm,
+          stile_width_mm: stile_width_mm,
+          rail_width_mm: rail_width_mm,
+          horizontal_joinery_allowance_mm: dimension_state[:horizontal_joinery_allowance_mm],
+          vertical_joinery_allowance_mm: dimension_state[:vertical_joinery_allowance_mm]
+        )
 
         front_tag = ensure_fronts_tag(model)
         material = resolve_frame_material(model, validated[:frame_material_id])
@@ -167,7 +190,11 @@ module AICabinets
           coping_mode: coping_mode,
           joint_type: joint_type.to_sym,
           miter_mode: miter_mode,
-          warnings: warnings
+          warnings: warnings,
+          opening_w_mm: open_width_mm,
+          opening_h_mm: open_height_mm,
+          finished_w_mm: outside_w_mm,
+          finished_h_mm: outside_h_mm
         }
       end
 
@@ -226,6 +253,65 @@ module AICabinets
         numeric
       end
       private_class_method :positive_length!
+
+      def resolve_open_dimensions(open_w_mm:, open_h_mm:, finished_w_mm:, finished_h_mm:, stile_width_mm:, rail_width_mm:,
+                                  horizontal_joinery_allowance_mm:, vertical_joinery_allowance_mm:)
+        if finished_w_mm && finished_h_mm
+          resolved_finished_w = positive_length!(finished_w_mm, 'finished_w_mm')
+          resolved_finished_h = positive_length!(finished_h_mm, 'finished_h_mm')
+          allowance_w = normalize_allowance(horizontal_joinery_allowance_mm)
+          allowance_h = normalize_allowance(vertical_joinery_allowance_mm)
+          open_width_mm = resolved_finished_w - (2.0 * stile_width_mm) - allowance_w
+          open_height_mm = resolved_finished_h - (2.0 * rail_width_mm) - allowance_h
+        elsif open_w_mm && open_h_mm
+          open_width_mm = positive_length!(open_w_mm, 'open_w_mm')
+          open_height_mm = positive_length!(open_h_mm, 'open_h_mm')
+          resolved_finished_w = open_width_mm + (2.0 * stile_width_mm)
+          resolved_finished_h = open_height_mm + (2.0 * rail_width_mm)
+          allowance_w = 0.0
+          allowance_h = 0.0
+        else
+          raise ArgumentError, 'Either finished dimensions or opening dimensions must be provided'
+        end
+
+        {
+          open_w_mm: open_width_mm,
+          open_h_mm: open_height_mm,
+          finished_w_mm: resolved_finished_w,
+          finished_h_mm: resolved_finished_h,
+          horizontal_joinery_allowance_mm: allowance_w,
+          vertical_joinery_allowance_mm: allowance_h
+        }
+      end
+      private_class_method :resolve_open_dimensions
+
+      def normalize_allowance(value)
+        return 0.0 unless value.is_a?(Numeric)
+
+        numeric = value.to_f
+        numeric.positive? ? numeric : 0.0
+      end
+      private_class_method :normalize_allowance
+
+      def ensure_positive_opening!(open_width_mm, open_height_mm, finished_w_mm:, finished_h_mm:, stile_width_mm:,
+                                   rail_width_mm:, horizontal_joinery_allowance_mm:, vertical_joinery_allowance_mm:)
+        return if open_width_mm > MIN_DIMENSION_MM && open_height_mm > MIN_DIMENSION_MM
+
+        message = format(
+          'Five-piece opening invalid: finished %.2f x %.2f mm with stile %.2f mm, rail %.2f mm, joinery allowances %.2f x %.2f mm -> opening %.2f x %.2f mm',
+          finished_w_mm,
+          finished_h_mm,
+          stile_width_mm,
+          rail_width_mm,
+          horizontal_joinery_allowance_mm,
+          vertical_joinery_allowance_mm,
+          open_width_mm,
+          open_height_mm
+        )
+
+        raise AICabinets::ValidationError, [message]
+      end
+      private_class_method :ensure_positive_opening!
 
       def remove_existing_frame_groups(entities)
         groups = entities.grep(Sketchup::Group).select do |group|

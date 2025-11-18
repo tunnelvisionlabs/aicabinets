@@ -15,11 +15,13 @@ module AICabinets
   module UI
     module Dialogs
       module FrontsDialog
+        extend self
         module_function
 
         ConsoleBridge = AICabinets::UI::DialogConsoleBridge
         Units = AICabinets::Ops::Units
-        private_constant :ConsoleBridge, :Units
+        MIN_PANEL_OPENING_MM = 1.0
+        private_constant :ConsoleBridge, :Units, :MIN_PANEL_OPENING_MM
 
         DIALOG_TITLE = 'AI Cabinets — Fronts'
         PREFERENCES_KEY = 'AICabinets.FrontsDialog'
@@ -140,7 +142,7 @@ module AICabinets
             notify(dialog, 'info', 'Reverted to slab front.')
           else
             sanitized = AICabinets::Params::FivePiece.write!(target, params: params, scope: scope)
-            regenerate_front(target, sanitized)
+            regenerate_front_impl(target, sanitized)
             notify(dialog, 'info', 'Five-piece settings applied.')
           end
 
@@ -358,29 +360,35 @@ module AICabinets
         end
         private_class_method :ensure_unique_instance
 
-        def regenerate_front(target, params)
+        def regenerate_front_impl(target, params)
           definition = ensure_definition(target)
           bbox = definition.bounds
           width_mm = Units.length_to_mm(bbox.width)
-          height_mm = Units.length_to_mm(bbox.height)
-          thickness_mm = params[:door_thickness_mm] || Units.length_to_mm(bbox.depth)
+          height_mm = Units.length_to_mm(bbox.depth)
+          thickness_mm = params[:door_thickness_mm] || Units.length_to_mm(bbox.height)
 
           params[:door_thickness_mm] = thickness_mm
           params[:rail_width_mm] ||= params[:stile_width_mm]
 
-          open_w_mm = width_mm - (2.0 * params[:stile_width_mm].to_f)
-          open_h_mm = height_mm - (2.0 * params[:rail_width_mm].to_f)
-
-          raise AICabinets::ValidationError, ['Door opening would be negative.'] unless open_w_mm.positive? && open_h_mm.positive?
+          clamp_frame_member_widths!(
+            params,
+            finished_w_mm: width_mm,
+            finished_h_mm: height_mm
+          )
 
           definition.entities.clear!
 
-          AICabinets::Geometry::FivePiece.build_frame!(
+          frame_result = AICabinets::Geometry::FivePiece.build_frame!(
             target: definition,
             params: params,
-            open_w_mm: open_w_mm,
-            open_h_mm: open_h_mm
+            finished_w_mm: width_mm,
+            finished_h_mm: height_mm
           )
+
+          open_w_mm = frame_result[:opening_w_mm]
+          open_h_mm = frame_result[:opening_h_mm]
+          open_w_mm ||= width_mm - (2.0 * params[:stile_width_mm].to_f)
+          open_h_mm ||= height_mm - (2.0 * params[:rail_width_mm].to_f)
 
           AICabinets::Geometry::FivePiecePanel.build_panel!(
             target: definition,
@@ -391,7 +399,78 @@ module AICabinets
             open_h_mm: open_h_mm
           )
         end
+        module_function :regenerate_front_impl
+        private_class_method :regenerate_front_impl
+
+        def self.regenerate_front(target, params)
+          regenerate_front_impl(target, params)
+        end
         private_class_method :regenerate_front
+
+        def clamp_frame_member_widths!(params, finished_w_mm:, finished_h_mm:)
+          stile_width_mm = params[:stile_width_mm].to_f
+          rail_width_mm = params[:rail_width_mm]
+          rail_width_mm = stile_width_mm unless rail_width_mm.is_a?(Numeric)
+
+          clearance_mm = params[:panel_clearance_per_side_mm].to_f
+
+          stile_limit = frame_member_limit(finished_w_mm, label: 'Door width', clearance_mm: clearance_mm)
+          rail_limit = frame_member_limit(finished_h_mm, label: 'Door height', clearance_mm: clearance_mm)
+
+          min_stile = minimum_stile_requirement_mm(params)
+          if stile_limit < min_stile
+            raise AICabinets::ValidationError,
+                  [format('Door width %.2f mm cannot accommodate stile width %.2f mm.', finished_w_mm, min_stile)]
+          end
+
+          clamped_stile = [stile_width_mm, stile_limit].min
+          params[:stile_width_mm] = clamped_stile
+
+          clamped_rail = [rail_width_mm.to_f, rail_limit].min
+          min_rail_width = clamped_stile / 2.0
+          if clamped_rail < min_rail_width
+            if rail_limit < min_rail_width
+              raise AICabinets::ValidationError,
+                    [format('Door height %.2f mm cannot accommodate rail width %.2f mm (half of clamped stile %.2f mm).',
+                            finished_h_mm, min_rail_width, clamped_stile)]
+            end
+            clamped_rail = min_rail_width
+          end
+          params[:rail_width_mm] = clamped_rail
+        end
+        private_class_method :clamp_frame_member_widths!
+
+        def frame_member_limit(total_mm, label:, clearance_mm:)
+          numeric = Float(total_mm)
+          required_opening = (clearance_mm * 2.0) + MIN_PANEL_OPENING_MM
+          limit = (numeric - required_opening) / 2.0
+          if limit <= 0.0
+            raise AICabinets::ValidationError,
+                  [format('%s %.2f mm is too small for a %.2f mm panel opening (including clearances).',
+                          label, numeric, required_opening)]
+          end
+
+          limit
+        rescue ArgumentError, TypeError
+          raise AICabinets::ValidationError, [format('%s is invalid.', label)]
+        end
+        private_class_method :frame_member_limit
+
+        def minimum_stile_requirement_mm(params)
+          joint_type = params[:joint_type] || 'cope_stick'
+          joint_min =
+            AICabinets::Params::FivePiece::MIN_STILE_WIDTH_BY_JOINT_MM.fetch(
+              joint_type
+            ) do
+              AICabinets::Params::FivePiece::MIN_STILE_WIDTH_BY_JOINT_MM.values.max
+            end
+
+          groove_depth = params[:groove_depth_mm].to_f
+          groove_min = (groove_depth * 2.0) + AICabinets::Params::FivePiece::GROOVE_DEPTH_BUFFER_MM
+
+          [joint_min, groove_min].max
+        end
+        private_class_method :minimum_stile_requirement_mm
 
         def rebuild_slab(target)
           definition = ensure_definition(target)

@@ -222,6 +222,31 @@ class TC_FivePieceFrame < TestUp::TestCase
     end
   end
 
+  def test_build_from_finished_dimensions
+    params = build_params
+    definition = Sketchup.active_model.definitions.add('Five Piece Frame AC Finished')
+    finished_w_mm = 640.0
+    finished_h_mm = 760.0
+
+    result = nil
+    with_solid_booleans(true) do
+      result = AICabinets::Geometry::FivePiece.build_frame!(
+        target: definition,
+        params: params,
+        finished_w_mm: finished_w_mm,
+        finished_h_mm: finished_h_mm
+      )
+    end
+
+    stile_width = params[:stile_width_mm]
+    rail_width = params[:rail_width_mm] || stile_width
+    expected_open_w = finished_w_mm - (2.0 * stile_width)
+    expected_open_h = finished_h_mm - (2.0 * rail_width)
+
+    assert_in_delta(expected_open_w, result[:opening_w_mm], 1e-6)
+    assert_in_delta(expected_open_h, result[:opening_h_mm], 1e-6)
+  end
+
   private
 
   def build_params(overrides = {})
