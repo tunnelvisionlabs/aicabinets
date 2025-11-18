@@ -246,12 +246,10 @@ module AICabinets
 
           drawer_action = last_drawer_rules_action(definition)
           door_style =
-            if drawer_action == 'slab'
+            if drawer_action == 'slab' || !five_piece_present?(definition)
               'slab'
-            elsif five_piece_present?(definition)
-              params[:joint_type] == 'miter' ? 'five_piece_miter' : 'five_piece_cope_stick'
             else
-              'slab'
+              params[:joint_type] == 'miter' ? 'five_piece_miter' : 'five_piece_cope_stick'
             end
 
           {

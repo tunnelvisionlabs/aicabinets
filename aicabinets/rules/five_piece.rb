@@ -16,7 +16,7 @@ module AICabinets
         keyword_init: true
       )
 
-      def evaluate_drawer_front(open_outside_w_mm:, open_outside_h_mm:, params: {})
+      def evaluate_drawer_front(_open_outside_w_mm:, open_outside_h_mm:, params: {})
         requested = params[:drawer_rail_width_mm]
         requested ||= params[:rail_width_mm]
         requested ||= params[:stile_width_mm]
