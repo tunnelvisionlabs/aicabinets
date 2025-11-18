@@ -77,25 +77,19 @@ module AICabinets
 
       origin, u_point, v_point = mapping_points(face.bounds, orientation)
 
-      u_point.x = origin.x + (u_point.x - origin.x) * scale_factor(scale_mm)
-      v_point.z = origin.z + (v_point.z - origin.z) * scale_factor(scale_mm)
+      u_point.x = origin.x + ((u_point.x - origin.x) * scale_factor(scale_mm))
+      v_point.z = origin.z + ((v_point.z - origin.z) * scale_factor(scale_mm))
 
       face.position_material(material, u_point, v_point, origin, true)
     rescue StandardError
       nil
     end
 
-    def mapping_points(bounds, orientation)
-      grain = orientation == :horizontal ? :horizontal : :vertical
+    def mapping_points(bounds, _orientation)
       y = (bounds.min.y + bounds.max.y) / 2.0
       origin = Geom::Point3d.new(bounds.min.x, y, bounds.min.z)
       u_point = Geom::Point3d.new(bounds.max.x, y, bounds.min.z)
-      v_point =
-        if grain == :horizontal
-          Geom::Point3d.new(bounds.min.x, y, bounds.max.z)
-        else
-          Geom::Point3d.new(bounds.min.x, y, bounds.max.z)
-        end
+      v_point = Geom::Point3d.new(bounds.min.x, y, bounds.max.z)
       [origin, u_point, v_point]
     end
     private_class_method :mapping_points
