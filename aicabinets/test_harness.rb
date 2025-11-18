@@ -149,9 +149,9 @@ module AICabinets
     end
 
     def indifferent_access(value)
+      return value if value.is_a?(EvalHash)
+
       case value
-      when EvalHash
-        value
       when Hash
         EvalHash.new(value)
       when Array
