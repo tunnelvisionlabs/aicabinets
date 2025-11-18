@@ -165,6 +165,12 @@ Use this section to standardize tone and content quality across issues, PRs, doc
 * Keep screenshots minimal and current; annotate only where it clarifies behavior.
 * When describing measurements, state **units explicitly** and avoid mixing unit systems in a single example.
 
+## Windows Deploy & TestUp Documentation
+
+Document the Windows Deploy and TestUp workflows in `README.md` so contributors can find the npm commands and environment overrides.
+
+Deploy/TestUp commands are available only during local agent execution; assume they cannot run in cloud execution environments.
+
 ## Local validation (docs & Ruby)
 
 Run these commands before sending a PR when you touch Markdown or Ruby files so CI matches local results:
