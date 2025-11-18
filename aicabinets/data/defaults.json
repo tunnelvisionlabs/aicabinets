@@ -20,6 +20,21 @@
       "bays": []
     }
   },
+  "cabinet_upper": {
+    "width_mm": 762,
+    "depth_mm": 356,
+    "height_mm": 762,
+    "overlay_mm": 0,
+    "panel_thickness_mm": 18,
+    "back_thickness_mm": 6,
+    "top_thickness_mm": 18,
+    "bottom_thickness_mm": 18,
+    "door_thickness_mm": 19,
+    "upper": {
+      "num_shelves": 2,
+      "has_back": true
+    }
+  },
   "constraints": {
     "min_door_leaf_width_mm": 140
   }

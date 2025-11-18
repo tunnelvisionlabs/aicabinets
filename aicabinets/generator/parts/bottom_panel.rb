@@ -24,7 +24,12 @@ module AICabinets
 
           translation = Geom::Transformation.translation([x_offset, y_offset, z_offset])
           group.transform!(translation)
-          group
+
+          component = group.to_component
+          definition = component.definition
+          definition.name = name if definition.respond_to?(:name=)
+          component.name = name if component.respond_to?(:name=)
+          component
         end
       end
     end

@@ -69,12 +69,29 @@ module AICabinets
       partitions: PARTITIONS_FALLBACK
     }.freeze
 
+    CABINET_UPPER_FALLBACK = {
+      width_mm: 762.0,
+      depth_mm: 356.0,
+      height_mm: 762.0,
+      overlay_mm: 0.0,
+      panel_thickness_mm: 18.0,
+      back_thickness_mm: 6.0,
+      top_thickness_mm: 18.0,
+      bottom_thickness_mm: 18.0,
+      door_thickness_mm: 19.0,
+      upper: {
+        num_shelves: 2,
+        has_back: true
+      }.freeze
+    }.freeze
+
     FALLBACK_CONSTRAINTS = {
       min_door_leaf_width_mm: 140.0
     }.freeze
 
-    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base constraints].freeze
+    RECOGNIZED_ROOT_KEYS = %w[version cabinet_base cabinet_upper constraints].freeze
     RECOGNIZED_KEYS = FALLBACK_MM.keys.map(&:to_s).freeze
+    UPPER_RECOGNIZED_KEYS = CABINET_UPPER_FALLBACK.keys.map(&:to_s).freeze
     RECOGNIZED_PARTITION_KEYS = PARTITIONS_FALLBACK.keys.map(&:to_s).freeze
     CONSTRAINT_KEYS = FALLBACK_CONSTRAINTS.keys.map(&:to_s).freeze
 
@@ -187,17 +204,17 @@ module AICabinets
           return nil
         end
 
-        warn_unknown_keys_once(raw, ['cabinet_base', 'constraints'], 'overrides root')
+        warn_unknown_keys_once(raw, ['cabinet_base', 'cabinet_upper', 'constraints'], 'overrides root')
         cabinet_base
       else
-        warn_unknown_keys_once(raw, RECOGNIZED_KEYS + ['constraints'], 'overrides root')
+        warn_unknown_keys_once(raw, RECOGNIZED_KEYS + ['cabinet_upper', 'constraints'], 'overrides root')
         raw
       end
     end
     private_class_method :overrides_container
 
     def sanitize_overrides_body(raw)
-      warn_unknown_keys_once(raw, RECOGNIZED_KEYS, 'overrides')
+      warn_unknown_keys_once(raw, RECOGNIZED_KEYS + ['cabinet_upper'], 'overrides')
 
       sanitized = {}
 
@@ -223,6 +240,11 @@ module AICabinets
           numeric = sanitize_override_numeric("overrides.#{key}", value)
           sanitized[key.to_sym] = numeric unless numeric.nil?
         end
+      end
+
+      if raw.key?('cabinet_upper')
+        upper_value = raw['cabinet_upper'] || raw[:cabinet_upper]
+        sanitized[:cabinet_upper] = sanitize_cabinet_upper(upper_value) if upper_value
       end
 
       sanitized
@@ -510,11 +532,12 @@ module AICabinets
     private_class_method :warn_unknown_keys_once
 
     def sanitize_defaults(raw)
-      return deep_dup(FALLBACK_MM) if raw.nil?
+      default_result = builtin_defaults
+      return default_result if raw.nil?
 
       unless raw.is_a?(Hash)
         warn('AI Cabinets: defaults root must be an object; using built-in fallbacks.')
-        return deep_dup(FALLBACK_MM)
+        return default_result
       end
 
       warn_unknown_keys(raw, RECOGNIZED_ROOT_KEYS, 'defaults root')
@@ -522,16 +545,23 @@ module AICabinets
       version = sanitize_version(raw['version'])
       if version != DEFAULT_VERSION
         warn("AI Cabinets: defaults version #{version} is not supported; using built-in fallbacks.")
-        return deep_dup(FALLBACK_MM)
+        return default_result
       end
 
       base_raw = raw['cabinet_base']
       unless base_raw.is_a?(Hash)
         warn('AI Cabinets: defaults cabinet_base must be an object; using built-in fallbacks.')
-        return deep_dup(FALLBACK_MM)
+        return default_result
       end
 
       result = sanitize_cabinet_base(base_raw)
+
+      upper_raw = raw['cabinet_upper']
+      if upper_raw.is_a?(Hash)
+        result[:cabinet_upper] = sanitize_cabinet_upper(upper_raw)
+      else
+        result[:cabinet_upper] = deep_dup(CABINET_UPPER_FALLBACK)
+      end
 
       constraints_source = raw['constraints'] || raw[:constraints]
       result[:constraints] = sanitize_constraints(constraints_source)
@@ -539,6 +569,14 @@ module AICabinets
       result
     end
     private_class_method :sanitize_defaults
+
+    def builtin_defaults
+      defaults = deep_dup(FALLBACK_MM)
+      defaults[:cabinet_upper] = deep_dup(CABINET_UPPER_FALLBACK)
+      defaults[:constraints] = deep_dup(FALLBACK_CONSTRAINTS)
+      defaults
+    end
+    private_class_method :builtin_defaults
 
     def sanitize_cabinet_base(raw)
       warn_unknown_keys(raw, RECOGNIZED_KEYS, 'defaults.cabinet_base')
@@ -562,6 +600,48 @@ module AICabinets
       end
     end
     private_class_method :sanitize_cabinet_base
+
+    def sanitize_cabinet_upper(raw)
+      warn_unknown_keys(raw, UPPER_RECOGNIZED_KEYS, 'defaults.cabinet_upper')
+
+      CABINET_UPPER_FALLBACK.each_with_object({}) do |(key, fallback), result|
+        label = "cabinet_upper.#{key}"
+
+        result[key] =
+          case key
+          when :upper
+            sanitize_upper_block(raw[key.to_s], fallback)
+          else
+            sanitize_numeric_field(label, raw[key.to_s], fallback)
+          end
+      end
+    end
+    private_class_method :sanitize_cabinet_upper
+
+    def sanitize_upper_block(raw, fallback)
+      unless raw.is_a?(Hash)
+        return deep_dup(fallback)
+      end
+
+      sanitized = deep_dup(fallback)
+
+      if raw.key?('num_shelves')
+        sanitized[:num_shelves] = sanitize_integer_field(
+          'cabinet_upper.upper.num_shelves',
+          raw['num_shelves'],
+          sanitized[:num_shelves],
+          min: 0,
+          max: MAX_PARTITION_COUNT
+        )
+      end
+
+      if raw.key?('has_back')
+        sanitized[:has_back] = !!raw['has_back']
+      end
+
+      sanitized
+    end
+    private_class_method :sanitize_upper_block
 
     def sanitize_constraints(raw)
       unless raw.is_a?(Hash)
@@ -883,16 +963,22 @@ module AICabinets
       result = deep_dup(defaults)
 
       overrides.each do |key, value|
-        if key == :constraints || key == 'constraints'
+        symbol = key.to_sym
+        if symbol == :constraints
           result[:constraints] = merge_constraints(result[:constraints], value)
           next
         end
 
-        next unless FALLBACK_MM.key?(key)
+        if symbol == :cabinet_upper
+          result[:cabinet_upper] = merge_cabinet_upper(result[:cabinet_upper], value)
+          next
+        end
 
-        result[key] =
-          if key == :partitions
-            merge_partitions(result[key], value)
+        next unless FALLBACK_MM.key?(symbol)
+
+        result[symbol] =
+          if symbol == :partitions
+            merge_partitions(result[symbol], value)
           else
             value
           end
@@ -901,6 +987,36 @@ module AICabinets
       result
     end
     private_class_method :merge_defaults
+
+    def merge_cabinet_upper(defaults, overrides)
+      base = defaults.is_a?(Hash) ? deep_dup(defaults) : deep_dup(CABINET_UPPER_FALLBACK)
+      return base unless overrides.is_a?(Hash)
+
+      overrides.each do |key, value|
+        next unless UPPER_RECOGNIZED_KEYS.include?(key.to_s)
+
+        base[key.to_sym] =
+          if key.to_sym == :upper && value.is_a?(Hash)
+            merge_upper_block(base[:upper], value)
+          else
+            value
+          end
+      end
+
+      base
+    end
+    private_class_method :merge_cabinet_upper
+
+    def merge_upper_block(defaults, overrides)
+      base = defaults.is_a?(Hash) ? deep_dup(defaults) : deep_dup(CABINET_UPPER_FALLBACK[:upper])
+      return base unless overrides.is_a?(Hash)
+
+      base[:num_shelves] = overrides[:num_shelves] if overrides.key?(:num_shelves)
+      base[:has_back] = overrides[:has_back] unless overrides[:has_back].nil?
+
+      base
+    end
+    private_class_method :merge_upper_block
 
     def merge_partitions(defaults, overrides)
       base = defaults.is_a?(Hash) ? deep_dup(defaults) : deep_dup(PARTITIONS_FALLBACK)

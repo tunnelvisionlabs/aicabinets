@@ -21,7 +21,7 @@ module ModelQuery
   end
 
   def front_entities(instance:)
-    fronts_by_bay(instance: instance).values.flatten
+    fronts_by_bay(instance: instance).values.flatten.map { |info| info[:entity] }.compact
   end
 
   def tag_name_for(entity)
