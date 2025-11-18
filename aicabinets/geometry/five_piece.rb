@@ -3,6 +3,7 @@
 require 'sketchup.rb'
 
 Sketchup.require('aicabinets/capabilities')
+Sketchup.require('aicabinets/appearance')
 Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/ops/materials')
 Sketchup.require('aicabinets/ops/tags')
@@ -87,7 +88,11 @@ module AICabinets
         )
 
         front_tag = ensure_fronts_tag(model)
-        material = resolve_frame_material(model, validated[:frame_material_id])
+        material = AICabinets::Appearance.resolve_material(
+          model: model,
+          id: validated[:frame_material_id],
+          fallback_name: AICabinets::Ops::Materials::DEFAULT_DOOR_FRAME_MATERIAL_NAME
+        )
 
         warnings = []
         stiles = []
@@ -177,6 +182,13 @@ module AICabinets
             miter_mode = result[:miter_mode]
             warnings.concat(result[:warnings])
           end
+
+          appearance_result =
+            AICabinets::Appearance.apply_five_piece_materials!(
+              definition: definition,
+              params: validated
+            )
+          warnings.concat(Array(appearance_result[:warnings])) if appearance_result
 
           model.commit_operation if operation_open
           operation_open = false
@@ -857,25 +869,6 @@ module AICabinets
       end
       private_class_method :translate_group!
 
-      def resolve_frame_material(model, material_id)
-        return nil unless model
-
-        name = material_id.to_s
-        if name.empty?
-          AICabinets::Ops::Materials.default_frame(model)
-        else
-          ensure_material(model, name)
-        end
-      end
-      private_class_method :resolve_frame_material
-
-      def ensure_material(model, name)
-        materials = model.materials
-        materials[name] || materials.add(name)
-      rescue StandardError
-        nil
-      end
-      private_class_method :ensure_material
     end
   end
 end

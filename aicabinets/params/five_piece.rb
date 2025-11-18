@@ -18,6 +18,7 @@ module AICabinets
       DOOR_TYPE = 'five_piece'.freeze
       JOINT_TYPES = %w[cope_stick miter].freeze
       PANEL_STYLES = %w[flat raised reverse_raised].freeze
+      PANEL_GRAIN = %w[vertical horizontal].freeze
       MIN_STILE_WIDTH_BY_JOINT_MM = {
         'cope_stick' => 50.0,
         'miter' => 55.0
@@ -34,6 +35,7 @@ module AICabinets
         rail_width_mm: nil,
         panel_style: 'flat',
         panel_thickness_mm: 9.5,
+        panel_grain: 'vertical',
         groove_depth_mm: 11.0,
         groove_width_mm: nil,
         panel_clearance_per_side_mm: 3.0,
@@ -59,6 +61,7 @@ module AICabinets
         joint_type
         inside_profile_id
         panel_style
+        panel_grain
         frame_material_id
         panel_material_id
       ].freeze
@@ -116,6 +119,11 @@ module AICabinets
         panel_style = coerced[:panel_style]
         unless PANEL_STYLES.include?(panel_style.to_s)
           errors << "panel_style must be one of: #{PANEL_STYLES.join(', ')}"
+        end
+
+        panel_grain = coerced[:panel_grain]
+        unless panel_grain.nil? || PANEL_GRAIN.include?(panel_grain.to_s)
+          errors << "panel_grain must be one of: #{PANEL_GRAIN.join(', ')}"
         end
 
         inside_profile_id = coerced[:inside_profile_id]
