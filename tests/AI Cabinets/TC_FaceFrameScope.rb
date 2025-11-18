@@ -37,7 +37,7 @@ class TC_FaceFrameScope < TestUp::TestCase
     )
 
     assert_equal(true, result[:ok])
-    assert_equal(def_key_of(first), def_key_of(second))
+    assert_equal(AICabinetsTestHelper.def_key_of(first), AICabinetsTestHelper.def_key_of(second))
     parsed = params_from_definition(first.definition)
     assert_in_delta(50.0, parsed[:face_frame][:stile_left_mm], 0.01)
   end
@@ -62,7 +62,7 @@ class TC_FaceFrameScope < TestUp::TestCase
     )
 
     assert_equal(true, result[:ok])
-    refute_equal(def_key_of(first), def_key_of(second))
+    refute_equal(AICabinetsTestHelper.def_key_of(first), AICabinetsTestHelper.def_key_of(second))
     parsed = params_from_definition(first.definition)
     parsed_other = params_from_definition(second.definition)
     assert_in_delta(16.0, parsed[:face_frame][:overlay_mm], 0.01)

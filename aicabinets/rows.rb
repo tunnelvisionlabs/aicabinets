@@ -918,14 +918,12 @@ module AICabinets
     def format_length(value_mm)
       return '' if value_mm.nil?
 
-      if defined?(Sketchup) && value_mm.respond_to?(:to_f)
-        length = value_mm.to_f.mm
-        return Sketchup.format_length(length)
-      end
-
-      format('%.2f mm', value_mm.to_f)
+      mm_value = Float(value_mm)
+      rounded = mm_value.round(3)
+      formatted = format('%.3f', rounded).sub(/\.?0+$/, '')
+      "#{formatted} mm"
     rescue StandardError
-      format('%.2f mm', value_mm.to_f)
+      format('%.3f mm', value_mm.to_f)
     end
     private_class_method :format_length
 

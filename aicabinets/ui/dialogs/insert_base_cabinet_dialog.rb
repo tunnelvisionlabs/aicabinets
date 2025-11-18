@@ -70,7 +70,6 @@ module AICabinets
             @field = field
           end
         end
-        private_constant :PayloadError
         private_constant :MAX_LENGTH_MM, :VALID_FRONT_VALUES, :VALID_PARTITION_MODES,
                         :VALID_PARTITION_LAYOUTS, :DEFAULT_PARTITION_LAYOUT, :LENGTH_FIELD_NAMES,
                         :FACE_FRAME_FIELD_NAMES
@@ -1763,20 +1762,12 @@ module AICabinets
         private_class_method :parse_face_frame_layout
 
         def parse_length_to_mm(value, field, label)
-          text =
-            if value.is_a?(Numeric)
-              format('%gmm', value)
-            else
-              value.to_s
-            end
-
-          length = text.to_l
-          unless length.respond_to?(:to_mm)
+          mm_value = Float(coerce_length_value_to_mm(value))
+          if mm_value.nan?
             raise PayloadError.new('invalid_type', "#{label} must be a valid length.", field)
           end
 
-          mm_value = length.to_mm.to_f
-          if mm_value.nan? || mm_value.negative?
+          if mm_value.negative?
             raise PayloadError.new('invalid_type', "#{label} must be non-negative.", field)
           end
 
@@ -1785,6 +1776,138 @@ module AICabinets
           raise PayloadError.new('invalid_type', "#{label} must be a valid length.", field)
         end
         private_class_method :parse_length_to_mm
+
+        def coerce_length_value_to_mm(value)
+          return nil if value.nil?
+
+          length_class = defined?(Sketchup::Length) ? Sketchup::Length : nil
+
+          if length_class && value.is_a?(length_class)
+            return value.to_mm.to_f
+          end
+
+          if value.is_a?(Numeric)
+            return value.to_f
+          end
+
+          if value.respond_to?(:to_mm)
+            converted = value.to_mm
+            return converted.to_f if converted.respond_to?(:to_f)
+            return Float(converted)
+          end
+
+          if value.respond_to?(:to_str)
+            return parse_string_length_to_mm(value.to_str)
+          end
+
+          return parse_string_length_to_mm(value.to_s) if value.respond_to?(:to_s)
+
+          nil
+        end
+        private_class_method :coerce_length_value_to_mm
+
+        def parse_string_length_to_mm(text)
+          return nil unless text
+
+          normalized = text.to_s.strip
+          return nil if normalized.empty?
+
+          manual_mm = parse_textual_length_to_mm(normalized)
+          return manual_mm if manual_mm
+
+          numeric_mm = parse_plain_numeric_mm(normalized)
+          return numeric_mm if numeric_mm
+
+          begin
+            if normalized.respond_to?(:to_l)
+              length = normalized.to_l
+              if length.respond_to?(:to_mm)
+                return length.to_mm.to_f
+              elsif length.respond_to?(:to_f)
+                return length.to_f
+              end
+            end
+          rescue NoMethodError, ArgumentError
+            # Fall through to manual/text parsing and direct numbers.
+          end
+
+          Float(normalized)
+        rescue ArgumentError, TypeError
+          nil
+        end
+        private_class_method :parse_string_length_to_mm
+
+        def parse_textual_length_to_mm(text)
+          return nil unless text && text =~ /\b(feet|foot|ft|inches|inch|in)\b/i
+
+          working = text.tr('-', ' ')
+          matches =
+            working.scan(/([+-]?(?:\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+))\s*(feet|foot|ft|inches|inch|in)\b/i)
+          return nil if matches.empty?
+
+          total_inches = 0.0
+          matches.each do |raw_value, unit|
+            magnitude = parse_mixed_number_token(raw_value)
+            next unless magnitude
+
+            scale = unit.match?(/feet|foot|ft/i) ? 12.0 : 1.0
+            total_inches += magnitude * scale
+          end
+
+          return nil unless total_inches.finite?
+
+          total_inches * 25.4
+        rescue StandardError
+          nil
+        end
+        private_class_method :parse_textual_length_to_mm
+
+        def parse_mixed_number_token(token)
+          return nil unless token
+
+          sanitized = token.strip
+          return nil if sanitized.empty?
+
+          clean = sanitized.tr('-', ' ')
+          parts = clean.split(/\s+/)
+          total = 0.0
+          parts.each do |part|
+            fraction = parse_fractional_component(part)
+            value = if fraction.nil?
+                      Float(part)
+                    else
+                      fraction
+                    end
+            total += value
+          end
+          total
+        rescue ArgumentError, TypeError, ZeroDivisionError
+          nil
+        end
+        private_class_method :parse_mixed_number_token
+
+        def parse_fractional_component(part)
+          match = part.match(/\A([+-]?\d+)\s*\/\s*([+-]?\d+)\z/)
+          return nil unless match
+
+          numerator = match[1].to_f
+          denominator = match[2].to_f
+          return nil if denominator.zero?
+
+          numerator / denominator
+        rescue StandardError
+          nil
+        end
+        private_class_method :parse_fractional_component
+
+        def parse_plain_numeric_mm(text)
+          return nil unless text && text.match?(/\A[+-]?\d+(?:\.\d+)?\z/)
+
+          Float(text)
+        rescue ArgumentError, TypeError
+          nil
+        end
+        private_class_method :parse_plain_numeric_mm
 
         def face_frame_error_field(message)
           return nil unless message.is_a?(String)

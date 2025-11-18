@@ -20,14 +20,14 @@ class TC_FaceFrameDialogHandlers < TestUp::TestCase
     raw = base_payload
     raw[:face_frame] = {
       enabled: true,
-      thickness_mm: "1'",
+      thickness_mm: "0' 3/4\"",
       stile_left_mm: "1 1/2\"",
       stile_right_mm: '38mm',
-      rail_top_mm: '1 ft 2 in',
+      rail_top_mm: '0.1 ft 1 in',
       rail_bottom_mm: '25.4',
       mid_stile_mm: '0',
       mid_rail_mm: '0',
-      reveal_mm: '1/8"',
+      reveal_mm: '3/32"',
       overlay_mm: '1/2"',
       layout: [{ kind: 'double_doors' }]
     }
@@ -35,9 +35,10 @@ class TC_FaceFrameDialogHandlers < TestUp::TestCase
     params = build_params(raw)
     face_frame = params[:face_frame]
 
-    assert_in_delta(304.8, face_frame[:thickness_mm], 0.1)
+    assert_in_delta(19.05, face_frame[:thickness_mm], 0.01)
     assert_in_delta(38.1, face_frame[:stile_left_mm], 0.1)
     assert_in_delta(38.0, face_frame[:stile_right_mm], 0.1)
+    assert_in_delta(55.88, face_frame[:rail_top_mm], 0.1)
     assert_equal([{ kind: 'double_doors' }], face_frame[:layout])
   end
 
