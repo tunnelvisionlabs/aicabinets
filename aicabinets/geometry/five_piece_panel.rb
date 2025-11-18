@@ -3,6 +3,7 @@
 require 'sketchup.rb'
 
 Sketchup.require('aicabinets/capabilities')
+Sketchup.require('aicabinets/appearance')
 Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/geometry/five_piece')
 Sketchup.require('aicabinets/ops/materials')
@@ -90,7 +91,14 @@ module AICabinets
             material_id: validated[:panel_material_id]
           )
 
+          appearance_result =
+            AICabinets::Appearance.apply_five_piece_materials!(
+              definition: definition,
+              params: validated
+            )
+
           warnings << 'Panel volume unavailable; geometry may not be solid.' unless panel_group.volume
+          warnings.concat(Array(appearance_result[:warnings])) if appearance_result
 
           model.commit_operation if operation_open
           operation_open = false
@@ -283,7 +291,11 @@ module AICabinets
         tag = AICabinets::Ops::Tags.ensure_tag(model, 'AICabinets/Fronts')
         group.layer = tag if tag
 
-        material = AICabinets::Ops::Materials.find_or_default(model: model, material_id: material_id)
+        material = AICabinets::Appearance.resolve_material(
+          model: model,
+          id: material_id,
+          fallback_name: AICabinets::Ops::Materials::DEFAULT_DOOR_MATERIAL_NAME
+        )
         group.material = material if material
 
         dictionary = group.attribute_dictionary(PANEL_DICTIONARY, true)

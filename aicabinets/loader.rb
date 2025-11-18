@@ -5,6 +5,7 @@ module AICabinets
     Sketchup.require('aicabinets/features')
     Sketchup.require('aicabinets/validation_error')
     Sketchup.require('aicabinets/capabilities')
+    Sketchup.require('aicabinets/appearance')
     Sketchup.require('aicabinets/params/five_piece')
     Sketchup.require('aicabinets/geometry/five_piece')
     Sketchup.require('aicabinets/geometry/five_piece_panel')
