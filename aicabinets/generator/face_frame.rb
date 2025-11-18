@@ -6,6 +6,7 @@ require 'aicabinets/face_frame'
 
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/ops/tags')
+Sketchup.require('aicabinets/ops/operations')
 
 module AICabinets
   module Generator
@@ -29,21 +30,11 @@ module AICabinets
         return nil unless width_mm.positive? && height_mm.positive?
 
         model = parent_entities.respond_to?(:model) ? parent_entities.model : nil
-        active_operation_name =
-          model.respond_to?(:active_operation_name) ? model.active_operation_name.to_s : ''
-        operation_started = false
-        operation_transparent = false
+        operation_open = false
+        operation_success = false
         begin
-          if model && model.respond_to?(:start_operation)
-            start_transparent = !active_operation_name.empty?
-            started = model.start_operation(
-              'AI Cabinets: Face Frame',
-              true,
-              false,
-              start_transparent
-            )
-            operation_started = started
-            operation_transparent = start_transparent if started
+          if model && model.respond_to?(:start_operation) && !Ops::Operations.operation_open?(model)
+            operation_open = !!model.start_operation('AI Cabinets: Face Frame', true)
           end
 
           thickness = Ops::Units.to_length_mm(thickness_mm)
@@ -100,15 +91,14 @@ module AICabinets
           Ops::Tags.assign!(group, FRONT_TAG_NAME)
           members.compact.each { |member| Ops::Tags.assign!(member, FRONT_TAG_NAME) }
 
+          operation_success = true
           group
         rescue StandardError
-          if operation_started && !operation_transparent && model.respond_to?(:abort_operation)
-            model.abort_operation
-          end
+          model.abort_operation if operation_open && model.respond_to?(:abort_operation)
           raise
         ensure
-          if operation_started && model.respond_to?(:commit_operation)
-            model.commit_operation
+          if operation_open && model.respond_to?(:commit_operation)
+            model.commit_operation if operation_success
           end
         end
       end

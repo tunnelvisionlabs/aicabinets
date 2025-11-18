@@ -5,6 +5,7 @@ module AICabinets
     Sketchup.require('aicabinets/features')
     Sketchup.require('aicabinets/version')
     Sketchup.require('aicabinets/ops/units')
+    Sketchup.require('aicabinets/ops/operations')
     Sketchup.require('aicabinets/selection')
     Sketchup.require('aicabinets/tags')
     Sketchup.require('aicabinets/rows')
@@ -30,6 +31,9 @@ module AICabinets
     def bootstrap
       return unless defined?(Sketchup)
 
+      if defined?(AICabinets::Ops::Operations)
+        AICabinets::Ops::Operations.install!
+      end
       AICabinets::UI.register_ui! if AICabinets::UI.respond_to?(:register_ui!)
       nil
     end

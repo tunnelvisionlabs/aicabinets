@@ -2,6 +2,8 @@
 
 require 'sketchup.rb'
 
+Sketchup.require('aicabinets/ops/operations')
+
 module AICabinets
   module Tags
     module_function
@@ -43,17 +45,11 @@ module AICabinets
 
       tag = nil
       operation_open = false
-      operation_transparent = false
-      active_operation_name =
-        model.respond_to?(:active_operation_name) ? model.active_operation_name.to_s : ''
+      operation_success = false
       begin
         if changes_required
-          if active_operation_name.empty?
-            operation_open = model.start_operation(OPERATION_NAME, true)
-          else
-            started = model.start_operation(OPERATION_NAME, true, false, true)
-            operation_open = started
-            operation_transparent = started
+          if model.respond_to?(:start_operation) && !Ops::Operations.operation_open?(model)
+            operation_open = !!model.start_operation(OPERATION_NAME, true)
           end
           folder ||= layers.add_folder(CABINET_FOLDER_NAME)
 
@@ -63,14 +59,18 @@ module AICabinets
           end
 
           tag = normalize_owned_tag(layers, folder, CABINET_TAG_NAME, create_if_missing: true)
-
-          model.commit_operation if operation_open
+          operation_success = true if operation_open
         else
           folder ||= infer_folder(layers)
           tag = normalize_owned_tag(layers, folder, CABINET_TAG_NAME, create_if_missing: true)
         end
+      rescue StandardError
+        model.abort_operation if operation_open && model.respond_to?(:abort_operation)
+        raise
       ensure
-        model.abort_operation if operation_open && !operation_transparent
+        if operation_open && model.respond_to?(:commit_operation)
+          model.commit_operation if operation_success
+        end
       end
 
       tag
