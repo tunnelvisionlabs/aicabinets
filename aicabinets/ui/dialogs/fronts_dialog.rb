@@ -5,6 +5,7 @@ require 'json'
 require 'aicabinets/geometry/five_piece'
 require 'aicabinets/geometry/five_piece_panel'
 require 'aicabinets/generator/fronts'
+require 'aicabinets/metadata'
 require 'aicabinets/ops/tags'
 require 'aicabinets/ops/units'
 require 'aicabinets/params/five_piece'
@@ -390,13 +391,23 @@ module AICabinets
           open_w_mm ||= width_mm - (2.0 * params[:stile_width_mm].to_f)
           open_h_mm ||= height_mm - (2.0 * params[:rail_width_mm].to_f)
 
-          AICabinets::Geometry::FivePiecePanel.build_panel!(
+          panel_result = AICabinets::Geometry::FivePiecePanel.build_panel!(
             target: definition,
             params: params,
             style: params[:panel_style],
             cove_radius_mm: params[:panel_cove_radius_mm],
             open_w_mm: open_w_mm,
             open_h_mm: open_h_mm
+          )
+
+          AICabinets::Metadata.write_five_piece!(
+            definition: definition,
+            params: params,
+            parts: {
+              stiles: frame_result[:stiles],
+              rails: frame_result[:rails],
+              panel: panel_result[:panel]
+            }
           )
         end
         module_function :regenerate_front_impl
