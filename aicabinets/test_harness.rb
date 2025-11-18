@@ -137,7 +137,8 @@ module AICabinets
       if ok
         value_json = data['value']
         begin
-          value = value_json.nil? ? nil : JSON.parse(value_json)
+          parsed = value_json.nil? ? nil : JSON.parse(value_json)
+          value = indifferent_access(parsed)
         rescue JSON::ParserError
           value = value_json
         end
@@ -146,6 +147,57 @@ module AICabinets
         { ok: false, error: data['error'].to_s }
       end
     end
+
+    def indifferent_access(value)
+      case value
+      when EvalHash
+        value
+      when Hash
+        EvalHash.new(value)
+      when Array
+        value.map { |entry| indifferent_access(entry) }
+      else
+        value
+      end
+    end
+
+    class EvalHash < Hash
+      def initialize(source = {})
+        super()
+        return unless source.is_a?(Hash)
+
+        source.each do |key, val|
+          self[key] = val
+        end
+      end
+
+      def [](key)
+        super(convert_key(key))
+      end
+
+      def []=(key, value)
+        super(convert_key(key), TestHarness.indifferent_access(value))
+      end
+
+      def fetch(key, *args, &block)
+        super(convert_key(key), *args, &block)
+      end
+
+      def key?(key)
+        super(convert_key(key))
+      end
+
+      alias include? key?
+      alias member? key?
+      alias has_key? key?
+
+      private
+
+      def convert_key(key)
+        key.is_a?(Symbol) ? key.to_s : key
+      end
+    end
+    private_constant :EvalHash
 
     def next_token
       SecureRandom.uuid
