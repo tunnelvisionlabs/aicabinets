@@ -69,6 +69,8 @@ Use the npm helpers to deploy the extension to SketchUp 2026 and run TestUp CI l
   npm run testup:all
   ```
 
+  Results are written to `dist/testup-all-results.json`, and each run logs `puts` output to `dist/testup-all-ruby-console.log` (with errors in `dist/testup-all-ruby-errors.log`). Pass `--output "C:\\dev\\aicabinets\\dist\\all_results.json"` to redirect the JSON if another tool monitors a different path.
+
 - Run a subset defined by a TestUp YAML config (auto-deploys first):
 
   ```cmd
@@ -120,6 +122,7 @@ Defaults assume SketchUp 2026 on Windows with `SketchUp.exe` in `%ProgramFiles%\
 - `AI_CABINETS_TESTS` or `--tests <path>`
 - `TESTUP_CONFIG` or `--config <path>` (for `testup:config`)
 - `TESTUP_CLASS` or `--class <TestUpClass>` with optional `--output <results.json>` (for `testup:class`)
+- `--output <results.json>` when running `testup:all` (defaults to `dist/testup-all-results.json`)
 - `STARTUP_RUBY` or `--script <path>` (for `sketchup:run`)
 
 Pass `--debug` after the command to echo resolved paths and the full SketchUp invocation.
