@@ -17,7 +17,11 @@ module ModelQuery
   end
 
   def fronts_by_bay(instance:)
-    components_by_bay(instance, 'Fronts')
+    components_by_bay(
+      instance,
+      'Fronts',
+      filter: ->(entity) { entity.is_a?(Sketchup::ComponentInstance) }
+    )
   end
 
   def front_entities(instance:)
@@ -38,7 +42,7 @@ module ModelQuery
     normalize_tag_category(tag_name_for(entity))
   end
 
-  def components_by_bay(instance, tag_category)
+  def components_by_bay(instance, tag_category, filter: nil)
     validate_instance(instance)
 
     result = Hash.new { |hash, key| hash[key] = [] }
@@ -46,6 +50,8 @@ module ModelQuery
     entities = enumerate_entities(instance.definition.entities)
 
     entities_in_category(entities, tag_category).each do |entity|
+      next if filter && !filter.call(entity)
+
       info = component_info(entity)
       result[info[:bay_index]] << info
     end

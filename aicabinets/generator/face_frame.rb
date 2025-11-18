@@ -19,6 +19,7 @@ module AICabinets
 
       def build(parent_entities:, params:, face_frame_mm:)
         validate_parent!(parent_entities)
+        return nil unless face_frame_mm.is_a?(Hash)
         frame = normalized_face_frame(face_frame_mm)
         return nil unless frame[:enabled]
 
