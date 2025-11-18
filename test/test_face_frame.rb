@@ -42,4 +42,15 @@ class FaceFrameTest < Minitest::Test
     refute_empty(validation_errors)
     assert_includes(validation_errors.first, 'layout[0].kind')
   end
+
+  def test_normalize_preserves_reveal_and_overlay_mm
+    defaults = AICabinets::FaceFrame.defaults_mm
+    input = { reveal_mm: 2.0, overlay_mm: 14.7 }
+
+    normalized, errors = AICabinets::FaceFrame.normalize(input, defaults: defaults)
+
+    assert_empty(errors)
+    assert_in_delta(2.0, normalized[:reveal_mm], 1.0e-6)
+    assert_in_delta(14.7, normalized[:overlay_mm], 1.0e-6)
+  end
 end

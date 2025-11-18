@@ -8,6 +8,7 @@ require 'aicabinets/version'
 require 'aicabinets/defaults'
 require 'aicabinets/params_sanitizer'
 require 'aicabinets/face_frame'
+require 'aicabinets/solver/front_layout'
 
 Sketchup.require('aicabinets/generator/carcass')
 Sketchup.require('aicabinets/ops/tags')
@@ -214,9 +215,33 @@ module AICabinets
           copy[:front] = front_string if front_string
         end
 
+        opening_mm = opening_from_params(copy)
+        layout_result = AICabinets::Solver::FrontLayout.solve(opening_mm: opening_mm, params: copy)
+        copy[:front_layout] = layout_result[:front_layout]
+        if layout_result[:warnings].any?
+          copy[:front_layout_warnings] = layout_result[:warnings]
+        else
+          copy.delete(:front_layout_warnings)
+        end
+
         copy
       end
       private_class_method :validate_params!
+
+      def opening_from_params(params)
+        return {} unless params.is_a?(Hash)
+
+        face_frame = params[:face_frame]
+        return {} unless face_frame.is_a?(Hash)
+
+        {
+          x: face_frame[:stile_left_mm].to_f,
+          z: face_frame[:rail_bottom_mm].to_f,
+          w: params[:width_mm].to_f - face_frame[:stile_left_mm].to_f - face_frame[:stile_right_mm].to_f,
+          h: params[:height_mm].to_f - face_frame[:rail_top_mm].to_f - face_frame[:rail_bottom_mm].to_f
+        }
+      end
+      private_class_method :opening_from_params
 
       def build_definition_key(params)
         canonical = canonicalize(params)
