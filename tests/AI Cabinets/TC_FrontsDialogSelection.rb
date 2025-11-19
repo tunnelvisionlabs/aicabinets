@@ -4,6 +4,8 @@ require 'testup/testcase'
 require_relative 'suite_helper'
 
 Sketchup.require('aicabinets/ui/dialogs/fronts_dialog')
+Sketchup.require('aicabinets/defaults')
+Sketchup.require('aicabinets/test_harness')
 load File.expand_path('../../aicabinets/ui/dialogs/fronts_dialog.rb', __dir__)
 
 class TC_FrontsDialogSelection < TestUp::TestCase
@@ -44,17 +46,17 @@ class TC_FrontsDialogSelection < TestUp::TestCase
   end
 
   def test_cabinet_single_front_auto_selects
-    cabinet = create_cabinet_with_fronts(%w[Door])
+    cabinet = create_cabinet_with_fronts('doors_left')
     select_entity(cabinet)
 
     payload = state_payload
 
     assert_equal('ready', payload[:mode])
-    assert_equal('Door', payload[:target][:name])
+    assert_match(/Door/i, payload[:target][:name])
   end
 
   def test_cabinet_multiple_fronts_requests_choice
-    cabinet = create_cabinet_with_fronts(%w[Left Right])
+    cabinet = create_cabinet_with_fronts('doors_double')
     select_entity(cabinet)
 
     payload = state_payload
@@ -68,7 +70,7 @@ class TC_FrontsDialogSelection < TestUp::TestCase
   end
 
   def test_previously_chosen_front_is_reused
-    cabinet = create_cabinet_with_fronts(%w[Left Right])
+    cabinet = create_cabinet_with_fronts('doors_double')
     select_entity(cabinet)
     payload = state_payload
     candidate = payload[:candidates].first
@@ -132,28 +134,16 @@ class TC_FrontsDialogSelection < TestUp::TestCase
     group
   end
 
-  def create_cabinet_with_fronts(names)
-    model = Sketchup.active_model
-    cabinet_def = model.definitions.add("Cabinet #{names.join('-')}")
-
-    names.each_with_index do |name, index|
-      front_def = model.definitions.add("Front #{name}")
-      face = front_def.entities.add_face(
-        Geom::Point3d.new(0, 0, 0),
-        Geom::Point3d.new(400.mm, 0, 0),
-        Geom::Point3d.new(400.mm, 0, 700.mm),
-        Geom::Point3d.new(0, 0, 700.mm)
-      )
-      face.pushpull(19.mm)
-      front_instance = cabinet_def.entities.add_instance(
-        front_def,
-        Geom::Transformation.translation([index * 450.mm, 0, 0])
-      )
-      front_instance.layer = ensure_front_tag(model)
-      front_instance.name = name if front_instance.respond_to?(:name=)
+  def create_cabinet_with_fronts(front_mode)
+    mode = front_mode.to_s
+    allowed = %w[doors_left doors_right doors_double]
+    unless allowed.include?(mode)
+      raise ArgumentError, "front_mode must be one of #{allowed.join(', ')}"
     end
 
-    model.entities.add_instance(cabinet_def, Geom::Transformation.new)
+    config = base_cabinet_config(mode)
+    _definition, instance = AICabinets::TestHarness.insert!(config: config)
+    instance
   end
 
   def ensure_front_tag(model)
@@ -186,4 +176,42 @@ class TC_FrontsDialogSelection < TestUp::TestCase
     AICabinets::UI::Dialogs::FrontsDialog.instance_variable_set(:@target_selection_signature, nil)
     clear_active_path_override
   end
+
+  def base_cabinet_config(front_mode)
+    defaults = deep_copy(AICabinets::Defaults.load_effective_mm)
+    defaults[:front] = front_mode
+    defaults[:fronts_shelves_state] = normalized_fronts_state(defaults[:fronts_shelves_state], front_mode)
+    defaults[:partitions] = normalized_partitions(defaults[:partitions], front_mode)
+    defaults
+  end
+
+  def normalized_partitions(partitions, front_mode)
+    data = partitions.is_a?(Hash) ? deep_copy(partitions) : {}
+    data[:bays] = Array(data[:bays]).map { |bay| bay.is_a?(Hash) ? deep_copy(bay) : {} }
+    data[:bays] = [{}] if data[:bays].empty?
+
+    data[:bays].map! do |bay|
+      bay[:mode] ||= 'fronts_shelves'
+      bay[:door_mode] = front_mode
+      bay[:fronts_shelves_state] = normalized_fronts_state(bay[:fronts_shelves_state], front_mode)
+      bay
+    end
+
+    data[:mode] ||= 'none'
+    data[:count] ||= 0
+    data[:orientation] ||= 'vertical'
+    data[:positions_mm] ||= []
+    data
+  end
+
+  def normalized_fronts_state(state, front_mode)
+    data = state.is_a?(Hash) ? deep_copy(state) : {}
+    data[:door_mode] = front_mode
+    data
+  end
+
+  def deep_copy(object)
+    Marshal.load(Marshal.dump(object))
+  end
+
 end

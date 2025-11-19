@@ -32,6 +32,12 @@ module AICabinets
         DEFAULT_GUIDANCE =
           'Select a single AI Cabinets front, one of its tagged parts, or a cabinet that contains doors or drawers.'
             .freeze unless const_defined?(:DEFAULT_GUIDANCE, false)
+        FRONT_TAG_NAMES =
+          [
+            AICabinets::Generator::Fronts::FRONTS_TAG_NAME,
+            'Fronts',
+            'Fronts (AI Cabinets)'
+          ].freeze unless const_defined?(:FRONT_TAG_NAMES, false)
 
         def show
           dialog = ensure_dialog
@@ -233,8 +239,15 @@ module AICabinets
           layer = entity.layer if entity.respond_to?(:layer)
           return false unless layer
 
-          layer_name = layer.respond_to?(:name) ? layer.name : nil
-          layer_name.to_s == AICabinets::Generator::Fronts::FRONTS_TAG_NAME
+          layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
+          return true if FRONT_TAG_NAMES.include?(layer_name)
+
+          if layer_name.start_with?(AICabinets::Tags::OWNED_TAG_PREFIX)
+            base_name = layer_name.split('/', 2).last
+            return base_name == 'Fronts'
+          end
+
+          false
         end
         private_class_method :front_tagged?
 
