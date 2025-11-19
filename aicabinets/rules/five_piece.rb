@@ -16,19 +16,29 @@ module AICabinets
         keyword_init: true
       )
 
-      def evaluate_drawer_front(_open_outside_w_mm:, open_outside_h_mm:, params: {})
+      def evaluate_drawer_front(open_outside_h_mm:, params: {}, **kwargs)
+        open_outside_w_mm = kwargs[:open_outside_w_mm]
+        open_outside_w_mm = kwargs[:_open_outside_w_mm] if open_outside_w_mm.nil?
+        _open_outside_w_mm = open_outside_w_mm # Preserve keyword compatibility even if unused for now.
         requested = params[:drawer_rail_width_mm]
         requested ||= params[:rail_width_mm]
         requested ||= params[:stile_width_mm]
+        requested_numeric = positive_value(requested)
 
         minimum_rail_mm = positive_value(params[:min_drawer_rail_width_mm]) || 0.0
-        effective_rail_mm = [positive_value(requested) || 0.0, minimum_rail_mm].max
+        effective_rail_mm = [requested_numeric || 0.0, minimum_rail_mm].max
 
         min_panel_opening_mm = positive_value(params[:min_panel_opening_mm]) || 0.0
         panel_h_mm = open_outside_h_mm.to_f - (2.0 * effective_rail_mm)
+        requested_panel_h_mm =
+          if requested_numeric
+            open_outside_h_mm.to_f - (2.0 * requested_numeric)
+          else
+            panel_h_mm
+          end
 
         decision =
-          if panel_h_mm < min_panel_opening_mm
+          if requested_panel_h_mm < min_panel_opening_mm
             Decision.new(
               action: :slab,
               effective_rail_mm: effective_rail_mm,
@@ -37,7 +47,7 @@ module AICabinets
                                  panel_h_mm, min_panel_opening_mm)],
               panel_h_mm: panel_h_mm
             )
-          elsif requested.to_f < minimum_rail_mm
+          elsif requested_numeric && requested_numeric < minimum_rail_mm
             Decision.new(
               action: :five_piece,
               effective_rail_mm: effective_rail_mm,
