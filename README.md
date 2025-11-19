@@ -5,6 +5,7 @@ This repository contains Ruby scripts for SketchUp that generate simple cabinetr
 ## Features
 
 - [Rows](docs/rows.md) – Create and manage cabinet rows, reflow widths, and keep reveals uniform across fronts.
+- [Five-piece doors](docs/five_piece_doors.md) – Configure rail-and-stile or mitered frames, raised panels, and drawer fallback rules in the Fronts dialog.
 
 ## Contents
 
