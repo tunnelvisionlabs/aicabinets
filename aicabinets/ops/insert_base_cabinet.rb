@@ -176,13 +176,19 @@ module AICabinets
         face_frame_defaults = defaults[:face_frame] || defaults['face_frame'] || AICabinets::FaceFrame.defaults_mm
         face_frame_raw = copy[:face_frame] || copy['face_frame']
         face_frame, face_frame_errors = AICabinets::FaceFrame.normalize(face_frame_raw, defaults: face_frame_defaults)
-        face_frame_errors.concat(AICabinets::FaceFrame.validate(face_frame))
-
-        raise ArgumentError, face_frame_errors.join('; ') if face_frame_errors.any?
+        face_frame_errors = face_frame_errors.map { |error| error[:message] }
 
         copy[:face_frame] = face_frame
         copy.delete('face_frame')
         copy[:schema_version] = SCHEMA_VERSION
+
+        opening_mm = opening_from_params(copy)
+        validation_result = AICabinets::FaceFrame.validate(face_frame, opening_mm: opening_mm)
+        unless validation_result[:ok]
+          face_frame_errors.concat(validation_result[:errors].map { |error| error[:message] })
+        end
+
+        raise ArgumentError, face_frame_errors.join('; ') if face_frame_errors.any?
 
         thickness_value =
           if params_mm.key?(:toe_kick_thickness_mm)

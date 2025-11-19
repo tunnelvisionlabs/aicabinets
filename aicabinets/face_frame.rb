@@ -50,7 +50,7 @@ module AICabinets
         value = raw[key] || raw[key.to_s]
         numeric = parse_numeric(value)
         if numeric.nil?
-          errors << "face_frame.#{key} must be a number"
+          errors << build_error("face_frame.#{key}", 'invalid_type', 'must be a number')
           next
         end
 
@@ -65,29 +65,38 @@ module AICabinets
       [normalized, errors]
     end
 
-    def validate(face_frame)
-      return ['face_frame must be an object'] unless face_frame.is_a?(Hash)
+    def validate(face_frame, opening_mm: nil)
+      unless face_frame.is_a?(Hash)
+        return validation_result([build_error('face_frame', 'invalid_type', 'face_frame must be an object')])
+      end
 
       errors = []
 
       BOUNDS.each do |key, range|
         value = face_frame[key]
-        next unless value.is_a?(Numeric)
+        unless value.is_a?(Numeric) && value.finite?
+          errors << build_error("face_frame.#{key}", 'invalid_type', 'must be a number')
+          next
+        end
+
         next if zero_optional?(key, value)
         next if range.cover?(value)
 
-        errors << format(
-          'face_frame.%<field>s must be between %<min>.1f mm and %<max>.1f mm',
-          field: key,
-          min: range.begin,
-          max: range.end
+        errors << build_error(
+          "face_frame.#{key}",
+          'out_of_bounds',
+          format('must be between %.1f mm and %.1f mm', range.begin, range.end)
         )
       end
 
-      layout_errors = validate_layout(face_frame[:layout])
-      errors.concat(layout_errors)
+      errors.concat(validate_layout(face_frame[:layout]))
 
-      errors
+      if opening_mm
+        layout_errors = validate_layout_with_opening(face_frame, opening_mm)
+        errors.concat(layout_errors)
+      end
+
+      validation_result(errors)
     end
 
     def merge(defaults, overrides)
@@ -161,13 +170,13 @@ module AICabinets
       return [deep_dup(fallback), []] if raw.nil?
 
       unless raw.is_a?(Array)
-        return [deep_dup(fallback), ['face_frame.layout must be an array']]
+        return [deep_dup(fallback), [build_error('face_frame.layout', 'invalid_type', 'must be an array')]]
       end
 
       errors = []
       normalized = raw.each_with_index.map do |entry, index|
         unless entry.is_a?(Hash)
-          errors << "face_frame.layout[#{index}] must be an object"
+          errors << build_error("face_frame.layout[#{index}]", 'invalid_type', 'must be an object')
           next
         end
 
@@ -180,25 +189,33 @@ module AICabinets
     private_class_method :normalize_layout
 
     def validate_layout(layout)
-      return ['face_frame.layout must be an array'] unless layout.is_a?(Array)
+      return [build_error('face_frame.layout', 'invalid_type', 'must be an array')] unless layout.is_a?(Array)
 
       errors = []
       layout.each_with_index do |entry, index|
         unless entry.is_a?(Hash)
-          errors << "face_frame.layout[#{index}] must be an object"
+          errors << build_error("face_frame.layout[#{index}]", 'invalid_type', 'must be an object')
           next
         end
 
         kind = entry[:kind] || entry['kind']
         unless LAYOUT_KINDS.include?(kind)
-          errors << "face_frame.layout[#{index}].kind must be one of #{LAYOUT_KINDS.join(', ')}"
+          errors << build_error(
+            "face_frame.layout[#{index}].kind",
+            'invalid_enum',
+            "must be one of #{LAYOUT_KINDS.join(', ')}"
+          )
           next
         end
 
         if kind == 'drawer_stack'
           drawers = entry[:drawers] || entry['drawers']
           unless drawers.is_a?(Integer) && drawers.positive?
-            errors << "face_frame.layout[#{index}].drawers must be a positive integer"
+            errors << build_error(
+              "face_frame.layout[#{index}].drawers",
+              'invalid_type',
+              'must be a positive integer'
+            )
           end
         end
       end
@@ -206,6 +223,18 @@ module AICabinets
       errors
     end
     private_class_method :validate_layout
+
+    def validate_layout_with_opening(face_frame, opening_mm)
+      require 'aicabinets/solver/front_layout' unless defined?(AICabinets::Solver::FrontLayout)
+
+      result = AICabinets::Solver::FrontLayout.solve(opening_mm: opening_mm, params: { face_frame: face_frame })
+      return [] if result[:warnings].empty?
+
+      result[:warnings].map do |warning|
+        build_error('face_frame.layout', 'layout_unfeasible', warning)
+      end
+    end
+    private_class_method :validate_layout_with_opening
 
     def zero_optional?(key, value)
       %i[mid_stile_mm mid_rail_mm].include?(key) && value.to_f.zero?
@@ -246,5 +275,15 @@ module AICabinets
       end
     end
     private_class_method :symbolize_keys
+
+    def build_error(field, code, message)
+      { field: field, code: code, message: message }
+    end
+    private_class_method :build_error
+
+    def validation_result(errors)
+      { ok: errors.empty?, errors: errors }
+    end
+    private_class_method :validation_result
   end
 end

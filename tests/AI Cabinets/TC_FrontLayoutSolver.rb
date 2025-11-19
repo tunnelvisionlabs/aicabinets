@@ -107,6 +107,42 @@ class TC_FrontLayoutSolver < TestUp::TestCase
     refute_empty(result[:warnings], 'Expected warnings explaining constraint failure')
   end
 
+  def test_double_doors_rounding_recomposes_opening
+    params = deep_copy(@defaults)
+    params[:face_frame][:layout] = [{ kind: 'double_doors' }]
+
+    opening_mm = { x: 0.0, z: 0.0, w: 705.5, h: 650.3 }
+
+    result = AICabinets::Solver::FrontLayout.solve(opening_mm: opening_mm, params: params)
+    fronts = result[:front_layout][:fronts]
+
+    widths = fronts.map { |front| front[:bbox_mm][:w] - result[:front_layout][:meta][:overlay_mm] }
+    recomposed = widths.sum + (result[:front_layout][:meta][:reveal_mm] * 3.0)
+
+    assert_in_delta(opening_mm[:w], recomposed, 0.1, 'Rounded doors plus reveals should match opening width')
+  end
+
+  def test_drawer_stack_rounding_recomposes_opening
+    params = deep_copy(@defaults)
+    params[:face_frame][:layout] = [{ kind: 'drawer_stack', drawers: 3 }]
+    params[:face_frame][:mid_rail_mm] = 25.0
+
+    opening_mm = opening_from_params(params)
+
+    result = AICabinets::Solver::FrontLayout.solve(opening_mm: opening_mm, params: params)
+    fronts = result[:front_layout][:fronts]
+
+    reveal_mm = result[:front_layout][:meta][:reveal_mm]
+    clear_sum = fronts.map.with_index do |front, index|
+      top_overlay = index == fronts.length - 1 ? result[:front_layout][:meta][:overlay_mm] : 0.0
+      bottom_overlay = index.zero? ? result[:front_layout][:meta][:overlay_mm] : 0.0
+      front[:bbox_mm][:h] - top_overlay - bottom_overlay
+    end.sum
+
+    recomposed_height = clear_sum + (reveal_mm * (fronts.length + 1))
+    assert_in_delta(opening_mm[:h], recomposed_height, 0.1, 'Drawer clears should recompose opening height after rounding')
+  end
+
   def test_persistence_idempotent
     params = deep_copy(@defaults)
     params[:face_frame][:layout] = [{ kind: 'drawer_stack', drawers: 2 }]

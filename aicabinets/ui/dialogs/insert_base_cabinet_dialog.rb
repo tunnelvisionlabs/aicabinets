@@ -1736,10 +1736,14 @@ module AICabinets
             face_frame[:layout] = parse_face_frame_layout(layout_value, face_frame[:layout])
           end
 
-          errors = AICabinets::FaceFrame.validate(face_frame)
-          unless errors.empty?
-            first_error = errors.first
-            raise PayloadError.new('invalid_type', first_error, face_frame_error_field(first_error))
+          validation_result = AICabinets::FaceFrame.validate(face_frame)
+          unless validation_result[:ok]
+            first_error = validation_result[:errors].first
+            raise PayloadError.new(
+              'invalid_type',
+              first_error[:message],
+              face_frame_error_field(first_error)
+            )
           end
 
           face_frame
@@ -1910,10 +1914,13 @@ module AICabinets
         end
         private_class_method :parse_plain_numeric_mm
 
-        def face_frame_error_field(message)
-          return nil unless message.is_a?(String)
+        def face_frame_error_field(error)
+          return nil unless error.is_a?(Hash)
 
-          match = message.match(/face_frame\.(\w+)/)
+          field = error[:field]
+          return nil unless field.is_a?(String)
+
+          match = field.match(/face_frame\.(\w+)/)
           return nil unless match
 
           "face_frame.#{match[1]}"

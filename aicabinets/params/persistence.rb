@@ -78,7 +78,7 @@ module AICabinets
       defaults = Params::FaceFrame.defaults_mm
       face_frame_raw = params[:face_frame] || params['face_frame']
       face_frame, face_errors = Params::FaceFrame.normalize(face_frame_raw, defaults: defaults)
-      warnings.concat(face_errors) if face_errors.any?
+      warnings.concat(face_errors.map { |error| error[:message] }) if face_errors.any?
       params[:face_frame] = face_frame
       params.delete('face_frame')
       params[:schema_version] = AICabinets::PARAMS_SCHEMA_VERSION
@@ -111,9 +111,13 @@ module AICabinets
       face_frame = params[:face_frame] || params['face_frame']
       defaults = Params::FaceFrame.defaults_mm
       normalized, normalize_errors = Params::FaceFrame.normalize(face_frame, defaults: defaults)
-      validation_errors = Params::FaceFrame.validate(normalized)
+      validation_result = Params::FaceFrame.validate(normalized)
       params[:face_frame] = normalized
-      normalize_errors + validation_errors
+
+      errors = []
+      errors.concat(normalize_errors.map { |error| error[:message] })
+      errors.concat(validation_result[:errors].map { |error| error[:message] }) unless validation_result[:ok]
+      errors
     end
     private_class_method :validate_face_frame
 

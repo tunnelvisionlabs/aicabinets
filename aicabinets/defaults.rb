@@ -559,14 +559,14 @@ module AICabinets
 
       face_frame_raw = raw['face_frame'] || raw[:face_frame]
       face_frame, face_errors = AICabinets::FaceFrame.normalize(face_frame_raw, defaults: FALLBACK_FACE_FRAME)
-      face_errors.each do |message|
-        warn("AI Cabinets: defaults #{message}; using built-in face_frame fallback value.")
+      face_errors.each do |error|
+        warn("AI Cabinets: defaults #{error[:message]}; using built-in face_frame fallback value.")
       end
-      validation_errors = AICabinets::FaceFrame.validate(face_frame)
-      validation_errors.each do |message|
-        warn("AI Cabinets: defaults #{message}; using built-in face_frame fallback value.")
+      validation_result = AICabinets::FaceFrame.validate(face_frame)
+      validation_result[:errors].each do |error|
+        warn("AI Cabinets: defaults #{error[:message]}; using built-in face_frame fallback value.")
       end
-      face_frame = FALLBACK_FACE_FRAME if validation_errors.any?
+      face_frame = FALLBACK_FACE_FRAME unless validation_result[:ok]
       result[:face_frame] = face_frame
 
       constraints_source = raw['constraints'] || raw[:constraints]

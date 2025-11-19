@@ -15,8 +15,8 @@ module AICabinets
         AICabinets::FaceFrame.normalize(raw, defaults:)
       end
 
-      def validate(face_frame)
-        AICabinets::FaceFrame.validate(face_frame)
+      def validate(face_frame, opening_mm: nil)
+        AICabinets::FaceFrame.validate(face_frame, opening_mm: opening_mm)
       end
     end
   end
