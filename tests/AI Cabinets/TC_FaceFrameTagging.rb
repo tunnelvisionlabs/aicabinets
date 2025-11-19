@@ -47,7 +47,7 @@ class TC_FaceFrameTagging < TestUp::TestCase
     assert_equal('Face Frame', face_frame.name)
 
     model = Sketchup.active_model
-    fronts_tag = model.layers[AICabinets::Metadata::Tagging::FRONTS_TAG_NAME]
+    fronts_tag = AICabinets::Metadata::Tagging.fronts_tag(model)
     refute_nil(fronts_tag, 'Fronts tag should be created on the model')
     assert_same(fronts_tag, face_frame.layer, 'Face frame container should be tagged')
 
@@ -179,7 +179,7 @@ class TC_FaceFrameTagging < TestUp::TestCase
 
     role = dictionary[AICabinets::Metadata::Naming::ROLE_KEY]
     index = dictionary[AICabinets::Metadata::Naming::INDEX_KEY]
-    index = index.to_i if index.respond_to?(:to_i)
+    index = index.to_i if index && index.respond_to?(:to_i)
     [role, index]
   end
 

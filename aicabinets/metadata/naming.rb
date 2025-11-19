@@ -43,12 +43,7 @@ module AICabinets
 
         normalized_role = normalize_role(role)
         label = label_for_role(normalized_role, index)
-        normalized_index =
-          if normalized_role == :mid_rail
-            normalize_index(index)
-          else
-            normalize_index_optional(index)
-          end
+        normalized_index = normalized_role == :mid_rail ? normalize_index(index) : nil
 
         assign_name(entity, label)
         write_role_attributes(entity, normalized_role, normalized_index)
@@ -103,15 +98,6 @@ module AICabinets
         integer
       end
       private_class_method :normalize_index
-
-      def normalize_index_optional(value)
-        return nil if value.nil?
-
-        normalize_index(value)
-      rescue ArgumentError
-        nil
-      end
-      private_class_method :normalize_index_optional
 
       def container?(entity)
         entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)

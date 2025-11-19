@@ -5,6 +5,7 @@ require 'sketchup.rb'
 Sketchup.require('aicabinets/generator/bay_bounds')
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/defaults')
+Sketchup.require('aicabinets/metadata/tagging')
 
 module AICabinets
   module Generator
@@ -88,8 +89,6 @@ module AICabinets
         :bottom_z_mm,
         keyword_init: true
       )
-
-      FRONTS_TAG_NAME = 'AICabinets/Fronts'.freeze
 
       def build(parent_entities:, params:)
         validate_parent!(parent_entities)
@@ -687,7 +686,8 @@ module AICabinets
       def tagged_as_front?(entity)
         layer = entity.respond_to?(:layer) ? entity.layer : nil
         layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
-        layer_name == FRONTS_TAG_NAME
+        layer_name == Metadata::Tagging::FRONTS_TAG_NAME ||
+          layer_name == Metadata::Tagging::LEGACY_FRONTS_TAG_NAME
       end
       private_class_method :tagged_as_front?
 

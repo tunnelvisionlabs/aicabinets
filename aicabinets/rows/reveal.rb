@@ -7,6 +7,7 @@ Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/ops/insert_base_cabinet')
 Sketchup.require('aicabinets/ops/materials')
 Sketchup.require('aicabinets/ops/tags')
+Sketchup.require('aicabinets/metadata/tagging')
 
 module AICabinets
   module Rows
@@ -116,7 +117,7 @@ module AICabinets
           parameter_set = AICabinets::Generator::Carcass::ParameterSet.new(params_mm)
           entities = instance.definition.entities
           created = AICabinets::Generator::Fronts.build(parent_entities: entities, params: parameter_set)
-          apply_category(created, 'AICabinets/Fronts', front_material)
+          apply_category(created, Metadata::Tagging::FRONTS_TAG_NAME, front_material)
         end
       end
       private_class_method :apply_plan!

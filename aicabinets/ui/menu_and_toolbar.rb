@@ -8,9 +8,10 @@ module AICabinets
 
       def register_ui!
         return unless defined?(::UI)
-        return if @ui_registered
 
         register_commands!
+        return if @ui_registered
+
         attach_menu
         attach_toolbar
         attach_context_menu

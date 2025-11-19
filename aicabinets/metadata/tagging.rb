@@ -2,12 +2,15 @@
 
 require 'sketchup.rb'
 
+Sketchup.require('aicabinets/ops/tags')
+
 module AICabinets
   module Metadata
     module Tagging
       module_function
 
-      FRONTS_TAG_NAME = 'AICabinets/Fronts'.freeze
+      FRONTS_TAG_NAME = 'Fronts'.freeze
+      LEGACY_FRONTS_TAG_NAME = 'AICabinets/Fronts'.freeze
 
       # Retrieves (or creates) the tag used for face-frame and fronts geometry.
       # Falls back to the active model when no explicit model is provided.
@@ -19,7 +22,14 @@ module AICabinets
         target_model ||= Sketchup.active_model
         validate_model!(target_model)
 
-        target_model.layers.add(FRONTS_TAG_NAME)
+        layers = target_model.layers
+        tag = layers[FRONTS_TAG_NAME]
+        return tag if tag
+
+        legacy = layers[LEGACY_FRONTS_TAG_NAME]
+        return legacy if legacy
+
+        Ops::Tags.ensure_tag(target_model, FRONTS_TAG_NAME)
       end
 
       # Assigns the given tag to container entities (groups/components).
