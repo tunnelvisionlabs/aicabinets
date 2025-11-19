@@ -9,7 +9,6 @@ require_relative 'suite_helper'
 require_relative '../support/rows_shared_helpers'
 
 Sketchup.require('aicabinets/rows')
-Sketchup.require('aicabinets/rows/highlight')
 Sketchup.require('aicabinets/rows/selection')
 Sketchup.require('aicabinets/ui/rows')
 Sketchup.require('aicabinets/ui/rows/manager_dialog')
