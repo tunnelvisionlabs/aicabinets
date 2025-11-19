@@ -32,6 +32,17 @@
   function toggleFivePieceFields() {
     var show = form.doorStyle.value !== 'slab';
     form.fivePieceSection.classList.toggle('is-hidden', !show);
+    syncInsideProfileControl();
+  }
+
+  function syncInsideProfileControl() {
+    if (!form.insideProfile) return;
+    var fivePiece = form.doorStyle.value !== 'slab';
+    var ready = currentMode === 'ready';
+    if (fivePiece && !form.insideProfile.value) {
+      form.insideProfile.value = 'shaker_inside';
+    }
+    form.insideProfile.disabled = !(ready && fivePiece);
   }
 
   function clearErrors() {
@@ -149,6 +160,7 @@
       form.targetLabel.textContent = '';
       form.targetLabel.classList.add('is-hidden');
     }
+    syncInsideProfileControl();
   }
 
   function setFormEnabled(enabled) {
@@ -163,6 +175,7 @@
     });
     if (form.apply) form.apply.disabled = !enabled;
     if (form.reset) form.reset.disabled = !enabled;
+    syncInsideProfileControl();
   }
 
   function renderTarget(target) {
