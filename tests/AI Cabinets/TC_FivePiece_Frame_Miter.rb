@@ -39,14 +39,23 @@ else
       expected_h = 720.0 + (2.0 * params[:rail_width_mm])
 
       assert_in_delta(expected_w, bounds.width.to_mm, AICabinets::Testing.tolerance)
-      assert_in_delta(params[:door_thickness_mm], bounds.depth.to_mm, AICabinets::Testing.tolerance)
-      assert_in_delta(expected_h, bounds.height.to_mm, AICabinets::Testing.tolerance)
+      # BoundingBox dimensions map width->X, height->Y, depth->Z in SketchUp.
+      assert_in_delta(params[:door_thickness_mm], bounds.height.to_mm, AICabinets::Testing.tolerance)
+      assert_in_delta(expected_h, bounds.depth.to_mm, AICabinets::Testing.tolerance)
 
       diagonal_face = result[:stiles].flat_map { |stile| stile.entities.grep(Sketchup::Face) }
-                                .find { |face| (face.normal.x.abs - face.normal.z.abs).abs < 1e-2 }
+                                .find do |face|
+        next false unless face.normal.x.abs > 1e-3 && face.normal.z.abs > 1e-3
+
+        (face.normal.x.abs - face.normal.z.abs).abs < 1e-2
+      end
       refute_nil(diagonal_face)
-      angle = diagonal_face.normal.angle_between(Geom::Vector3d.new(1, 0, 1))
-      assert_in_delta(Math::PI / 4.0, angle, 0.05)
+      x_axis = Geom::Vector3d.new(diagonal_face.normal.x.positive? ? 1 : -1, 0, 0)
+      z_axis = Geom::Vector3d.new(0, 0, diagonal_face.normal.z.positive? ? 1 : -1)
+      angle_x = diagonal_face.normal.angle_between(x_axis)
+      angle_z = diagonal_face.normal.angle_between(z_axis)
+      assert_in_delta(Math::PI / 4.0, angle_x, 0.05)
+      assert_in_delta(Math::PI / 4.0, angle_z, 0.05)
     end
   end
 end

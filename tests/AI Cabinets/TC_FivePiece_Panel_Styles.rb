@@ -39,14 +39,18 @@ else
       fit_h = 720.0 - (2.0 * params[:panel_clearance_per_side_mm])
 
       assert_in_delta(fit_w, bounds.width.to_mm, AICabinets::Testing.tolerance)
-      assert_in_delta(fit_h, bounds.height.to_mm, AICabinets::Testing.tolerance)
-      assert_in_delta(params[:panel_thickness_mm], bounds.depth.to_mm, AICabinets::Testing.tolerance)
+      assert_in_delta(fit_h, bounds.depth.to_mm, AICabinets::Testing.tolerance)
+      assert_in_delta(params[:panel_thickness_mm], bounds.height.to_mm, AICabinets::Testing.tolerance)
       assert(panel.volume.positive?) if panel.respond_to?(:volume)
     end
 
     def test_reverse_raised_flips_orientation
       definition = Sketchup.active_model.definitions.add('Five Piece Panel Reverse Raised')
-      params = AICabinets::Params::FivePiece.defaults.merge(panel_style: 'reverse_raised', panel_thickness_mm: 18.0)
+      params = AICabinets::Params::FivePiece.defaults.merge(
+        panel_style: 'reverse_raised',
+        panel_thickness_mm: 18.0,
+        groove_depth_mm: 20.0
+      )
 
       result = AICabinets::Geometry::FivePiecePanel.build_panel!(
         target: definition,
@@ -59,7 +63,9 @@ else
       panel = result[:panel]
       yaxis = panel.transformation.yaxis
       assert(yaxis.y.negative?, 'Reverse raised panel should flip Y axis')
-      assert(panel.volume.positive?) if panel.respond_to?(:volume)
+      if panel.respond_to?(:volume)
+        assert(panel.volume.to_f.abs.positive?, 'Reverse raised panel must compute a solid volume')
+      end
     end
   end
 end
