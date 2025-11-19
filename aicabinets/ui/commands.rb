@@ -32,7 +32,6 @@ module AICabinets
 
         AICabinets::Commands::FaceFrame.register!(commands)
       end
-      private_class_method :register_face_frame_commands!
 
       def build_insert_base_cabinet_command
         command = ::UI::Command.new('Insert Base Cabinet…') do
