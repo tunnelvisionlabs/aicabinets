@@ -13,7 +13,15 @@
       <header class="dialog__header">
         <h1>Fronts</h1>
         <p class="dialog__hint">Configure five-piece door options for the selected front.</p>
+        <p id="target-label" class="dialog__hint dialog__hint--target is-hidden"></p>
       </header>
+
+      <section class="section is-hidden" id="choose-front">
+        <p id="choose-front-message" class="field__hint">
+          Multiple AI Cabinets fronts were found in the current selection. Choose one to edit.
+        </p>
+        <ul id="front-candidates" class="candidate-list"></ul>
+      </section>
 
       <section class="section">
         <label class="field">
@@ -29,7 +37,7 @@
       <section class="section" id="five-piece-fields">
         <label class="field">
           <span class="field__label">Inside profile</span>
-          <select id="inside-profile" disabled>
+          <select id="inside-profile">
             <option value="shaker_inside">Shaker</option>
           </select>
         </label>

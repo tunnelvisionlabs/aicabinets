@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'set' # rubocop:disable Lint/RedundantRequireStatement -- required for Set usage
 
 require 'aicabinets/geometry/five_piece'
 require 'aicabinets/geometry/five_piece_panel'
@@ -28,6 +29,15 @@ module AICabinets
         DIALOG_TITLE = 'AI Cabinets — Fronts' unless const_defined?(:DIALOG_TITLE, false)
         PREFERENCES_KEY = 'AICabinets.FrontsDialog' unless const_defined?(:PREFERENCES_KEY, false)
         HTML_FILENAME = 'fronts_dialog.html' unless const_defined?(:HTML_FILENAME, false)
+        DEFAULT_GUIDANCE =
+          'Select a single AI Cabinets front, one of its tagged parts, or a cabinet that contains doors or drawers.'
+            .freeze unless const_defined?(:DEFAULT_GUIDANCE, false)
+        FRONT_TAG_NAMES =
+          [
+            AICabinets::Generator::Fronts::FRONTS_TAG_NAME,
+            'Fronts',
+            'Fronts (AI Cabinets)'
+          ].freeze unless const_defined?(:FRONT_TAG_NAMES, false)
 
         def show
           dialog = ensure_dialog
@@ -89,6 +99,10 @@ module AICabinets
             deliver_defaults(dialog)
           end
 
+          dialog.add_action_callback('fronts:choose_target') do |_context, payload|
+            handle_choose_target(dialog, payload)
+          end
+
           dialog.add_action_callback('fronts:format_length') do |_context, payload|
             handle_format_length(dialog, payload)
           end
@@ -102,14 +116,7 @@ module AICabinets
         private_class_method :show_dialog
 
         def deliver_state(dialog)
-          instance = selected_front_instance
-          unless instance
-            notify(dialog, 'error', 'Select a single AI Cabinets front component to edit.')
-            return
-          end
-
-          params = read_params(instance)
-          payload = serialize_state(instance, params)
+          payload = build_state_payload
           send_state(dialog, payload)
         rescue StandardError => e
           notify(dialog, 'error', "Unable to load current state: #{e.message}")
@@ -117,9 +124,7 @@ module AICabinets
         private_class_method :deliver_state
 
         def deliver_defaults(dialog)
-          instance = selected_front_instance
-          params = AICabinets::Params::FivePiece.defaults
-          payload = serialize_state(instance, params)
+          payload = build_state_payload(defaults: true)
           send_state(dialog, payload)
         rescue StandardError => e
           notify(dialog, 'error', "Unable to load defaults: #{e.message}")
@@ -127,9 +132,11 @@ module AICabinets
         private_class_method :deliver_defaults
 
         def handle_apply(dialog, payload)
-          instance = selected_front_instance
+          instance = current_front_instance
           unless instance
-            notify(dialog, 'error', 'Select a single AI Cabinets front component to edit.')
+            payload = build_state_payload
+            send_state(dialog, payload)
+            notify(dialog, 'warning', DEFAULT_GUIDANCE)
             return
           end
 
@@ -162,6 +169,35 @@ module AICabinets
           notify(dialog, 'error', "Apply failed: #{e.message}")
         end
         private_class_method :handle_apply
+
+        def handle_choose_target(dialog, payload)
+          persistent_id = payload.is_a?(Hash) ? payload['persistent_id'] : nil
+          unless persistent_id
+            notify(dialog, 'warning', 'Pick a door or drawer front to edit.')
+            return
+          end
+
+          selection = current_selection
+          reset_target_if_selection_changed(selection)
+          candidates = selection_candidates(selection)
+          candidate = candidates.find { |item| item[:persistent_id] == persistent_id.to_s }
+
+          unless candidate
+            payload = build_state_payload
+            send_state(dialog, payload)
+            notify(dialog, 'warning', 'Unable to resolve the selected front. Please choose again.')
+            return
+          end
+
+          instance = candidate[:instance]
+          remember_target(instance, selection)
+          params = read_params(instance)
+          ready_payload = build_ready_payload(instance, params)
+          send_state(dialog, ready_payload)
+        rescue StandardError => e
+          notify(dialog, 'error', "Unable to choose a front: #{e.message}")
+        end
+        private_class_method :handle_choose_target
 
         def handle_format_length(dialog, payload)
           value = payload && payload['value']
@@ -199,27 +235,19 @@ module AICabinets
         end
         private_class_method :notify
 
-        def selected_front_instance
-          return nil unless defined?(Sketchup)
-
-          model = Sketchup.active_model
-          selection = model&.selection
-          return nil unless selection&.count == 1
-
-          entity = selection.first
-          return nil unless entity.is_a?(Sketchup::ComponentInstance)
-          return nil unless front_tagged?(entity)
-
-          entity
-        end
-        private_class_method :selected_front_instance
-
         def front_tagged?(entity)
           layer = entity.layer if entity.respond_to?(:layer)
           return false unless layer
 
-          layer_name = layer.respond_to?(:name) ? layer.name : nil
-          layer_name.to_s == AICabinets::Generator::Fronts::FRONTS_TAG_NAME
+          layer_name = layer.respond_to?(:name) ? layer.name.to_s : ''
+          return true if FRONT_TAG_NAMES.include?(layer_name)
+
+          if layer_name.start_with?(AICabinets::Tags::OWNED_TAG_PREFIX)
+            base_name = layer_name.split('/', 2).last
+            return base_name == 'Fronts'
+          end
+
+          false
         end
         private_class_method :front_tagged?
 
@@ -286,6 +314,299 @@ module AICabinets
           }
         end
         private_class_method :serialize_state
+
+        def build_ready_payload(instance, params)
+          payload = serialize_state(instance, params)
+          payload[:mode] = 'ready'
+          payload[:target] = {
+            persistent_id: persistent_id(instance),
+            name: entity_label(instance),
+            path_hint: entity_label(instance)
+          }
+          payload
+        end
+        private_class_method :build_ready_payload
+
+        def build_choose_payload(candidates, text = nil)
+          {
+            mode: 'choose',
+            candidates: candidates.map { |candidate| candidate_payload(candidate) },
+            level: 'info',
+            text: text || 'Multiple fronts found. Choose one to edit.'
+          }
+        end
+        private_class_method :build_choose_payload
+
+        def build_message_payload(level, text)
+          {
+            mode: 'message',
+            level: level || 'info',
+            text: text || DEFAULT_GUIDANCE
+          }
+        end
+        private_class_method :build_message_payload
+
+        def build_state_payload(defaults: false)
+          selection = current_selection
+          reset_target_if_selection_changed(selection)
+
+          resolution = resolve_selection(selection, prefer_pid: @target_persistent_id)
+          case resolution[:mode]
+          when :ready
+            instance = resolution[:instance]
+            remember_target(instance, selection)
+            params = defaults ? AICabinets::Params::FivePiece.defaults : read_params(instance)
+            build_ready_payload(instance, params)
+          when :choose
+            build_choose_payload(resolution[:candidates], resolution[:text])
+          when :message
+            build_message_payload(resolution[:level], resolution[:text])
+          else
+            build_message_payload('warning', DEFAULT_GUIDANCE)
+          end
+        end
+        private_class_method :build_state_payload
+
+        def current_front_instance
+          selection = current_selection
+          reset_target_if_selection_changed(selection)
+          resolution = resolve_selection(selection, prefer_pid: @target_persistent_id)
+          return nil unless resolution[:mode] == :ready
+
+          instance = resolution[:instance]
+          remember_target(instance, selection)
+          instance
+        end
+        private_class_method :current_front_instance
+
+        def resolve_selection(selection, prefer_pid: nil)
+          unless selection&.count == 1
+            return { mode: :message, level: 'info', text: DEFAULT_GUIDANCE }
+          end
+
+          entity = selection.first
+          front_instance = direct_front_instance(entity)
+          front_instance ||= front_instance_from_active_path(Sketchup.active_model)
+          front_instance ||= front_instance_from_part(entity)
+
+          return { mode: :ready, instance: front_instance } if front_instance
+
+          candidates = selection_candidates(selection)
+          if candidates.empty?
+            return {
+              mode: :message,
+              level: 'warning',
+              text: 'The selected component does not contain AI Cabinets fronts.'
+            }
+          end
+
+          if prefer_pid
+            candidate = candidates.find { |item| item[:persistent_id] == prefer_pid.to_s }
+            return { mode: :ready, instance: candidate[:instance] } if candidate
+          end
+
+          return { mode: :ready, instance: candidates.first[:instance] } if candidates.length == 1
+
+          { mode: :choose, candidates: candidates, text: 'Multiple fronts found. Choose one to edit.' }
+        end
+        private_class_method :resolve_selection
+
+        def direct_front_instance(entity)
+          return unless entity&.valid?
+          return entity if entity.is_a?(Sketchup::ComponentInstance) && front_tagged?(entity)
+
+          nil
+        end
+        private_class_method :direct_front_instance
+
+        def front_instance_from_part(entity)
+          return unless entity&.valid?
+          return unless front_tagged?(entity)
+
+          instance = front_instance_from_active_path(Sketchup.active_model)
+          return instance if instance
+
+          definition = entity_parent_definition(entity)
+          candidates = definition&.instances&.grep(Sketchup::ComponentInstance)&.select { |inst| front_tagged?(inst) }
+          return candidates.first if candidates&.length == 1
+
+          nil
+        end
+        private_class_method :front_instance_from_part
+
+        def entity_parent_definition(entity)
+          parent_entities = entity.respond_to?(:parent) ? entity.parent : nil
+          return unless parent_entities.respond_to?(:parent)
+
+          parent_entities.parent if parent_entities.parent.is_a?(Sketchup::ComponentDefinition)
+        end
+        private_class_method :entity_parent_definition
+
+        def front_instance_from_active_path(model)
+          path = current_active_path(model)
+          return unless path.respond_to?(:reverse_each)
+
+          path.reverse_each do |item|
+            next unless item.is_a?(Sketchup::ComponentInstance)
+            return item if front_tagged?(item)
+          end
+
+          nil
+        end
+        private_class_method :front_instance_from_active_path
+
+        def selection_candidates(selection)
+          return [] unless selection&.count == 1
+
+          entity = selection.first
+          candidates_for_entity(entity)
+        end
+        private_class_method :selection_candidates
+
+        def candidates_for_entity(entity)
+          case entity
+          when Sketchup::ComponentInstance
+            definition = entity.definition
+            collect_front_candidates(definition&.entities, base_path: [entity_label(entity)])
+          when Sketchup::Group
+            collect_front_candidates(entity.entities, base_path: [entity_label(entity)])
+          else
+            []
+          end
+        end
+        private_class_method :candidates_for_entity
+
+        def collect_front_candidates(entities, base_path:, depth: 0, visited: Set.new)
+          return [] unless entities.is_a?(Sketchup::Entities)
+          return [] if depth > 10
+
+          entities.each_with_object([]) do |child, memo|
+            next unless child&.valid?
+
+            if child.is_a?(Sketchup::ComponentInstance)
+              if front_tagged?(child)
+                pid = persistent_id(child)
+                next unless pid
+
+                memo << {
+                  instance: child,
+                  persistent_id: pid,
+                  name: entity_label(child),
+                  path_hint: build_path_hint(base_path, child)
+                }
+                next
+              end
+
+              definition = child.definition
+              next unless definition
+
+              key = definition.object_id
+              next if visited.include?(key)
+
+              visited << key
+              child_path = base_path + [entity_label(child)]
+              memo.concat(collect_front_candidates(definition.entities,
+                                                   base_path: child_path,
+                                                   depth: depth + 1,
+                                                   visited: visited))
+            elsif child.is_a?(Sketchup::Group)
+              child_path = base_path + [entity_label(child)]
+              memo.concat(collect_front_candidates(child.entities,
+                                                   base_path: child_path,
+                                                   depth: depth + 1,
+                                                   visited: visited))
+            end
+          end
+        end
+        private_class_method :collect_front_candidates
+
+        def candidate_payload(candidate)
+          {
+            persistent_id: candidate[:persistent_id],
+            name: candidate[:name],
+            path_hint: candidate[:path_hint]
+          }
+        end
+        private_class_method :candidate_payload
+
+        def remember_target(instance, selection)
+          @target_persistent_id = persistent_id(instance)
+          @target_selection_signature = selection_signature(selection)
+        end
+        private_class_method :remember_target
+
+        def reset_target_if_selection_changed(selection)
+          signature = selection_signature(selection)
+          return if @target_selection_signature == signature
+
+          @target_selection_signature = signature
+          @target_persistent_id = nil
+        end
+        private_class_method :reset_target_if_selection_changed
+
+        def selection_signature(selection)
+          model = Sketchup.active_model
+          path = current_active_path(model)
+          ids =
+            if path && !path.empty?
+              path.filter_map { |entity| persistent_id(entity) }
+            elsif selection && selection.respond_to?(:each)
+              selection.map { |entity| persistent_id(entity) }
+            else
+              []
+            end
+
+          ids.empty? ? nil : ids
+        end
+        private_class_method :selection_signature
+
+        def current_active_path(model)
+          override = @active_path_override
+          return Array(override) if override
+
+          return unless model.respond_to?(:active_path)
+
+          model.active_path
+        end
+        private_class_method :current_active_path
+
+        def current_selection
+          return nil unless defined?(Sketchup)
+
+          model = Sketchup.active_model
+          model&.selection
+        end
+        private_class_method :current_selection
+
+        def persistent_id(entity)
+          return unless entity&.valid?
+          return unless entity.respond_to?(:persistent_id)
+
+          value = entity.persistent_id
+          value ? value.to_s : nil
+        rescue StandardError
+          nil
+        end
+        private_class_method :persistent_id
+
+        def entity_label(entity)
+          return '' unless entity
+
+          name = entity.respond_to?(:name) ? entity.name.to_s : ''
+          return name unless name.empty?
+
+          definition = entity.respond_to?(:definition) ? entity.definition : nil
+          definition_name = definition && definition.respond_to?(:name) ? definition.name.to_s : ''
+          return definition_name unless definition_name.empty?
+
+          entity.respond_to?(:typename) ? entity.typename.to_s : entity.class.name
+        end
+        private_class_method :entity_label
+
+        def build_path_hint(base_path, entity)
+          (Array(base_path) + [entity_label(entity)]).compact.join(' › ')
+        end
+        private_class_method :build_path_hint
 
         def parse_payload(payload)
           data = payload.is_a?(Hash) ? payload : {}
