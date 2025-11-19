@@ -85,11 +85,13 @@ module AICabinets
       raw = read_defaults_file(DEFAULTS_PATH)
       sanitized = sanitize_defaults(raw)
       canonical = canonicalize(sanitized)
-      ParamsSanitizer.sanitize!(canonical, global_defaults: canonical)
+      params = ParamsSanitizer.sanitize!(canonical, global_defaults: canonical)
+      attach_cabinet_base!(params)
     rescue StandardError => error
       warn("AI Cabinets: defaults load failed (#{error.message}); using built-in fallbacks.")
       fallback = deep_dup(FALLBACK_MM)
-      ParamsSanitizer.sanitize!(fallback, global_defaults: fallback)
+      params = ParamsSanitizer.sanitize!(fallback, global_defaults: fallback)
+      attach_cabinet_base!(params)
     end
 
     def load_effective_mm
@@ -99,7 +101,8 @@ module AICabinets
       return defaults if overrides.empty?
 
       result = merge_defaults(defaults, overrides)
-      ParamsSanitizer.sanitize!(result, global_defaults: result)
+      params = ParamsSanitizer.sanitize!(result, global_defaults: result)
+      attach_cabinet_base!(params)
     rescue StandardError => error
       warn("AI Cabinets: effective defaults load failed (#{error.message}); using shipped defaults.")
       defaults
@@ -1295,6 +1298,31 @@ module AICabinets
       nil
     end
     private_class_method :parse_numeric
+
+    # Adds a concrete :cabinet_base hash so consumers can merge defaults without nil checks.
+    def attach_cabinet_base!(hash)
+      return {} unless hash.is_a?(Hash)
+
+      hash[:cabinet_base] = build_cabinet_base_payload(hash)
+      hash
+    end
+    private_class_method :attach_cabinet_base!
+
+    def build_cabinet_base_payload(source)
+      FALLBACK_MM.each_with_object({}) do |(key, _), payload|
+        value =
+          if source.key?(key)
+            source[key]
+          elsif source.key?(key.to_s)
+            source[key.to_s]
+          else
+            FALLBACK_MM[key]
+          end
+
+        payload[key] = deep_dup(value)
+      end
+    end
+    private_class_method :build_cabinet_base_payload
 
     def deep_dup(value)
       case value

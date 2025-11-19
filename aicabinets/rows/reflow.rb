@@ -4,6 +4,7 @@ require 'json'
 require 'time'
 
 Sketchup.require('aicabinets/ops/edit_base_cabinet')
+Sketchup.require('aicabinets/params/persistence')
 
 module AICabinets
   module Rows
@@ -210,11 +211,8 @@ module AICabinets
         json = dictionary[AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY]
         raise RowError.new(:missing_params, 'Cabinet parameters are unavailable.') unless json.is_a?(String)
 
-        parsed = JSON.parse(json)
-        parsed.each_with_object({}) do |(key, value), memo|
-          memo[key.to_sym] = value
-        end
-      rescue JSON::ParserError
+        AICabinets::Params.read(definition)
+      rescue StandardError
         raise RowError.new(:invalid_params, 'Cabinet parameters are invalid.')
       end
       private_class_method :definition_params

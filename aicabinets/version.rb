@@ -2,5 +2,5 @@
 
 module AICabinets
   VERSION = '0.1.0'.freeze
-  PARAMS_SCHEMA_VERSION = 2
+  PARAMS_SCHEMA_VERSION = 3
 end

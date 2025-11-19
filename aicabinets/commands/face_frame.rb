@@ -9,9 +9,19 @@ module AICabinets
       def register!(registry)
         return unless defined?(::UI::Command)
 
-        registry[:face_frame_insert] ||= build_insert_command
-        registry[:face_frame_edit] ||= build_edit_command
+        registry[:face_frame_insert] ||= insert_command
+        registry[:face_frame_edit] ||= edit_command
       end
+
+      def insert_command
+        @insert_command ||= build_insert_command
+      end
+      private_class_method :insert_command
+
+      def edit_command
+        @edit_command ||= build_edit_command
+      end
+      private_class_method :edit_command
 
       def build_insert_command
         command = ::UI::Command.new('Cabinet (Face Frame)') do

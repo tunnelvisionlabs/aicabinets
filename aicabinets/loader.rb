@@ -4,6 +4,7 @@ module AICabinets
   if defined?(Sketchup)
     Sketchup.require('aicabinets/features')
     Sketchup.require('aicabinets/version')
+    Sketchup.require('aicabinets/params/persistence')
     Sketchup.require('aicabinets/metadata/tagging')
     Sketchup.require('aicabinets/metadata/naming')
     Sketchup.require('aicabinets/ops/units')
