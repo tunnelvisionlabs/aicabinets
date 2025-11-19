@@ -4,8 +4,9 @@ require 'sketchup.rb'
 
 require 'aicabinets/face_frame'
 
+Sketchup.require('aicabinets/metadata/tagging')
+Sketchup.require('aicabinets/metadata/naming')
 Sketchup.require('aicabinets/ops/units')
-Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/ops/operations')
 
 module AICabinets
@@ -13,8 +14,6 @@ module AICabinets
     module FaceFrame
       module_function
 
-      FACE_FRAME_NAME = 'Face Frame'
-      FRONT_TAG_NAME = 'AICabinets/Fronts'
       MIN_DIMENSION_MM = 0.1
 
       def build(parent_entities:, params:, face_frame_mm:)
@@ -39,14 +38,17 @@ module AICabinets
           end
 
           thickness = Ops::Units.to_length_mm(thickness_mm)
+          front_tag = Metadata::Tagging.fronts_tag(model)
 
           group = parent_entities.add_group
-          group.name = FACE_FRAME_NAME if group.respond_to?(:name=)
+          Metadata::Naming.name_face_frame!(group)
+          Metadata::Tagging.apply_tag!(group, front_tag)
 
           members = []
           members << build_member(
             parent: group,
-            name: 'Stile Left',
+            role: :stile_left,
+            tag: front_tag,
             x_start_mm: 0.0,
             width_mm: frame[:stile_left_mm],
             z_start_mm: 0.0,
@@ -57,7 +59,8 @@ module AICabinets
           right_x_mm = width_mm - frame[:stile_right_mm]
           members << build_member(
             parent: group,
-            name: 'Stile Right',
+            role: :stile_right,
+            tag: front_tag,
             x_start_mm: right_x_mm,
             width_mm: frame[:stile_right_mm],
             z_start_mm: 0.0,
@@ -68,7 +71,8 @@ module AICabinets
           top_z_mm = height_mm - frame[:rail_top_mm]
           members << build_member(
             parent: group,
-            name: 'Rail Top',
+            role: :rail_top,
+            tag: front_tag,
             x_start_mm: 0.0,
             width_mm: width_mm,
             z_start_mm: top_z_mm,
@@ -78,7 +82,8 @@ module AICabinets
 
           members << build_member(
             parent: group,
-            name: 'Rail Bottom',
+            role: :rail_bottom,
+            tag: front_tag,
             x_start_mm: 0.0,
             width_mm: width_mm,
             z_start_mm: 0.0,
@@ -86,11 +91,14 @@ module AICabinets
             thickness: thickness
           )
 
-          mid_members = build_mid_members(group: group, frame: frame, thickness: thickness, params: params)
+          mid_members = build_mid_members(
+            group: group,
+            frame: frame,
+            thickness: thickness,
+            params: params,
+            tag: front_tag
+          )
           members.concat(mid_members) if mid_members.any?
-
-          Ops::Tags.assign!(group, FRONT_TAG_NAME)
-          members.compact.each { |member| Ops::Tags.assign!(member, FRONT_TAG_NAME) }
 
           operation_success = true
           group
@@ -118,7 +126,7 @@ module AICabinets
       end
       private_class_method :normalized_face_frame
 
-      def build_mid_members(group:, frame:, thickness:, params:)
+      def build_mid_members(group:, frame:, thickness:, params:, tag:)
         opening_width_mm = params.width_mm - frame[:stile_left_mm] - frame[:stile_right_mm]
         opening_height_mm = params.height_mm - frame[:rail_top_mm] - frame[:rail_bottom_mm]
         return [] unless opening_width_mm.positive? && opening_height_mm.positive?
@@ -130,7 +138,8 @@ module AICabinets
           x_start_mm = frame[:stile_left_mm] + ((opening_width_mm - mid_width_mm) / 2.0)
           members << build_member(
             parent: group,
-            name: 'Mid Stile',
+            role: :mid_stile,
+            tag: tag,
             x_start_mm: x_start_mm,
             width_mm: mid_width_mm,
             z_start_mm: frame[:rail_bottom_mm],
@@ -155,7 +164,9 @@ module AICabinets
 
             members << build_member(
               parent: group,
-              name: "Mid Rail #{index}",
+              role: :mid_rail,
+              index: index,
+              tag: tag,
               x_start_mm: frame[:stile_left_mm],
               width_mm: usable_width_mm,
               z_start_mm: z_start_mm,
@@ -184,12 +195,13 @@ module AICabinets
       end
       private_class_method :mid_rail_count
 
-      def build_member(parent:, name:, x_start_mm:, width_mm:, z_start_mm:, height_mm:, thickness:)
+      def build_member(parent:, role:, x_start_mm:, width_mm:, z_start_mm:, height_mm:, thickness:, tag:, index: nil)
         return nil unless width_mm.to_f > MIN_DIMENSION_MM
         return nil unless height_mm.to_f > MIN_DIMENSION_MM
 
         group = parent.entities.add_group
-        group.name = name if group.respond_to?(:name=)
+        Metadata::Naming.name_member!(group, role: role, index: index)
+        Metadata::Tagging.apply_tag!(group, tag)
 
         x_end_mm = x_start_mm + width_mm
         z_end_mm = z_start_mm + height_mm

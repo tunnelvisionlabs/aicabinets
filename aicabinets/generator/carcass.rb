@@ -13,6 +13,7 @@ Sketchup.require('aicabinets/generator/shelves')
 Sketchup.require('aicabinets/generator/fronts')
 Sketchup.require('aicabinets/generator/face_frame')
 Sketchup.require('aicabinets/generator/partitions')
+Sketchup.require('aicabinets/metadata/tagging')
 Sketchup.require('aicabinets/ops/units')
 Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/ops/materials')
@@ -250,7 +251,7 @@ module AICabinets
           unless fronts.empty?
             instances[:fronts] = fronts
             register_created(created, fronts)
-            apply_category(fronts, 'AICabinets/Fronts', front_material)
+            apply_category(fronts, Metadata::Tagging::FRONTS_TAG_NAME, front_material)
           end
 
           face_frame = FaceFrame.build(
@@ -261,7 +262,7 @@ module AICabinets
           if face_frame
             instances[:face_frame] = face_frame
             register_created(created, face_frame)
-            apply_category(face_frame, 'AICabinets/Fronts', front_material)
+            apply_category(face_frame, Metadata::Tagging::FRONTS_TAG_NAME, front_material)
           end
 
           bounds = Geom::BoundingBox.new
