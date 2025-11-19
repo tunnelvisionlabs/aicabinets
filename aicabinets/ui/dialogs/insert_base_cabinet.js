@@ -585,6 +585,46 @@
     }
   }
 
+  function disableDescendantControls(element) {
+    if (!element || typeof element.querySelectorAll !== 'function') {
+      return;
+    }
+
+    var controls = element.querySelectorAll('input, select, textarea, button');
+    for (var index = 0; index < controls.length; index += 1) {
+      var control = controls[index];
+      if (!control) {
+        continue;
+      }
+
+      if (!control.hasAttribute('data-style-disabled')) {
+        control.setAttribute('data-style-disabled', control.disabled ? 'true' : 'false');
+      }
+
+      control.disabled = true;
+    }
+  }
+
+  function restoreDisabledControls(element) {
+    if (!element || typeof element.querySelectorAll !== 'function') {
+      return;
+    }
+
+    var controls = element.querySelectorAll('input, select, textarea, button');
+    for (var index = 0; index < controls.length; index += 1) {
+      var control = controls[index];
+      if (!control) {
+        continue;
+      }
+
+      var disabledAttr = control.getAttribute('data-style-disabled');
+      if (disabledAttr != null) {
+        control.disabled = disabledAttr === 'true';
+        control.removeAttribute('data-style-disabled');
+      }
+    }
+  }
+
   function dispatchCustomEvent(target, eventName, detail) {
     if (!target || typeof target.dispatchEvent !== 'function' || !eventName) {
       return false;
@@ -714,11 +754,13 @@
       element.removeAttribute('aria-hidden');
       element.removeAttribute('inert');
       setElementInert(element, false);
+      restoreDisabledControls(element);
     } else {
       element.setAttribute('hidden', '');
       element.setAttribute('aria-hidden', 'true');
       element.setAttribute('inert', '');
       setElementInert(element, true);
+      disableDescendantControls(element);
     }
   };
 
