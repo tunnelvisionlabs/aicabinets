@@ -25,6 +25,8 @@ module AICabinets
         @menu ||= extensions_menu.add_submenu(MENU_TITLE)
 
         primary_commands = [
+          commands[:face_frame_insert],
+          commands[:face_frame_edit],
           commands[:insert_base_cabinet],
           commands[:edit_base_cabinet]
         ].compact
@@ -58,6 +60,8 @@ module AICabinets
         return unless @toolbar
 
         toolbar_commands = [
+          commands[:face_frame_insert],
+          commands[:face_frame_edit],
           commands[:insert_base_cabinet],
           commands[:create_row_from_selection],
           commands[:rows_manage],
