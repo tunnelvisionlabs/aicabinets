@@ -30,7 +30,7 @@ module AICabinets
         component_definition?(definition)
       raise ArgumentError, 'params must be a Hash' unless params.is_a?(Hash)
 
-      normalized = deep_copy(params)
+      normalized = deep_symbolize_keys(deep_copy(params))
       errors = validate_face_frame(normalized)
       raise ArgumentError, errors.join('; ') if errors.any?
 
@@ -39,7 +39,11 @@ module AICabinets
         raise ArgumentError, "schema_version must be #{AICabinets::PARAMS_SCHEMA_VERSION}"
       end
 
-      json = JSON.generate(canonicalize(normalized))
+      existing = deep_symbolize_keys(read_params_hash(definition))
+      merged = deep_merge_hash(existing, normalized)
+      merged[:schema_version] = schema_version
+
+      json = JSON.generate(canonicalize(merged))
       dictionary = definition.attribute_dictionary(DICTIONARY_NAME, true)
       dictionary[PARAMS_JSON_KEY] = json
       nil
@@ -141,6 +145,43 @@ module AICabinets
       definition.is_a?(Sketchup::ComponentDefinition)
     end
     private_class_method :component_definition?
+
+    def deep_symbolize_keys(value)
+      case value
+      when Hash
+        value.each_with_object({}) do |(key, element), memo|
+          symbolized =
+            case key
+            when Symbol
+              key
+            else
+              key.to_s.to_sym
+            end
+          memo[symbolized] = deep_symbolize_keys(element)
+        end
+      when Array
+        value.map { |item| deep_symbolize_keys(item) }
+      else
+        value
+      end
+    end
+    private_class_method :deep_symbolize_keys
+
+    def deep_merge_hash(original, updates)
+      base = original.is_a?(Hash) ? deep_copy(original) : {}
+      return base unless updates.is_a?(Hash)
+
+      updates.each do |key, value|
+        if base.key?(key) && base[key].is_a?(Hash) && value.is_a?(Hash)
+          base[key] = deep_merge_hash(base[key], value)
+        else
+          base[key] = deep_copy(value)
+        end
+      end
+
+      base
+    end
+    private_class_method :deep_merge_hash
 
     def canonicalize(value)
       case value
