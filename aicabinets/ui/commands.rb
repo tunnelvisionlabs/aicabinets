@@ -14,6 +14,7 @@ module AICabinets
       def register_commands!
         return unless defined?(::UI::Command)
 
+        register_face_frame_commands!
         commands[:insert_base_cabinet] ||= build_insert_base_cabinet_command
         commands[:edit_base_cabinet] ||= build_edit_base_cabinet_command
         commands[:create_row_from_selection] ||= build_create_row_command
@@ -25,6 +26,13 @@ module AICabinets
       end
 
       private
+
+      def register_face_frame_commands!
+        return unless defined?(AICabinets::Commands::FaceFrame)
+
+        AICabinets::Commands::FaceFrame.register!(commands)
+      end
+      private_class_method :register_face_frame_commands!
 
       def build_insert_base_cabinet_command
         command = ::UI::Command.new('Insert Base Cabinet…') do
