@@ -9,7 +9,7 @@ else
 
   Sketchup.require('aicabinets/geometry/five_piece')
   Sketchup.require('aicabinets/params/five_piece')
-  Sketchup.require('aicabinets/testing')
+  require_relative '../support/testing'
 
   class TC_FivePiece_Frame_Miter < TestUp::TestCase
     def setup

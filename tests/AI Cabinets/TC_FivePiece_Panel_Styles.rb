@@ -9,7 +9,7 @@ else
 
   Sketchup.require('aicabinets/geometry/five_piece_panel')
   Sketchup.require('aicabinets/params/five_piece')
-  Sketchup.require('aicabinets/testing')
+  require_relative '../support/testing'
 
   class TC_FivePiece_Panel_Styles < TestUp::TestCase
     def setup
