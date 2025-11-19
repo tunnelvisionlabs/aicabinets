@@ -285,6 +285,19 @@ body.has-layout-preview .form {
   gap: 16px;
 }
 
+.style-fieldsets {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.style-fieldsets__group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
 .form__section-title {
   margin: 0;
   font-size: 1.1rem;

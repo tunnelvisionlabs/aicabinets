@@ -69,6 +69,7 @@
   var uiRoot = (root.UI = root.UI || {});
   var namespace = (uiRoot.InsertBaseCabinet = uiRoot.InsertBaseCabinet || {});
   var insertFormNamespace = (uiRoot.InsertForm = uiRoot.InsertForm || {});
+  namespace.styleSections = null;
 
   var controller = null;
   var testSupport = {
@@ -130,6 +131,7 @@
   var pendingBayState = null;
   var pendingBayValidity = [];
   var pendingToasts = [];
+  var pendingStyleChange = null;
 
   var layoutPreviewManager = (function () {
     var state = {
@@ -460,6 +462,22 @@
   var STYLE_TOOLTIP = 'Coming soon';
   var DEFAULT_STYLE = 'base';
 
+  function normalizeDialogStyle(style) {
+    if (typeof style !== 'string') {
+      return DEFAULT_STYLE;
+    }
+
+    var normalized = style.trim().toLowerCase();
+    if (STYLE_ENABLED.indexOf(normalized) !== -1) {
+      return normalized;
+    }
+    if (STYLE_DISABLED.indexOf(normalized) !== -1) {
+      return normalized;
+    }
+
+    return DEFAULT_STYLE;
+  }
+
   var stringsNamespace = uiRoot.Strings || {};
 
   function formatTemplate(template, params) {
@@ -566,6 +584,148 @@
       element.removeAttribute('aria-hidden');
     }
   }
+
+  function dispatchCustomEvent(target, eventName, detail) {
+    if (!target || typeof target.dispatchEvent !== 'function' || !eventName) {
+      return false;
+    }
+
+    var eventDetail = detail || {};
+    var eventObject = null;
+
+    try {
+      if (typeof window.CustomEvent === 'function') {
+        eventObject = new CustomEvent(eventName, {
+          bubbles: true,
+          detail: eventDetail
+        });
+      } else if (document && typeof document.createEvent === 'function') {
+        eventObject = document.createEvent('CustomEvent');
+        eventObject.initCustomEvent(eventName, true, false, eventDetail);
+      }
+
+      if (eventObject) {
+        target.dispatchEvent(eventObject);
+        return true;
+      }
+    } catch (error) {
+      // Suppress dispatch errors to avoid console noise in the dialog.
+    }
+
+    return false;
+  }
+
+  function StyleSectionsToggler(options) {
+    var opts = options || {};
+    this.container = opts.container || null;
+    this.eventTarget = opts.eventTarget || document;
+    this.sections = [];
+    this.currentStyle = normalizeDialogStyle(opts.initialStyle);
+  }
+
+  StyleSectionsToggler.prototype.initialize = function initialize() {
+    this.refreshSections();
+    this.setStyle(this.currentStyle, { silent: true, force: true });
+  };
+
+  StyleSectionsToggler.prototype.refreshSections = function refreshSections() {
+    this.sections = [];
+    if (!this.container || typeof this.container.querySelectorAll !== 'function') {
+      return;
+    }
+
+    var nodeList = this.container.querySelectorAll('[data-styles]');
+    var nodes = Array.prototype.slice.call(nodeList);
+    var sections = [];
+
+    nodes.forEach(function (element) {
+      if (!element) {
+        return;
+      }
+
+      var stylesAttr = element.getAttribute('data-styles') || '';
+      var tokens = stylesAttr
+        .split(/[\s,]+/)
+        .map(function (token) {
+          return token.trim().toLowerCase();
+        })
+        .filter(Boolean);
+
+      sections.push({ element: element, tokens: tokens });
+    });
+
+    this.sections = sections;
+  };
+
+  StyleSectionsToggler.prototype.getStyle = function getStyle() {
+    return this.currentStyle;
+  };
+
+  StyleSectionsToggler.prototype.setStyle = function setStyle(style, options) {
+    var opts = options || {};
+    var normalized = normalizeDialogStyle(style);
+    var changed = normalized !== this.currentStyle || opts.force;
+    this.currentStyle = normalized;
+    this.updateSections();
+    if (changed && opts.silent !== true) {
+      this.emitChange(normalized);
+    }
+    return normalized;
+  };
+
+  StyleSectionsToggler.prototype.updateSections = function updateSections() {
+    if (!this.sections.length) {
+      return;
+    }
+
+    var active = { shared: true };
+    active[this.currentStyle] = true;
+
+    for (var index = 0; index < this.sections.length; index += 1) {
+      var entry = this.sections[index];
+      if (!entry || !entry.element) {
+        continue;
+      }
+
+      var tokens = entry.tokens || [];
+      var shouldShow = false;
+      for (var tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
+        var token = tokens[tokenIndex];
+        if (Object.prototype.hasOwnProperty.call(active, token)) {
+          shouldShow = true;
+          break;
+        }
+      }
+
+      this.toggleSection(entry.element, shouldShow);
+    }
+  };
+
+  StyleSectionsToggler.prototype.toggleSection = function toggleSection(
+    element,
+    shouldShow
+  ) {
+    if (!element) {
+      return;
+    }
+
+    if (shouldShow) {
+      element.removeAttribute('hidden');
+      element.removeAttribute('aria-hidden');
+      element.removeAttribute('inert');
+      setElementInert(element, false);
+    } else {
+      element.setAttribute('hidden', '');
+      element.setAttribute('aria-hidden', 'true');
+      element.setAttribute('inert', '');
+      setElementInert(element, true);
+    }
+  };
+
+  StyleSectionsToggler.prototype.emitChange = function emitChange(style) {
+    var target = this.eventTarget || document;
+    dispatchCustomEvent(target, 'stylechange', { style: style });
+  };
 
   function LiveAnnouncer(element, options) {
     options = options || {};
@@ -2983,6 +3143,7 @@
       ? this.scopeSection.querySelector('[data-role="scope-note"]')
       : null;
     this.styleSelect = form.querySelector('[data-role="style-select"]');
+    this.styleSections = null;
     this.cabinetType = DEFAULT_STYLE;
     this.disabledStyles = STYLE_DISABLED.slice();
     this.styleTooltip = STYLE_TOOLTIP;
@@ -3024,6 +3185,12 @@
     this.lastSentGlobalShelves = null;
 
     this.initializeElements();
+    this.styleSections = new StyleSectionsToggler({
+      container: this.form,
+      eventTarget: this.dialogRoot || document,
+      initialStyle: this.cabinetType
+    });
+    this.styleSections.initialize();
     this.bindEvents();
     this.setPartitionsLayout('none', {
       notify: false,
@@ -3153,19 +3320,7 @@
   };
 
   FormController.prototype.normalizeStyle = function normalizeStyle(style) {
-    if (typeof style !== 'string') {
-      return DEFAULT_STYLE;
-    }
-
-    var normalized = style.trim().toLowerCase();
-    if (STYLE_ENABLED.indexOf(normalized) !== -1) {
-      return normalized;
-    }
-    if (STYLE_DISABLED.indexOf(normalized) !== -1) {
-      return normalized;
-    }
-
-    return DEFAULT_STYLE;
+    return normalizeDialogStyle(style);
   };
 
   FormController.prototype.isStyleDisabled = function isStyleDisabled(style) {
@@ -3187,6 +3342,9 @@
     this.cabinetType = normalized;
     if (this.styleSelect) {
       this.styleSelect.value = normalized;
+    }
+    if (this.styleSections) {
+      this.styleSections.setStyle(normalized);
     }
 
     if (opts.notify !== false) {
@@ -5146,8 +5304,37 @@
     }
   };
 
+  namespace.setStyle = function setStyle(style, options) {
+    var normalized = normalizeDialogStyle(style);
+    if (controller) {
+      controller.setStyle(normalized, options);
+      pendingStyleChange = null;
+      return;
+    }
+
+    var storedOptions = options ? Object.assign({}, options) : undefined;
+    pendingStyleChange = { style: normalized, options: storedOptions };
+  };
+
+  namespace.getStyle = function getStyle() {
+    if (controller) {
+      return controller.cabinetType;
+    }
+
+    if (pendingStyleChange && pendingStyleChange.style) {
+      return pendingStyleChange.style;
+    }
+
+    return DEFAULT_STYLE;
+  };
+
   namespace.emitProbeState = function emitProbeState() {
-    var style = controller && controller.cabinetType ? controller.cabinetType : DEFAULT_STYLE;
+    var style = DEFAULT_STYLE;
+    if (controller && controller.cabinetType) {
+      style = controller.cabinetType;
+    } else if (pendingStyleChange && pendingStyleChange.style) {
+      style = pendingStyleChange.style;
+    }
     return {
       style: style,
       disabled: STYLE_DISABLED.slice(),
@@ -5447,6 +5634,7 @@
 
     controller = new FormController(form);
     namespace.controller = controller;
+    namespace.styleSections = controller.styleSections;
     if (pendingConfiguration) {
       controller.configureMode(pendingConfiguration);
       pendingConfiguration = null;
@@ -5465,6 +5653,11 @@
     if (pendingDefaults) {
       controller.applyDefaults(pendingDefaults);
       pendingDefaults = null;
+    }
+
+    if (pendingStyleChange && pendingStyleChange.style) {
+      controller.setStyle(pendingStyleChange.style, pendingStyleChange.options);
+      pendingStyleChange = null;
     }
 
     if (pendingPlacementEvents.length) {
@@ -5521,5 +5714,6 @@
   document.addEventListener('keydown', handleDialogKeyDown, true);
   window.addEventListener('unload', function () {
     controller = null;
+    namespace.styleSections = null;
   });
 })();
