@@ -8,6 +8,7 @@ Sketchup.require('aicabinets/ops/insert_base_cabinet')
 Sketchup.require('aicabinets/ops/materials')
 Sketchup.require('aicabinets/ops/tags')
 Sketchup.require('aicabinets/metadata/tagging')
+Sketchup.require('aicabinets/params/persistence')
 
 module AICabinets
   module Rows
@@ -188,8 +189,8 @@ module AICabinets
         json = dictionary[AICabinets::Ops::InsertBaseCabinet::PARAMS_JSON_KEY]
         return unless json.is_a?(String) && !json.empty?
 
-        JSON.parse(json, symbolize_names: true)
-      rescue JSON::ParserError
+        AICabinets::Params.read(definition)
+      rescue StandardError
         nil
       end
       private_class_method :definition_params
