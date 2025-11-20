@@ -911,6 +911,10 @@ module AICabinets
               coerce_non_negative_integer(@global_fronts_shelves_state[:shelf_count])
             end
 
+          if count.nil?
+            count = coerce_non_negative_integer(@shelf_count)
+          end
+
           @default_bay_shelf_count = count || 0
         end
 

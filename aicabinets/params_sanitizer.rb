@@ -74,6 +74,11 @@ module AICabinets
       orientation = sanitize_partition_orientation(sanitized[:orientation], partition_mode, defaults_partitions[:orientation])
       sanitized[:orientation] = orientation
 
+      if partition_mode == 'none'
+        sanitized[:bays] = []
+        return sanitized
+      end
+
       bays = sanitize_bays_array(
         sanitized[:bays],
         sanitized[:count],
