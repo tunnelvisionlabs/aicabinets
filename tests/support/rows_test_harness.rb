@@ -278,6 +278,8 @@ module RowsTestHarness
     defaults[:front] = FRONT_MODE
     defaults[:door_reveal_mm] = 2.0
     defaults[:door_gap_mm] = AICabinets::Generator::Fronts::REVEAL_CENTER_MM
+    defaults[:face_frame] = deep_copy(defaults[:face_frame]) || {}
+    defaults[:face_frame][:enabled] = overlay_type == :face_frame_overlay
 
     defaults[:fronts_shelves_state] = deep_copy(defaults[:fronts_shelves_state]) || {}
     defaults[:fronts_shelves_state][:door_mode] = FRONT_MODE

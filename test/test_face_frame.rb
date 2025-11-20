@@ -19,8 +19,8 @@ class FaceFrameTest < Minitest::Test
     normalized, errors = AICabinets::FaceFrame.normalize({ mid_stile_mm: 0, mid_rail_mm: 0 }, defaults: {})
     assert_empty(errors)
 
-    validation_errors = AICabinets::FaceFrame.validate(normalized)
-    assert_empty(validation_errors)
+    validation_result = AICabinets::FaceFrame.validate(normalized)
+    assert(validation_result[:ok], 'Expected zero validation errors')
   end
 
   def test_validate_rejects_out_of_range_values
@@ -28,9 +28,10 @@ class FaceFrameTest < Minitest::Test
     normalized, errors = AICabinets::FaceFrame.normalize({ thickness_mm: 9, overlay_mm: 40 }, defaults: defaults)
     assert_empty(errors)
 
-    validation_errors = AICabinets::FaceFrame.validate(normalized)
-    refute_empty(validation_errors)
-    assert_includes(validation_errors.first, 'thickness_mm')
+    validation_result = AICabinets::FaceFrame.validate(normalized)
+    refute(validation_result[:ok])
+    first_error = validation_result[:errors].first
+    assert_includes(first_error[:field], 'thickness_mm')
   end
 
   def test_validate_rejects_unknown_layout_kind
@@ -38,9 +39,10 @@ class FaceFrameTest < Minitest::Test
     normalized, errors = AICabinets::FaceFrame.normalize({ layout: [{ kind: 'unknown' }] }, defaults: defaults)
     assert_empty(errors)
 
-    validation_errors = AICabinets::FaceFrame.validate(normalized)
-    refute_empty(validation_errors)
-    assert_includes(validation_errors.first, 'layout[0].kind')
+    validation_result = AICabinets::FaceFrame.validate(normalized)
+    refute(validation_result[:ok])
+    first_error = validation_result[:errors].first
+    assert_includes(first_error[:field], 'layout[0].kind')
   end
 
   def test_normalize_preserves_reveal_and_overlay_mm

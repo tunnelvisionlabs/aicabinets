@@ -60,6 +60,16 @@ function logDebug(enabled, message) {
   }
 }
 
+function safeRemove(targetPath, debug) {
+  if (!targetPath) return;
+  try {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  } catch (error) {
+    console.warn(`Warning: unable to remove ${targetPath}: ${error.message}`);
+    logDebug(debug, `rmSync failed for ${targetPath}: ${error.stack || error}`);
+  }
+}
+
 function copyExtension(pluginsDir, debug) {
   logDebug(debug, `Ensuring Plugins directory exists: ${pluginsDir}`);
   fs.mkdirSync(pluginsDir, { recursive: true });
@@ -409,8 +419,8 @@ function generateTestupConfig(testsRoot, options = {}) {
   fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
   fs.mkdirSync(path.dirname(consoleLogPath), { recursive: true });
   fs.mkdirSync(path.dirname(consoleErrPath), { recursive: true });
-  fs.rmSync(consoleLogPath, { recursive: true, force: true });
-  fs.rmSync(consoleErrPath, { recursive: true, force: true });
+  safeRemove(consoleLogPath, options.debug);
+  safeRemove(consoleErrPath, options.debug);
 
   const normalizeForYaml = (value) => value.replace(/\\/g, '/');
   const lines = [

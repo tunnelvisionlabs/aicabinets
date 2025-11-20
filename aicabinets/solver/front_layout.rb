@@ -12,6 +12,19 @@ module AICabinets
       MIN_DOOR_WIDTH_MM = 200.0
       MIN_DRAWER_FACE_HEIGHT_MM = 120.0
 
+      # Round to the nearest 0.1 mm. The helper is exposed for tests so the
+      # rounding strategy stays deterministic and documented.
+      def round_mm(value)
+        round_to_precision(value, ROUND_PRECISION_MM)
+      end
+
+      # Round a collection so the recomposed sum matches the target after
+      # precision rounding. Residuals are applied from the outside-in to keep
+      # symmetry stable between runs.
+      def distribute_residual(values, target_total:, precision: ROUND_PRECISION_MM)
+        distribute_rounding(values, target_total: target_total, precision: precision)
+      end
+
       # Deterministically split the opening into fronts using closed-form math so
       # widths/heights and reveal gaps recombine after rounding to 0.1 mm. The
       # solver keeps all math in millimeters and distributes rounding residue to
@@ -102,7 +115,7 @@ module AICabinets
           return { fronts: [], mid_members: empty_mid_members, warnings: [warning] }
         end
 
-        widths = distribute_rounding(Array.new(2, clear_width_total / 2.0), target_total: clear_width_total)
+        widths = distribute_residual(Array.new(2, clear_width_total / 2.0), target_total: clear_width_total)
         clear_height = round_mm(clear_height_total)
 
         warnings = []
@@ -173,7 +186,7 @@ module AICabinets
           return { fronts: [], mid_members: empty_mid_members, warnings: [warning] }
         end
 
-        clear_heights = distribute_rounding(Array.new(drawers, clear_height_total / drawers), target_total: clear_height_total)
+        clear_heights = distribute_residual(Array.new(drawers, clear_height_total / drawers), target_total: clear_height_total)
 
         warnings = []
         clear_heights.each do |height|
@@ -266,11 +279,6 @@ module AICabinets
       end
       private_class_method :numeric
 
-      def round_mm(value)
-        (value.to_f / ROUND_PRECISION_MM).round * ROUND_PRECISION_MM
-      end
-      private_class_method :round_mm
-
       def distribute_rounding(values, target_total:, precision: ROUND_PRECISION_MM)
         scale = (1.0 / precision).round
         scaled_values = values.map { |value| (value * scale).round }
@@ -288,6 +296,11 @@ module AICabinets
         scaled_values.map { |value| value / scale.to_f }
       end
       private_class_method :distribute_rounding
+
+      def round_to_precision(value, precision)
+        (value.to_f / precision).round * precision
+      end
+      private_class_method :round_to_precision
 
       def failure(message, opening_mm)
         {

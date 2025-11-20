@@ -74,6 +74,8 @@ class TC_FrontGuardrails < TestUp::TestCase
     defaults[:width_mm] = WIDTH_MM
     defaults[:front] = front
     defaults[:partition_mode] = 'none'
+    defaults[:face_frame] = deep_copy(defaults[:face_frame]) || {}
+    defaults[:face_frame][:enabled] = false
     defaults[:door_gap_mm] = 2.0
     defaults[:fronts_shelves_state] = deep_copy(defaults[:fronts_shelves_state]) || {}
     defaults[:fronts_shelves_state][:door_mode] = front
