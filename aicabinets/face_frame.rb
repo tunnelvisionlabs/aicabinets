@@ -70,6 +70,14 @@ module AICabinets
         return validation_result([build_error('face_frame', 'invalid_type', 'face_frame must be an object')])
       end
 
+      enabled =
+        if face_frame.key?(:enabled)
+          face_frame[:enabled]
+        elsif face_frame.key?('enabled')
+          face_frame['enabled']
+        end
+      return validation_result([]) if enabled == false
+
       errors = []
 
       BOUNDS.each do |key, range|
@@ -228,9 +236,35 @@ module AICabinets
       require 'aicabinets/solver/front_layout' unless defined?(AICabinets::Solver::FrontLayout)
 
       result = AICabinets::Solver::FrontLayout.solve(opening_mm: opening_mm, params: { face_frame: face_frame })
-      return [] if result[:warnings].empty?
+      warnings = Array(result[:warnings]).compact
 
-      result[:warnings].map do |warning|
+      layout_entry = Array(face_frame[:layout]).first
+      if layout_entry.is_a?(Hash)
+        kind = layout_entry[:kind] || layout_entry['kind']
+        if kind == 'drawer_stack'
+          drawer_count = layout_entry[:drawers] || layout_entry['drawers']
+          drawer_count = drawer_count.to_i
+          mid_rail_mm = face_frame[:mid_rail_mm].to_f
+          height_mm = opening_mm.is_a?(Hash) ? (opening_mm[:h] || opening_mm['h']) : nil
+          if drawer_count > 1 && mid_rail_mm.positive? && height_mm.is_a?(Numeric)
+            reveal_mm = face_frame[:reveal_mm].to_f
+            available_height_mm = height_mm.to_f - (reveal_mm * (drawer_count + 1)) - (mid_rail_mm * (drawer_count - 1))
+            per_drawer_height_mm = available_height_mm / drawer_count
+            if per_drawer_height_mm < AICabinets::Solver::FrontLayout::MIN_DRAWER_FACE_HEIGHT_MM
+              warnings << format(
+                'Minimum drawer face height %.1f mm not met (%.1f mm)',
+                AICabinets::Solver::FrontLayout::MIN_DRAWER_FACE_HEIGHT_MM,
+                AICabinets::Solver::FrontLayout.round_mm(per_drawer_height_mm)
+              )
+            end
+          end
+        end
+      end
+
+      warnings.uniq!
+      return [] if warnings.empty?
+
+      warnings.map do |warning|
         build_error('face_frame.layout', 'layout_unfeasible', warning)
       end
     end
