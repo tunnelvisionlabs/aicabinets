@@ -453,6 +453,17 @@
     toe_kick_depth: 'toe_kick_depth_mm'
   };
 
+  var STYLE_DEFAULTS = {
+    upper: {
+      width_mm: 762,
+      depth_mm: 356,
+      height_mm: 762,
+      panel_thickness_mm: 18,
+      shelves: 2,
+      front: 'doors_double'
+    }
+  };
+
   var INTEGER_FIELDS = ['shelves', 'partitions_count'];
 
   var UI_PAYLOAD_VERSION = '1.0.0';
@@ -3136,6 +3147,7 @@
     this.fieldLabels = {};
     this.fieldErrorMessages = {};
     this.touched = {};
+    this.styleDefaultsApplied = {};
     this.values = {
       lengths: {},
       front: 'empty',
@@ -3389,10 +3401,98 @@
       this.styleSections.setStyle(normalized);
     }
 
+    if (opts.applyStyleDefaults !== false) {
+      this.applyStyleDefaultsForStyle(normalized);
+    }
+
     if (opts.notify !== false) {
       this.notifyStyleChange(normalized);
     }
   };
+
+  FormController.prototype.hasAppliedStyleDefaults = function hasAppliedStyleDefaults(
+    style
+  ) {
+    if (!style) {
+      return false;
+    }
+
+    var key = this.normalizeStyle(style);
+    return this.styleDefaultsApplied[key] === true;
+  };
+
+  FormController.prototype.markStyleDefaultsApplied =
+    function markStyleDefaultsApplied(style) {
+      var key = this.normalizeStyle(style);
+      if (!key) {
+        return;
+      }
+
+      this.styleDefaultsApplied[key] = true;
+    };
+
+  FormController.prototype.applyStyleDefaultsForStyle =
+    function applyStyleDefaultsForStyle(style) {
+      if (!style) {
+        return;
+      }
+
+      var normalized = this.normalizeStyle(style);
+      if (!normalized || this.hasAppliedStyleDefaults(normalized)) {
+        return;
+      }
+
+      var defaults = STYLE_DEFAULTS[normalized];
+      if (!defaults || typeof defaults !== 'object') {
+        return;
+      }
+
+      var formatLength = this.lengthService.format.bind(this.lengthService);
+
+      ['width', 'depth', 'height', 'panel_thickness'].forEach(
+        function (name) {
+          var key = LENGTH_DEFAULT_KEYS[name];
+          var input = this.inputs[name];
+          if (!key || !input) {
+            return;
+          }
+
+          var mmValue = defaults[key];
+          if (typeof mmValue !== 'number') {
+            mmValue = Number(mmValue);
+          }
+
+          if (!isFinite(mmValue)) {
+            return;
+          }
+
+          this.values.lengths[name] = mmValue;
+          this.touched[name] = false;
+          input.dataset.mmValue = String(mmValue);
+          input.value = formatLength(mmValue);
+          input.removeAttribute('data-invalid');
+          this.setFieldError(name, null, true);
+        }.bind(this)
+      );
+
+      if (typeof defaults.shelves === 'number' && this.inputs.shelves) {
+        var shelves = Math.max(0, Math.round(defaults.shelves));
+        this.inputs.shelves.value = String(shelves);
+        this.values.shelves = shelves;
+        this.touched.shelves = false;
+        this.setFieldError('shelves', null, true);
+      }
+
+      if (typeof defaults.front === 'string' && this.inputs.front) {
+        this.inputs.front.value = defaults.front;
+        this.values.front = this.inputs.front.value;
+        this.touched.front = false;
+        this.setFieldError('front', null, true);
+      }
+
+      this.markStyleDefaultsApplied(normalized);
+      this.updateInsertButtonState();
+    };
 
   FormController.prototype.notifyStyleChange = function notifyStyleChange(style) {
     var normalized = this.normalizeStyle(style);
@@ -3973,6 +4073,8 @@
 
     this.selectedBayIndex = nextSelected;
     this.setBayArray(bays, { selectedIndex: nextSelected });
+    this.markStyleDefaultsApplied(this.cabinetType || DEFAULT_STYLE);
+
     this.ensureBayLength();
     this.pendingSelectedBayIndex = null;
 
@@ -4168,9 +4270,12 @@
     var formatLength = this.lengthService.format.bind(this.lengthService);
 
     if (defaults.cabinet_type) {
-      this.setStyle(defaults.cabinet_type, { notify: false });
+      this.setStyle(defaults.cabinet_type, {
+        notify: false,
+        applyStyleDefaults: false
+      });
     } else {
-      this.setStyle(DEFAULT_STYLE, { notify: false });
+      this.setStyle(DEFAULT_STYLE, { notify: false, applyStyleDefaults: false });
     }
 
     LENGTH_FIELDS.forEach(
